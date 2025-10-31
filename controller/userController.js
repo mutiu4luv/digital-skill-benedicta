@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import nodemailer from "nodemailer";
 import cloudinary from "../config/cloudnary.js";
+
 export const registerUser = async (req, res) => {
   try {
     const {
@@ -35,30 +36,31 @@ export const registerUser = async (req, res) => {
     // Generate OTP
     const verificationCode = Math.floor(100000 + Math.random() * 900000);
 
-    // ✅ Use Brevo (Sendinblue) SMTP
-    const transporter = nodemailer.createTransport({
-      host: "smtp-relay.brevo.com",
-      port: 587,
-      auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_API_KEY, // <-- use your API key here
+    // ✅ Send Email using Brevo API (NO SMTP)
+    const response = await fetch("https://api.brevo.com/v3/smtp/email", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "api-key": process.env.EMAIL_API_KEY,
       },
+      body: JSON.stringify({
+        sender: { name: "HGSC² Digital Skills", email: process.env.EMAIL_USER },
+        to: [{ email }],
+        subject: "Verify Your HGSC² Account",
+        htmlContent: `
+          <h2>Welcome, ${fullName}</h2>
+          <p>Your verification code is:</p>
+          <h1>${verificationCode}</h1>
+          <p>This code expires in 10 minutes.</p>
+        `,
+      }),
     });
 
-    // ✅ Send the verification email
-    await transporter.sendMail({
-      from: `"HGSC² Digital Skills" <${process.env.EMAIL_USER}>`,
-      to: email,
-      subject: "Verify Your HGSC² Account",
-      html: `
-        <h2>Welcome, ${fullName}</h2>
-        <p>Your verification code is:</p>
-        <h1>${verificationCode}</h1>
-        <p>This code expires in 10 minutes.</p>
-      `,
-    });
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(`Brevo API error: ${text}`);
+    }
 
-    // ✅ Return OTP data
     res.status(200).json({
       message: "Verification code sent to your email.",
       tempUser: {
