@@ -8,28 +8,30 @@ dotenv.config();
 
 const app = express();
 
-// ✅ Configure CORS properly
+// ✅ 1. Enable CORS before everything else
 app.use(
   cors({
     origin: [
-      "https://hgsccdigitalskills.vercel.app", // your frontend domain
-      "http://localhost:5173", // for local testing
+      "http://localhost:5173", // local frontend
+      "https://hgsccdigitalskills.vercel.app", // your deployed frontend
     ],
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
-    credentials: true, // allows cookies or auth headers if needed
+    allowedHeaders: ["Content-Type", "Authorization"],
   })
 );
 
+// ✅ 2. JSON parser
 app.use(express.json());
 
-// ✅ Routes
-app.use("/api/users", userRoutes);
-
+// ✅ 3. Test route
 app.get("/", (req, res) => {
   res.send("HGSC² Digital Skills API is running...");
 });
 
-// ✅ MongoDB Connection
+// ✅ 4. Routes
+app.use("/api/users", userRoutes);
+
+// ✅ 5. MongoDB Connection
 mongoose
   .connect(process.env.MONGO_URI)
   .then(() => {
