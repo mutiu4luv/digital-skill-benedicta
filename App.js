@@ -13,7 +13,7 @@ app.use(
   cors({
     origin: [
       "https://hgsccdigitalskills.vercel.app", // your frontend domain
-      "http://localhost:3000", // for local testing
+      "http://localhost:5173", // for local testing
     ],
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
     credentials: true, // allows cookies or auth headers if needed
