@@ -4,6 +4,7 @@ import jwt from "jsonwebtoken";
 import nodemailer from "nodemailer";
 import cloudinary from "../config/cloudnary.js";
 
+// 📌 Register User
 export const registerUser = async (req, res) => {
   try {
     const {
@@ -36,31 +37,31 @@ export const registerUser = async (req, res) => {
     // Generate OTP
     const verificationCode = Math.floor(100000 + Math.random() * 900000);
 
-    // ✅ Send Email using Brevo API (NO SMTP)
-    const response = await fetch("https://api.brevo.com/v3/smtp/email", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "api-key": process.env.EMAIL_API_KEY,
+    // ✅ Setup Brevo SMTP transporter
+    const transporter = nodemailer.createTransport({
+      host: "smtp-relay.brevo.com",
+      port: 587,
+      secure: false, // use TLS
+      auth: {
+        user: process.env.EMAIL_USER, // 9a743f001@smtp-brevo.com
+        pass: process.env.EMAIL_PASS, // your Brevo SMTP key
       },
-      body: JSON.stringify({
-        sender: { name: "HGSC² Digital Skills", email: process.env.EMAIL_USER },
-        to: [{ email }],
-        subject: "Verify Your HGSC² Account",
-        htmlContent: `
-          <h2>Welcome, ${fullName}</h2>
-          <p>Your verification code is:</p>
-          <h1>${verificationCode}</h1>
-          <p>This code expires in 10 minutes.</p>
-        `,
-      }),
     });
 
-    if (!response.ok) {
-      const text = await response.text();
-      throw new Error(`Brevo API error: ${text}`);
-    }
+    // ✅ Send verification email
+    await transporter.sendMail({
+      from: `"HGSC² Digital Skills" <${process.env.EMAIL_USER}>`,
+      to: email,
+      subject: "Verify Your HGSC² Account",
+      html: `
+        <h2>Welcome, ${fullName}</h2>
+        <p>Your verification code is:</p>
+        <h1>${verificationCode}</h1>
+        <p>This code expires in 10 minutes.</p>
+      `,
+    });
 
+    // ✅ Return temporary data for frontend OTP verification
     res.status(200).json({
       message: "Verification code sent to your email.",
       tempUser: {
@@ -166,7 +167,7 @@ export const loginUser = async (req, res) => {
   }
 };
 
-// 📌 Get All Users (owner only)
+// 📌 Get All Users (admin only)
 export const getAllUsers = async (req, res) => {
   try {
     const users = await User.find().select("-password");
