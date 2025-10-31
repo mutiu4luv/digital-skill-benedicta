@@ -35,15 +35,17 @@ export const registerUser = async (req, res) => {
     // Generate OTP
     const verificationCode = Math.floor(100000 + Math.random() * 900000);
 
-    // ✅ Send verification email only (no DB write yet)
+    // ✅ Use Brevo (Sendinblue) SMTP
     const transporter = nodemailer.createTransport({
-      service: "gmail",
+      host: "smtp-relay.brevo.com",
+      port: 587,
       auth: {
         user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS,
+        pass: process.env.EMAIL_API_KEY, // <-- use your API key here
       },
     });
 
+    // ✅ Send the verification email
     await transporter.sendMail({
       from: `"HGSC² Digital Skills" <${process.env.EMAIL_USER}>`,
       to: email,
@@ -56,7 +58,7 @@ export const registerUser = async (req, res) => {
       `,
     });
 
-    // ✅ Return OTP in backend memory (client will resend it to verify)
+    // ✅ Return OTP data
     res.status(200).json({
       message: "Verification code sent to your email.",
       tempUser: {
