@@ -15,8 +15,6 @@ export const registerUser = async (req, res) => {
       acceptedTerms,
     } = req.body;
 
-    console.log("📩 Register route reached with:", req.body);
-
     if (!fullName || !email || !password)
       return res
         .status(400)
@@ -34,77 +32,76 @@ export const registerUser = async (req, res) => {
     if (existingUser)
       return res.status(400).json({ message: "Email already registered" });
 
-    // ✅ Upload image to Cloudinary (using buffer)
-    let uploadedPhotoUrl = "";
-    if (req.file) {
-      const uploadResult = await cloudinary.uploader.upload_stream(
-        { folder: "hgsc_users" },
-        async (error, result) => {
-          if (error) {
-            console.error("❌ Cloudinary upload failed:", error);
-            return res
-              .status(500)
-              .json({ message: "Cloudinary upload failed" });
-          }
+    // Generate OTP
+    const verificationCode = Math.floor(100000 + Math.random() * 900000);
 
-          uploadedPhotoUrl = result.secure_url;
+    // ✅ Send verification email only (no DB write yet)
+    const transporter = nodemailer.createTransport({
+      service: "gmail",
+      auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS,
+      },
+    });
 
-          // Continue user creation once image uploaded
-          const salt = await bcrypt.genSalt(10);
-          const hashedPassword = await bcrypt.hash(password, salt);
-          const verificationCode = Math.floor(100000 + Math.random() * 900000);
+    await transporter.sendMail({
+      from: `"HGSC² Digital Skills" <${process.env.EMAIL_USER}>`,
+      to: email,
+      subject: "Verify Your HGSC² Account",
+      html: `
+        <h2>Welcome, ${fullName}</h2>
+        <p>Your verification code is:</p>
+        <h1>${verificationCode}</h1>
+        <p>This code expires in 10 minutes.</p>
+      `,
+    });
 
-          const newUser = await User.create({
-            fullName,
-            email,
-            password: hashedPassword,
-            role: role || "student",
-            phoneNumber,
-            country,
-            profilePhoto: uploadedPhotoUrl,
-            acceptedTerms,
-            verificationCode,
-            isVerified: false,
-          });
+    // ✅ Return OTP in backend memory (client will resend it to verify)
+    res.status(200).json({
+      message: "Verification code sent to your email.",
+      tempUser: {
+        fullName,
+        email,
+        password,
+        role,
+        phoneNumber,
+        country,
+        acceptedTerms,
+        verificationCode,
+      },
+    });
+  } catch (error) {
+    console.error("❌ Registration error:", error);
+    res.status(500).json({
+      message: "Error sending verification email",
+      error: error.message,
+    });
+  }
+};
 
-          // Send email verification
-          const transporter = nodemailer.createTransport({
-            service: "gmail",
-            auth: {
-              user: process.env.EMAIL_USER,
-              pass: process.env.EMAIL_PASS,
-            },
-          });
+// 📌 Verify Email
+export const verifyEmail = async (req, res) => {
+  try {
+    const {
+      fullName,
+      email,
+      password,
+      role,
+      phoneNumber,
+      country,
+      acceptedTerms,
+      code,
+      sentCode,
+    } = req.body;
 
-          await transporter.sendMail({
-            from: `"HGSC² Digital Skills" <${process.env.EMAIL_USER}>`,
-            to: email,
-            subject: "Verify Your HGSC² Account",
-            html: `
-                <h2>Welcome, ${fullName}</h2>
-                <p>Your verification code is:</p>
-                <h1>${verificationCode}</h1>
-                <p>This code expires in 10 minutes.</p>
-              `,
-          });
+    if (!email || !code)
+      return res.status(400).json({ message: "Email and code are required" });
 
-          console.log("✅ Registration successful");
-          res.status(201).json({
-            message: "Registration successful! Please verify your email.",
-            userId: newUser._id,
-          });
-        }
-      );
+    if (code !== sentCode)
+      return res.status(400).json({ message: "Invalid verification code" });
 
-      // 🔹 Pipe buffer to Cloudinary
-      uploadResult.end(req.file.buffer);
-      return; // stop further execution until upload completes
-    }
-
-    // If no photo uploaded, continue normally
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
-    const verificationCode = Math.floor(100000 + Math.random() * 900000);
 
     const newUser = await User.create({
       fullName,
@@ -114,41 +111,15 @@ export const registerUser = async (req, res) => {
       phoneNumber,
       country,
       acceptedTerms,
-      verificationCode,
-      isVerified: false,
+      isVerified: true,
     });
 
     res.status(201).json({
-      message: "Registration successful (no photo)",
+      message: "Email verified and user registered successfully",
       userId: newUser._id,
     });
   } catch (error) {
-    console.error("❌ Registration error:", error);
-    res
-      .status(500)
-      .json({ message: "Error registering user", error: error.message });
-  }
-};
-
-// 📌 Verify Email
-export const verifyEmail = async (req, res) => {
-  try {
-    const { email, code } = req.body;
-    if (!email || !code)
-      return res.status(400).json({ message: "Email and code are required" });
-
-    const user = await User.findOne({ email });
-    if (!user) return res.status(404).json({ message: "User not found" });
-
-    if (user.verificationCode !== code)
-      return res.status(400).json({ message: "Invalid verification code" });
-
-    user.isVerified = true;
-    user.verificationCode = null;
-    await user.save();
-
-    res.status(200).json({ message: "Email verified successfully" });
-  } catch (error) {
+    console.error("❌ Verification error:", error);
     res
       .status(500)
       .json({ message: "Verification failed", error: error.message });
