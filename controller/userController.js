@@ -13,28 +13,29 @@ cloudinary.config({
   api_key: process.env.CLOUDINARY_API_KEY,
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
-/* ✅ Setup Nodemailer (Gmail) */
+
+/* ✅ Setup Nodemailer with Gmail App Password */
 const transporter = nodemailer.createTransport({
-  service: "gmail",
+  host: "smtp.gmail.com",
+  port: 465, // SSL port
+  secure: true,
   auth: {
     user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS,
+    pass: process.env.EMAIL_PASS, // App password
+  },
+  tls: {
+    rejectUnauthorized: false,
   },
 });
 
 /* ✅ Register Controller */
-
 export const registerUser = async (req, res) => {
   try {
-    const {
-      fullName,
-      email,
-      password,
-      role,
-      phoneNumber,
-      country,
-      acceptedTerms,
-    } = req.body;
+    const { fullName, email, password, phoneNumber, country, acceptedTerms } =
+      req.body;
+
+    // Set role automatically to "student"
+    const role = "student";
 
     if (!fullName || !email || !password)
       return res
@@ -76,6 +77,7 @@ export const registerUser = async (req, res) => {
       profilePhoto = uploaded.secure_url;
     }
 
+    // ✅ Generate verification code
     const verificationCode = Math.floor(100000 + Math.random() * 900000);
 
     // ✅ Send verification email
@@ -104,7 +106,7 @@ export const registerUser = async (req, res) => {
         fullName,
         email,
         password,
-        role,
+        role, // automatically student
         phoneNumber,
         country,
         acceptedTerms,
@@ -134,6 +136,7 @@ export const verifyEmail = async (req, res) => {
       acceptedTerms,
       code,
       sentCode,
+      profilePhoto, // pass from frontend
     } = req.body;
 
     if (!email || !code)
@@ -149,12 +152,11 @@ export const verifyEmail = async (req, res) => {
       fullName,
       email,
       password: hashedPassword,
-      role: role || "student",
+      role: role?.toLowerCase() || "student",
       phoneNumber,
       country,
       acceptedTerms,
       profilePhoto,
-
       isVerified: true,
     });
 
