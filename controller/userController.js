@@ -8,35 +8,37 @@ import streamifier from "streamifier";
 
 dotenv.config();
 
+// Configure Cloudinary
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
   api_key: process.env.CLOUDINARY_API_KEY,
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
-/* ✅ Setup Nodemailer with Gmail App Password */
+// Configure Nodemailer with Gmail App Password
 const transporter = nodemailer.createTransport({
   host: "smtp.gmail.com",
-  port: 465, // SSL port
+  port: 465,
   secure: true,
   auth: {
     user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS, // App password
+    pass: process.env.EMAIL_PASS,
   },
   tls: {
     rejectUnauthorized: false,
   },
 });
 
-/* ✅ Register Controller */
+// Register Controller
 export const registerUser = async (req, res) => {
   try {
     const { fullName, email, password, phoneNumber, country, acceptedTerms } =
       req.body;
 
-    // Set role automatically to "student"
+    // Always set role to "student"
     const role = "student";
 
+    // Validate required fields
     if (!fullName || !email || !password)
       return res
         .status(400)
@@ -50,37 +52,34 @@ export const registerUser = async (req, res) => {
         .status(400)
         .json({ message: "Please accept the terms & conditions" });
 
+    // Check if user already exists
     const existingUser = await User.findOne({ email });
     if (existingUser)
       return res.status(400).json({ message: "Email already registered" });
 
-    // ✅ Upload photo using streamifier (works for browser uploads)
+    // Upload profile photo if provided
     let profilePhoto = "";
     if (req.file) {
-      const streamUpload = () => {
-        return new Promise((resolve, reject) => {
+      const streamUpload = () =>
+        new Promise((resolve, reject) => {
           const stream = cloudinary.uploader.upload_stream(
             {
               folder: "hgsc_users",
               transformation: [{ width: 500, height: 500, crop: "fill" }],
             },
-            (error, result) => {
-              if (result) resolve(result);
-              else reject(error);
-            }
+            (error, result) => (result ? resolve(result) : reject(error))
           );
           streamifier.createReadStream(req.file.buffer).pipe(stream);
         });
-      };
 
       const uploaded = await streamUpload();
       profilePhoto = uploaded.secure_url;
     }
 
-    // ✅ Generate verification code
+    // Generate verification code
     const verificationCode = Math.floor(100000 + Math.random() * 900000);
 
-    // ✅ Send verification email
+    // Send verification email
     const mailOptions = {
       from: `"HGSC² Digital Skills" <${process.env.EMAIL_USER}>`,
       to: email,
@@ -106,7 +105,7 @@ export const registerUser = async (req, res) => {
         fullName,
         email,
         password,
-        role, // automatically student
+        role, // always "student"
         phoneNumber,
         country,
         acceptedTerms,
@@ -122,7 +121,6 @@ export const registerUser = async (req, res) => {
     });
   }
 };
-
 /* ✅ Verify Email Controller */
 export const verifyEmail = async (req, res) => {
   try {
