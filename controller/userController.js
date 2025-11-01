@@ -1,25 +1,24 @@
 import User from "../module/userModule.js";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
-import nodemailer from "nodemailer";
-import cloudinary from "../config/cloudnary.js";
 import SibApiV3Sdk from "sib-api-v3-sdk";
 import dotenv from "dotenv";
 
 dotenv.config();
 
-// Setup Brevo client
+// ✅ Setup Brevo client properly
 const brevoClient = SibApiV3Sdk.ApiClient.instance;
 const apiKey = brevoClient.authentications["api-key"];
-apiKey.apiKey = process.env.EMAIL_PASS;
+apiKey.apiKey = process.env.EMAIL_API_KEY; // ✅ Use the correct Brevo API key variable
 
 const tranEmailApi = new SibApiV3Sdk.TransactionalEmailsApi();
 
+// ✅ Register user and send OTP
 export const registerUser = async (req, res) => {
   try {
     const { firstName, lastName, email, password } = req.body;
 
-    // Check if user exists
+    // Check if user already exists
     const existing = await User.findOne({ email });
     if (existing)
       return res.status(400).json({ message: "User already exists" });
@@ -35,28 +34,33 @@ export const registerUser = async (req, res) => {
       password: hashedPassword,
     });
 
-    // Send verification email
+    // Generate OTP
+    const otp = Math.floor(100000 + Math.random() * 900000);
+    user.otp = otp;
+    await user.save();
+
+    // Prepare Brevo email
     const sender = {
-      email: "yourverifiedemail@yourdomain.com", // must be a verified sender in Brevo
+      email: process.env.EMAIL_USER, // ✅ Your verified Brevo sender email (e.g. 9a743f001@smtp-brevo.com)
       name: "HGSC² Digital Skills",
     };
 
     const receivers = [{ email: user.email }];
 
-    const otp = Math.floor(100000 + Math.random() * 900000); // 6-digit OTP
-    user.otp = otp;
-    await user.save();
-
     const emailContent = {
       sender,
       to: receivers,
       subject: "Email Verification Code",
-      htmlContent: `<p>Hi ${user.firstName},</p>
+      htmlContent: `
+        <p>Hi ${user.firstName || "there"},</p>
         <p>Your verification code is <b>${otp}</b>.</p>
         <p>This code expires in 10 minutes.</p>
-        <p>HGSC² Digital Skills Team</p>`,
+        <br/>
+        <p>HGSC² Digital Skills Team</p>
+      `,
     };
 
+    // ✅ Send the transactional email via Brevo
     await tranEmailApi.sendTransacEmail(emailContent);
 
     res.status(201).json({
@@ -71,7 +75,7 @@ export const registerUser = async (req, res) => {
   }
 };
 
-// 📌 Verify Email and Register
+// ✅ Verify Email and Register (OTP confirmation)
 export const verifyEmail = async (req, res) => {
   try {
     const {
@@ -117,9 +121,8 @@ export const verifyEmail = async (req, res) => {
       .json({ message: "Verification failed", error: error.message });
   }
 };
-// 📌 Verify Email and Register
 
-// 📌 Login
+// ✅ Login
 export const loginUser = async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -155,7 +158,7 @@ export const loginUser = async (req, res) => {
   }
 };
 
-// 📌 Get All Users (admin only)
+// ✅ Get All Users (admin only)
 export const getAllUsers = async (req, res) => {
   try {
     const users = await User.find().select("-password");
