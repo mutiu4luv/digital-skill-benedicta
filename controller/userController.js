@@ -16,83 +16,60 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
-// ✅ Configure Brevo client
+/* ✅ Configure Brevo */
 const defaultClient = SibApiV3Sdk.ApiClient.instance;
 const apiKey = defaultClient.authentications["api-key"];
 apiKey.apiKey = process.env.BREVO_API_KEY;
-
-const transactionalEmailsApi = new SibApiV3Sdk.TransactionalEmailsApi();
+const apiInstance = new SibApiV3Sdk.TransactionalEmailsApi();
 
 export const registerUser = async (req, res) => {
   try {
     const { fullName, email, password, phoneNumber, country, acceptedTerms } =
       req.body;
 
-    // Automatically set role to "student"
+    // role automatically set to "student"
     const role = "student";
 
-    if (!fullName || !email || !password) {
+    if (!fullName || !email || !password)
       return res
         .status(400)
         .json({ message: "All required fields are needed" });
-    }
 
-    if (password.length < 5) {
+    if (password.length < 5)
       return res.status(400).json({ message: "Password too short" });
-    }
 
-    if (acceptedTerms !== true && acceptedTerms !== "true") {
+    if (acceptedTerms !== true && acceptedTerms !== "true")
       return res
         .status(400)
         .json({ message: "Please accept the terms & conditions" });
-    }
 
-    // Check if user exists
     const existingUser = await User.findOne({ email });
-    if (existingUser) {
+    if (existingUser)
       return res.status(400).json({ message: "Email already registered" });
-    }
 
-    // Upload profile photo (if any)
+    // ✅ Upload photo if provided
     let profilePhoto = "";
     if (req.file) {
-      const streamUpload = () => {
-        return new Promise((resolve, reject) => {
+      const streamUpload = () =>
+        new Promise((resolve, reject) => {
           const stream = cloudinary.uploader.upload_stream(
             {
               folder: "hgsc_users",
               transformation: [{ width: 500, height: 500, crop: "fill" }],
             },
-            (error, result) => {
-              if (result) resolve(result);
-              else reject(error);
-            }
+            (error, result) => (result ? resolve(result) : reject(error))
           );
           streamifier.createReadStream(req.file.buffer).pipe(stream);
         });
-      };
+
       const uploaded = await streamUpload();
       profilePhoto = uploaded.secure_url;
     }
 
-    // Generate verification code
+    // ✅ Generate verification code
     const verificationCode = Math.floor(100000 + Math.random() * 900000);
 
-    // Save user temporarily in DB or send as tempUser
-    // (you can hash password later after verification if desired)
-    const tempUser = {
-      fullName,
-      email,
-      password,
-      role,
-      phoneNumber,
-      country,
-      acceptedTerms,
-      profilePhoto,
-      verificationCode,
-    };
-
-    // Send email via Brevo
+    // ✅ Send email via Brevo
     const sendSmtpEmail = new SibApiV3Sdk.SendSmtpEmail();
     sendSmtpEmail.sender = {
       name: "HGSC² Digital Skills",
@@ -111,19 +88,30 @@ export const registerUser = async (req, res) => {
         <p>This code expires in <b>10 minutes</b>.</p>
       </div>
     `;
-
-    await transactionalEmailsApi.sendTransacEmail(sendSmtpEmail);
+    await apiInstance.sendTransacEmail(sendSmtpEmail);
 
     res.status(200).json({
       message: "Verification code sent to your email.",
-      tempUser,
+      tempUser: {
+        fullName,
+        email,
+        password,
+        role,
+        phoneNumber,
+        country,
+        acceptedTerms,
+        profilePhoto,
+        verificationCode,
+      },
     });
   } catch (error) {
     console.error("❌ Registration error:", error);
-    res.status(500).json({
-      message: "Error during registration or sending verification email.",
-      error: error.message,
-    });
+    res
+      .status(500)
+      .json({
+        message: "Error during registration or sending verification email.",
+        error: error.message,
+      });
   }
 };
 /* ✅ Verify Email Controller */
