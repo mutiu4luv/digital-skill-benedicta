@@ -34,6 +34,7 @@ export const registerUser = async (req, res) => {
   try {
     const { fullName, email, password, phoneNumber, country, acceptedTerms } =
       req.body;
+    console.log("Received body:", req.body);
 
     // Always set role to "student"
     const role = "student";
@@ -71,6 +72,7 @@ export const registerUser = async (req, res) => {
           );
           streamifier.createReadStream(req.file.buffer).pipe(stream);
         });
+      console.log("Received file:", req.file);
 
       const uploaded = await streamUpload();
       profilePhoto = uploaded.secure_url;
