@@ -3,6 +3,10 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import nodemailer from "nodemailer";
 import cloudinary from "../config/cloudnary.js";
+import SibApiV3Sdk from "sib-api-v3-sdk";
+import dotenv from "dotenv";
+
+dotenv.config();
 
 // 📌 Register User and Send OTP
 export const registerUser = async (req, res) => {
@@ -37,23 +41,28 @@ export const registerUser = async (req, res) => {
     // Generate OTP
     const verificationCode = Math.floor(100000 + Math.random() * 900000);
 
-    // ✅ Setup Brevo API
-    const apiInstance = new Brevo.TransactionalEmailsApi();
-    const apiKey = apiInstance.authentications["apiKey"];
+    // ✅ Configure Brevo API client
+    let defaultClient = SibApiV3Sdk.ApiClient.instance;
+    let apiKey = defaultClient.authentications["api-key"];
     apiKey.apiKey = process.env.EMAIL_API_KEY;
+
+    const apiInstance = new SibApiV3Sdk.TransactionalEmailsApi();
 
     const sendSmtpEmail = {
       sender: {
         name: "HGSC² Digital Skills",
         email: process.env.EMAIL_USER,
       },
-      to: [{ email, name: fullName }],
+      to: [{ email: email, name: fullName }],
       subject: "Verify Your HGSC² Account",
       htmlContent: `
-        <h2>Welcome, ${fullName}</h2>
-        <p>Your verification code is:</p>
-        <h1 style="color:#1976d2;">${verificationCode}</h1>
-        <p>This code expires in 10 minutes.</p>
+        <div style="font-family: Arial, sans-serif; line-height: 1.5;">
+          <h2>Welcome, ${fullName} 👋</h2>
+          <p>Your verification code is:</p>
+          <h1 style="color:#1976d2;">${verificationCode}</h1>
+          <p>This code will expire in 10 minutes.</p>
+          <p>Thanks for joining HGSC² Digital Skills!</p>
+        </div>
       `,
     };
 
@@ -128,6 +137,7 @@ export const verifyEmail = async (req, res) => {
       .json({ message: "Verification failed", error: error.message });
   }
 };
+// 📌 Verify Email and Register
 
 // 📌 Login
 export const loginUser = async (req, res) => {
