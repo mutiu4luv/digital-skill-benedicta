@@ -4,7 +4,7 @@ import jwt from "jsonwebtoken";
 import nodemailer from "nodemailer";
 import cloudinary from "../config/cloudnary.js";
 
-// 📌 Register User
+// 📌 Register User and Send OTP
 export const registerUser = async (req, res) => {
   try {
     const {
@@ -37,29 +37,27 @@ export const registerUser = async (req, res) => {
     // Generate OTP
     const verificationCode = Math.floor(100000 + Math.random() * 900000);
 
-    // ✅ Setup Brevo SMTP transporter
-    const transporter = nodemailer.createTransport({
-      host: "smtp-relay.brevo.com",
-      port: 587,
-      secure: false, // use TLS
-      auth: {
-        user: process.env.EMAIL_USER, // 9a743f001@smtp-brevo.com
-        pass: process.env.EMAIL_PASS, // your Brevo SMTP key
-      },
-    });
+    // ✅ Setup Brevo API
+    const apiInstance = new Brevo.TransactionalEmailsApi();
+    const apiKey = apiInstance.authentications["apiKey"];
+    apiKey.apiKey = process.env.EMAIL_API_KEY;
 
-    // ✅ Send verification email
-    await transporter.sendMail({
-      from: `"HGSC² Digital Skills" <${process.env.EMAIL_USER}>`,
-      to: email,
+    const sendSmtpEmail = {
+      sender: {
+        name: "HGSC² Digital Skills",
+        email: process.env.EMAIL_USER,
+      },
+      to: [{ email, name: fullName }],
       subject: "Verify Your HGSC² Account",
-      html: `
+      htmlContent: `
         <h2>Welcome, ${fullName}</h2>
         <p>Your verification code is:</p>
-        <h1>${verificationCode}</h1>
+        <h1 style="color:#1976d2;">${verificationCode}</h1>
         <p>This code expires in 10 minutes.</p>
       `,
-    });
+    };
+
+    await apiInstance.sendTransacEmail(sendSmtpEmail);
 
     // ✅ Return temporary data for frontend OTP verification
     res.status(200).json({
@@ -84,7 +82,7 @@ export const registerUser = async (req, res) => {
   }
 };
 
-// 📌 Verify Email
+// 📌 Verify Email and Register
 export const verifyEmail = async (req, res) => {
   try {
     const {
