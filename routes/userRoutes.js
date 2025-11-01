@@ -9,8 +9,6 @@ import {
 import { protect, authorizeRoles } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
-
-// ✅ Use disk storage (best for Cloudinary path uploads)
 const storage = multer.diskStorage({});
 const upload = multer({ storage });
 

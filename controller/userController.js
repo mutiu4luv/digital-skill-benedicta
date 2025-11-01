@@ -7,8 +7,6 @@ import cloudinary from "../config/cloudnary.js";
 
 dotenv.config();
 
-dotenv.config();
-
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
   api_key: process.env.CLOUDINARY_API_KEY,
@@ -141,6 +139,8 @@ export const verifyEmail = async (req, res) => {
       phoneNumber,
       country,
       acceptedTerms,
+      profilePhoto,
+
       isVerified: true,
     });
 
