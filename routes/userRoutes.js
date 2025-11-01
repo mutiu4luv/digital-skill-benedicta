@@ -10,7 +10,9 @@ import { protect, authorizeRoles } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
 const storage = multer.memoryStorage();
-const upload = multer({ storage });
+const upload = multer({
+  limits: { fileSize: 5 * 1024 * 1024 },
+});
 
 router.post("/register", upload.single("profilePhoto"), registerUser);
 router.post("/verify-email", verifyEmail);
