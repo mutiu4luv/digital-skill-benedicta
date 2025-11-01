@@ -4,6 +4,7 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import nodemailer from "nodemailer";
 import cloudinary from "../config/cloudnary.js";
+import streamifier from "streamifier";
 
 dotenv.config();
 
@@ -52,13 +53,26 @@ export const registerUser = async (req, res) => {
     if (existingUser)
       return res.status(400).json({ message: "Email already registered" });
 
-    // ✅ Upload photo
+    // ✅ Upload photo using streamifier (works for browser uploads)
     let profilePhoto = "";
     if (req.file) {
-      const uploaded = await cloudinary.uploader.upload(req.file.path, {
-        folder: "hgsc_users",
-        transformation: [{ width: 500, height: 500, crop: "fill" }],
-      });
+      const streamUpload = () => {
+        return new Promise((resolve, reject) => {
+          const stream = cloudinary.uploader.upload_stream(
+            {
+              folder: "hgsc_users",
+              transformation: [{ width: 500, height: 500, crop: "fill" }],
+            },
+            (error, result) => {
+              if (result) resolve(result);
+              else reject(error);
+            }
+          );
+          streamifier.createReadStream(req.file.buffer).pipe(stream);
+        });
+      };
+
+      const uploaded = await streamUpload();
       profilePhoto = uploaded.secure_url;
     }
 
