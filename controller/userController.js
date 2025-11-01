@@ -7,6 +7,13 @@ import cloudinary from "../config/cloudnary.js";
 
 dotenv.config();
 
+dotenv.config();
+
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+});
 /* ✅ Setup Nodemailer (Gmail) */
 const transporter = nodemailer.createTransport({
   service: "gmail",
@@ -17,6 +24,7 @@ const transporter = nodemailer.createTransport({
 });
 
 /* ✅ Register Controller */
+
 export const registerUser = async (req, res) => {
   try {
     const {
@@ -46,20 +54,19 @@ export const registerUser = async (req, res) => {
     if (existingUser)
       return res.status(400).json({ message: "Email already registered" });
 
-    /* ✅ Upload image if provided */
+    // ✅ Upload photo
     let profilePhoto = "";
     if (req.file) {
-      const uploaded = await cloudinary.v2.uploader.upload(req.file.path, {
+      const uploaded = await cloudinary.uploader.upload(req.file.path, {
         folder: "hgsc_users",
         transformation: [{ width: 500, height: 500, crop: "fill" }],
       });
       profilePhoto = uploaded.secure_url;
     }
 
-    /* ✅ Generate OTP */
     const verificationCode = Math.floor(100000 + Math.random() * 900000);
 
-    /* ✅ Send email with Gmail */
+    // ✅ Send verification email
     const mailOptions = {
       from: `"HGSC² Digital Skills" <${process.env.EMAIL_USER}>`,
       to: email,
@@ -73,9 +80,6 @@ export const registerUser = async (req, res) => {
             ${verificationCode}
           </h1>
           <p>This code expires in <b>10 minutes</b>.</p>
-          <p>If you didn’t request this, please ignore this email.</p>
-          <br/>
-          <p>— The HGSC² Digital Skills Team</p>
         </div>
       `,
     };
