@@ -5,6 +5,7 @@ import jwt from "jsonwebtoken";
 import nodemailer from "nodemailer";
 import cloudinary from "../config/cloudnary.js";
 import streamifier from "streamifier";
+import SibApiV3Sdk from "sib-api-v3-sdk";
 
 dotenv.config();
 
@@ -15,65 +16,61 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
-// Configure Nodemailer with Gmail App Password
-const transporter = nodemailer.createTransport({
-  host: "smtp.gmail.com",
-  port: 465,
-  secure: true,
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS,
-  },
-  tls: {
-    rejectUnauthorized: false,
-  },
-});
+// ✅ Configure Brevo client
+const defaultClient = SibApiV3Sdk.ApiClient.instance;
+const apiKey = defaultClient.authentications["api-key"];
+apiKey.apiKey = process.env.BREVO_API_KEY;
 
-// Register Controller
+const transactionalEmailsApi = new SibApiV3Sdk.TransactionalEmailsApi();
+
 export const registerUser = async (req, res) => {
   try {
     const { fullName, email, password, phoneNumber, country, acceptedTerms } =
       req.body;
-    console.log("Received body:", req.body);
 
-    // Always set role to "student"
+    // Automatically set role to "student"
     const role = "student";
 
-    // Validate required fields
-    if (!fullName || !email || !password)
+    if (!fullName || !email || !password) {
       return res
         .status(400)
         .json({ message: "All required fields are needed" });
+    }
 
-    if (password.length < 5)
+    if (password.length < 5) {
       return res.status(400).json({ message: "Password too short" });
+    }
 
-    if (acceptedTerms !== true && acceptedTerms !== "true")
+    if (acceptedTerms !== true && acceptedTerms !== "true") {
       return res
         .status(400)
         .json({ message: "Please accept the terms & conditions" });
+    }
 
-    // Check if user already exists
+    // Check if user exists
     const existingUser = await User.findOne({ email });
-    if (existingUser)
+    if (existingUser) {
       return res.status(400).json({ message: "Email already registered" });
+    }
 
-    // Upload profile photo if provided
+    // Upload profile photo (if any)
     let profilePhoto = "";
     if (req.file) {
-      const streamUpload = () =>
-        new Promise((resolve, reject) => {
+      const streamUpload = () => {
+        return new Promise((resolve, reject) => {
           const stream = cloudinary.uploader.upload_stream(
             {
               folder: "hgsc_users",
               transformation: [{ width: 500, height: 500, crop: "fill" }],
             },
-            (error, result) => (result ? resolve(result) : reject(error))
+            (error, result) => {
+              if (result) resolve(result);
+              else reject(error);
+            }
           );
           streamifier.createReadStream(req.file.buffer).pipe(stream);
         });
-      console.log("Received file:", req.file);
-
+      };
       const uploaded = await streamUpload();
       profilePhoto = uploaded.secure_url;
     }
@@ -81,39 +78,45 @@ export const registerUser = async (req, res) => {
     // Generate verification code
     const verificationCode = Math.floor(100000 + Math.random() * 900000);
 
-    // Send verification email
-    const mailOptions = {
-      from: `"HGSC² Digital Skills" <${process.env.EMAIL_USER}>`,
-      to: email,
-      subject: "Verify Your HGSC² Digital Skills Account",
-      html: `
-        <div style="font-family: Arial, sans-serif; line-height:1.6;">
-          <h2>Welcome, ${fullName} 👋</h2>
-          <p>Thank you for registering with <strong>HGSC² Digital Skills</strong>.</p>
-          <p>Your verification code is:</p>
-          <h1 style="background:#1976d2;color:#fff;display:inline-block;padding:10px 20px;border-radius:8px;">
-            ${verificationCode}
-          </h1>
-          <p>This code expires in <b>10 minutes</b>.</p>
-        </div>
-      `,
+    // Save user temporarily in DB or send as tempUser
+    // (you can hash password later after verification if desired)
+    const tempUser = {
+      fullName,
+      email,
+      password,
+      role,
+      phoneNumber,
+      country,
+      acceptedTerms,
+      profilePhoto,
+      verificationCode,
     };
 
-    await transporter.sendMail(mailOptions);
+    // Send email via Brevo
+    const sendSmtpEmail = new SibApiV3Sdk.SendSmtpEmail();
+    sendSmtpEmail.sender = {
+      name: "HGSC² Digital Skills",
+      email: process.env.EMAIL_SENDER,
+    };
+    sendSmtpEmail.to = [{ email, name: fullName }];
+    sendSmtpEmail.subject = "Verify Your HGSC² Digital Skills Account";
+    sendSmtpEmail.htmlContent = `
+      <div style="font-family: Arial, sans-serif; line-height:1.6;">
+        <h2>Welcome, ${fullName} 👋</h2>
+        <p>Thank you for registering with <strong>HGSC² Digital Skills</strong>.</p>
+        <p>Your verification code is:</p>
+        <h1 style="background:#1976d2;color:#fff;display:inline-block;padding:10px 20px;border-radius:8px;">
+          ${verificationCode}
+        </h1>
+        <p>This code expires in <b>10 minutes</b>.</p>
+      </div>
+    `;
+
+    await transactionalEmailsApi.sendTransacEmail(sendSmtpEmail);
 
     res.status(200).json({
       message: "Verification code sent to your email.",
-      tempUser: {
-        fullName,
-        email,
-        password,
-        role, // always "student"
-        phoneNumber,
-        country,
-        acceptedTerms,
-        profilePhoto,
-        verificationCode,
-      },
+      tempUser,
     });
   } catch (error) {
     console.error("❌ Registration error:", error);
