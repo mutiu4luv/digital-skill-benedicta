@@ -8,79 +8,59 @@ import dotenv from "dotenv";
 
 dotenv.config();
 
-// 📌 Register User and Send OTP
+// Setup Brevo client
+const brevoClient = SibApiV3Sdk.ApiClient.instance;
+const apiKey = brevoClient.authentications["api-key"];
+apiKey.apiKey = process.env.EMAIL_PASS;
+
+const tranEmailApi = new SibApiV3Sdk.TransactionalEmailsApi();
+
 export const registerUser = async (req, res) => {
   try {
-    const {
-      fullName,
+    const { firstName, lastName, email, password } = req.body;
+
+    // Check if user exists
+    const existing = await User.findOne({ email });
+    if (existing)
+      return res.status(400).json({ message: "User already exists" });
+
+    // Hash password
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    // Create new user
+    const user = await User.create({
+      firstName,
+      lastName,
       email,
-      password,
-      role,
-      phoneNumber,
-      country,
-      acceptedTerms,
-    } = req.body;
+      password: hashedPassword,
+    });
 
-    if (!fullName || !email || !password)
-      return res
-        .status(400)
-        .json({ message: "All required fields are needed" });
-
-    if (password.length < 5)
-      return res.status(400).json({ message: "Password too short" });
-
-    if (!acceptedTerms)
-      return res
-        .status(400)
-        .json({ message: "Please accept the terms & conditions" });
-
-    const existingUser = await User.findOne({ email });
-    if (existingUser)
-      return res.status(400).json({ message: "Email already registered" });
-
-    // Generate OTP
-    const verificationCode = Math.floor(100000 + Math.random() * 900000);
-
-    // ✅ Configure Brevo API client
-    let defaultClient = SibApiV3Sdk.ApiClient.instance;
-    let apiKey = defaultClient.authentications["api-key"];
-    apiKey.apiKey = process.env.EMAIL_API_KEY;
-
-    const apiInstance = new SibApiV3Sdk.TransactionalEmailsApi();
-
-    const sendSmtpEmail = {
-      sender: {
-        name: "HGSC² Digital Skills",
-        email: process.env.EMAIL_USER,
-      },
-      to: [{ email: email, name: fullName }],
-      subject: "Verify Your HGSC² Account",
-      htmlContent: `
-        <div style="font-family: Arial, sans-serif; line-height: 1.5;">
-          <h2>Welcome, ${fullName} 👋</h2>
-          <p>Your verification code is:</p>
-          <h1 style="color:#1976d2;">${verificationCode}</h1>
-          <p>This code will expire in 10 minutes.</p>
-          <p>Thanks for joining HGSC² Digital Skills!</p>
-        </div>
-      `,
+    // Send verification email
+    const sender = {
+      email: "yourverifiedemail@yourdomain.com", // must be a verified sender in Brevo
+      name: "HGSC² Digital Skills",
     };
 
-    await apiInstance.sendTransacEmail(sendSmtpEmail);
+    const receivers = [{ email: user.email }];
 
-    // ✅ Return temporary data for frontend OTP verification
-    res.status(200).json({
-      message: "Verification code sent to your email.",
-      tempUser: {
-        fullName,
-        email,
-        password,
-        role,
-        phoneNumber,
-        country,
-        acceptedTerms,
-        verificationCode,
-      },
+    const otp = Math.floor(100000 + Math.random() * 900000); // 6-digit OTP
+    user.otp = otp;
+    await user.save();
+
+    const emailContent = {
+      sender,
+      to: receivers,
+      subject: "Email Verification Code",
+      htmlContent: `<p>Hi ${user.firstName},</p>
+        <p>Your verification code is <b>${otp}</b>.</p>
+        <p>This code expires in 10 minutes.</p>
+        <p>HGSC² Digital Skills Team</p>`,
+    };
+
+    await tranEmailApi.sendTransacEmail(emailContent);
+
+    res.status(201).json({
+      message: "User registered. Verification email sent successfully.",
     });
   } catch (error) {
     console.error("❌ Registration error:", error);
