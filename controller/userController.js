@@ -1,67 +1,78 @@
+import dotenv from "dotenv";
 import User from "../module/userModule.js";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
-import SibApiV3Sdk from "sib-api-v3-sdk";
-import dotenv from "dotenv";
+import nodemailer from "nodemailer";
+import cloudinary from "../config/cloudnary.js";
 
 dotenv.config();
 
-/* ✅ Configure Brevo API Client */
-const brevoClient = SibApiV3Sdk.ApiClient.instance;
-const apiKey = brevoClient.authentications["api-key"];
-apiKey.apiKey = process.env.EMAIL_API_KEY;
+/* ✅ Setup Nodemailer (Gmail) */
+const transporter = nodemailer.createTransport({
+  service: "gmail",
+  auth: {
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS,
+  },
+});
 
-const tranEmailApi = new SibApiV3Sdk.TransactionalEmailsApi();
-
+/* ✅ Register Controller */
 export const registerUser = async (req, res) => {
   try {
-    const { firstName, lastName, email, password } = req.body;
+    const {
+      fullName,
+      email,
+      password,
+      role,
+      phoneNumber,
+      country,
+      acceptedTerms,
+    } = req.body;
 
-    if (!firstName || !lastName || !email || !password) {
-      return res.status(400).json({ message: "All fields are required." });
-    }
+    if (!fullName || !email || !password)
+      return res
+        .status(400)
+        .json({ message: "All required fields are needed" });
+
+    if (password.length < 5)
+      return res.status(400).json({ message: "Password too short" });
+
+    if (acceptedTerms !== true && acceptedTerms !== "true")
+      return res
+        .status(400)
+        .json({ message: "Please accept the terms & conditions" });
 
     const existingUser = await User.findOne({ email });
     if (existingUser)
-      return res.status(400).json({ message: "User already exists." });
+      return res.status(400).json({ message: "Email already registered" });
 
-    // Hash password
-    const hashedPassword = await bcrypt.hash(password, 10);
+    /* ✅ Upload image if provided */
+    let profilePhoto = "";
+    if (req.file) {
+      const uploaded = await cloudinary.v2.uploader.upload(req.file.path, {
+        folder: "hgsc_users",
+        transformation: [{ width: 500, height: 500, crop: "fill" }],
+      });
+      profilePhoto = uploaded.secure_url;
+    }
 
-    // Generate OTP
-    const otp = Math.floor(100000 + Math.random() * 900000);
+    /* ✅ Generate OTP */
+    const verificationCode = Math.floor(100000 + Math.random() * 900000);
 
-    // Create user with OTP
-    const user = await User.create({
-      firstName,
-      lastName,
-      email,
-      password: hashedPassword,
-      otp,
-      isVerified: false,
-    });
-
-    /* ✅ Email setup */
-    const sender = {
-      email: process.env.EMAIL_USER, // verified sender in Brevo
-      name: "HGSC² Digital Skills",
-    };
-
-    const receivers = [{ email: user.email }];
-
-    const emailContent = {
-      sender,
-      to: receivers,
-      subject: "Email Verification Code - HGSC² Digital Skills",
-      htmlContent: `
-        <div style="font-family: Arial, sans-serif; line-height: 1.6;">
-          <h2>Hello ${user.firstName},</h2>
-          <p>Thank you for registering with <b>HGSC² Digital Skills</b>.</p>
+    /* ✅ Send email with Gmail */
+    const mailOptions = {
+      from: `"HGSC² Digital Skills" <${process.env.EMAIL_USER}>`,
+      to: email,
+      subject: "Verify Your HGSC² Digital Skills Account",
+      html: `
+        <div style="font-family: Arial, sans-serif; line-height:1.6;">
+          <h2>Welcome, ${fullName} 👋</h2>
+          <p>Thank you for registering with <strong>HGSC² Digital Skills</strong>.</p>
           <p>Your verification code is:</p>
-          <h1 style="background:#222;color:#fff;display:inline-block;padding:10px 20px;border-radius:8px;">
-            ${otp}
+          <h1 style="background:#1976d2;color:#fff;display:inline-block;padding:10px 20px;border-radius:8px;">
+            ${verificationCode}
           </h1>
-          <p>This code will expire in 10 minutes.</p>
+          <p>This code expires in <b>10 minutes</b>.</p>
           <p>If you didn’t request this, please ignore this email.</p>
           <br/>
           <p>— The HGSC² Digital Skills Team</p>
@@ -69,23 +80,32 @@ export const registerUser = async (req, res) => {
       `,
     };
 
-    /* ✅ Send the transactional email */
-    await tranEmailApi.sendTransacEmail(emailContent);
+    await transporter.sendMail(mailOptions);
 
-    res.status(201).json({
-      message: "User registered successfully. Verification email sent.",
-      email: user.email,
-      otp, // only for testing — remove this in production
+    res.status(200).json({
+      message: "Verification code sent to your email.",
+      tempUser: {
+        fullName,
+        email,
+        password,
+        role,
+        phoneNumber,
+        country,
+        acceptedTerms,
+        profilePhoto,
+        verificationCode,
+      },
     });
   } catch (error) {
-    console.error("❌ Full registration error:", error);
+    console.error("❌ Registration error:", error);
     res.status(500).json({
-      message: "Error sending verification email",
-      error: error.message || error,
+      message: "Error during registration or sending verification email.",
+      error: error.message,
     });
   }
 };
 
+/* ✅ Verify Email Controller */
 export const verifyEmail = async (req, res) => {
   try {
     const {
@@ -97,68 +117,56 @@ export const verifyEmail = async (req, res) => {
       country,
       acceptedTerms,
       code,
+      sentCode,
     } = req.body;
 
     if (!email || !code)
-      return res
-        .status(400)
-        .json({ message: "Email and verification code are required." });
+      return res.status(400).json({ message: "Email and code are required" });
 
-    const user = await User.findOne({ email });
-    if (!user)
-      return res
-        .status(404)
-        .json({ message: "User not found. Please register first." });
+    if (code !== sentCode)
+      return res.status(400).json({ message: "Invalid verification code" });
 
-    if (user.isVerified)
-      return res.status(400).json({ message: "User already verified." });
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(password, salt);
 
-    if (String(user.otp) !== String(code))
-      return res
-        .status(400)
-        .json({ message: "Invalid or incorrect verification code." });
+    const newUser = await User.create({
+      fullName,
+      email,
+      password: hashedPassword,
+      role: role || "student",
+      phoneNumber,
+      country,
+      acceptedTerms,
+      isVerified: true,
+    });
 
-    // Mark as verified
-    user.isVerified = true;
-    user.otp = null; // clear OTP
-    user.fullName = fullName || `${user.firstName} ${user.lastName}`;
-    user.role = role || "student";
-    user.phoneNumber = phoneNumber;
-    user.country = country;
-    user.acceptedTerms = acceptedTerms;
-    await user.save();
-
-    res.status(200).json({
-      message: "Email verified successfully. You can now log in.",
+    res.status(201).json({
+      message: "Email verified and user registered successfully",
+      userId: newUser._id,
     });
   } catch (error) {
     console.error("❌ Verification error:", error);
-    res.status(500).json({
-      message: "Verification failed.",
-      error: error.message || error,
-    });
+    res
+      .status(500)
+      .json({ message: "Verification failed", error: error.message });
   }
 };
 
+// 📌 Login
 export const loginUser = async (req, res) => {
   try {
     const { email, password } = req.body;
-    if (!email || !password)
-      return res
-        .status(400)
-        .json({ message: "Email and password are required." });
-
     const user = await User.findOne({ email });
-    if (!user) return res.status(404).json({ message: "User not found." });
+    if (!user) return res.status(404).json({ message: "User not found" });
 
     const validPassword = await bcrypt.compare(password, user.password);
     if (!validPassword)
-      return res.status(401).json({ message: "Invalid credentials." });
+      return res.status(401).json({ message: "Invalid credentials" });
 
     if (!user.isVerified)
       return res
         .status(403)
-        .json({ message: "Please verify your email first." });
+        .json({ message: "Please verify your email first" });
 
     const token = jwt.sign(
       { id: user._id, role: user.role },
@@ -171,26 +179,23 @@ export const loginUser = async (req, res) => {
       token,
       user: {
         id: user._id,
-        fullName: user.fullName || `${user.firstName} ${user.lastName}`,
-        email: user.email,
+        fullName: user.fullName,
         role: user.role,
       },
     });
   } catch (error) {
-    console.error("❌ Login error:", error);
-    res.status(500).json({ message: "Login failed.", error: error.message });
+    res.status(500).json({ message: "Login failed", error: error.message });
   }
 };
 
+// 📌 Get All Users (admin only)
 export const getAllUsers = async (req, res) => {
   try {
     const users = await User.find().select("-password");
-    res.status(200).json(users);
+    res.json(users);
   } catch (error) {
-    console.error("❌ Fetch users error:", error);
-    res.status(500).json({
-      message: "Error fetching users.",
-      error: error.message,
-    });
+    res
+      .status(500)
+      .json({ message: "Error fetching users", error: error.message });
   }
 };
