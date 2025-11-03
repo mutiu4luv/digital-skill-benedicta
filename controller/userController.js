@@ -6,114 +6,92 @@ import cloudinary from "../config/cloudnary.js";
 import streamifier from "streamifier";
 import User from "../module/userModule.js"; // adjust path
 import bcrypt from "bcryptjs";
+import Brevo from "@getbrevo/brevo";
+import jwt from "jsonwebtoken";
 
 const defaultClient = SibApiV3Sdk.ApiClient.instance;
 defaultClient.authentications["api-key"].apiKey = process.env.BREVO_API_KEY;
 const brevoEmailApi = new SibApiV3Sdk.TransactionalEmailsApi();
-
 export const registerUser = async (req, res) => {
   try {
-    const { fullName, email, password, phoneNumber, country, acceptedTerms } =
-      req.body;
+    const { firstName, lastName, email, password } = req.body;
 
-    // ✅ Auto role
-    const role = "student";
-
-    // ✅ Validations
-    if (!fullName || !email || !password)
-      return res
-        .status(400)
-        .json({ message: "All required fields are needed" });
-
-    if (password.length < 5)
-      return res.status(400).json({ message: "Password too short" });
-
-    if (acceptedTerms !== true && acceptedTerms !== "true")
-      return res
-        .status(400)
-        .json({ message: "Please accept the terms & conditions" });
+    if (!firstName || !lastName || !email || !password)
+      return res.status(400).json({ message: "All fields are required" });
 
     const existingUser = await User.findOne({ email });
     if (existingUser)
-      return res.status(400).json({ message: "Email already registered" });
+      return res.status(400).json({ message: "User already exists" });
 
-    // ✅ Upload profile photo if provided
-    let profilePhoto = "";
-    if (req.file) {
-      const streamUpload = () =>
-        new Promise((resolve, reject) => {
-          const stream = cloudinary.uploader.upload_stream(
-            {
-              folder: "hgsc_users",
-              transformation: [{ width: 500, height: 500, crop: "fill" }],
-            },
-            (error, result) => {
-              if (result) resolve(result);
-              else reject(error);
-            }
-          );
-          streamifier.createReadStream(req.file.buffer).pipe(stream);
-        });
-      const uploaded = await streamUpload();
-      profilePhoto = uploaded.secure_url;
-    }
-
-    // ✅ Hash password
+    // 🔹 Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // ✅ Save user in DB
-    const newUser = await User.create({
-      fullName,
+    // 🔹 Upload image to Cloudinary
+    let imageUrl = "";
+    if (req.file) {
+      const uploadedImage = await cloudinary.v2.uploader.upload(req.file.path, {
+        folder: "students",
+      });
+      imageUrl = uploadedImage.secure_url;
+    }
+
+    // 🔹 Create new user (auto role = student)
+    const newUser = new User({
+      firstName,
+      lastName,
       email,
       password: hashedPassword,
-      role,
-      phoneNumber,
-      country,
-      acceptedTerms,
-      profilePhoto,
+      image: imageUrl,
+      role: "student",
+      isVerified: false,
+    });
+    await newUser.save();
+
+    // 🔹 Generate verification token
+    const token = jwt.sign({ email }, process.env.JWT_SECRET, {
+      expiresIn: "1h",
     });
 
-    // ✅ Generate verification code
-    const verificationCode = Math.floor(100000 + Math.random() * 900000);
+    // 🔹 Prepare Brevo client
+    const apiInstance = new Brevo.TransactionalEmailsApi();
+    const apiKey = apiInstance.authentications["apiKey"];
+    apiKey.apiKey = process.env.BREVO_API_KEY;
 
-    // ✅ Send email via Brevo
-    const sendSmtpEmail = new SibApiV3Sdk.SendSmtpEmail({
-      sender: { name: "HGSC² Digital Skills", email: process.env.EMAIL_SENDER },
-      to: [{ email, name: fullName }],
-      subject: "Verify Your HGSC² Digital Skills Account",
-      htmlContent: `
-        <div style="font-family: Arial, sans-serif; line-height:1.6;">
-          <h2>Welcome, ${fullName} 👋</h2>
-          <p>Thank you for registering with <strong>HGSC² Digital Skills</strong>.</p>
-          <p>Your verification code is:</p>
-          <h1 style="background:#1976d2;color:#fff;display:inline-block;padding:10px 20px;border-radius:8px;">
-            ${verificationCode}
-          </h1>
-          <p>This code expires in <b>10 minutes</b>.</p>
-        </div>
-      `,
-    });
+    // 🔹 Email content
+    const verificationLink = `https://hgsccdigitalskills.vercel.app/verify-email?token=${token}`;
+    const sendSmtpEmail = new Brevo.SendSmtpEmail();
 
-    await brevoEmailApi.sendTransacEmail(sendSmtpEmail);
+    sendSmtpEmail.subject = "Verify Your HGSC² Digital Skills Account";
+    sendSmtpEmail.to = [{ email, name: `${firstName} ${lastName}` }];
+    sendSmtpEmail.sender = {
+      name: "HGSC² Digital Skills",
+      email: process.env.EMAIL_SENDER,
+    };
+    sendSmtpEmail.htmlContent = `
+      <div style="font-family: Arial, sans-serif; line-height: 1.5;">
+        <h2>Welcome, ${firstName}!</h2>
+        <p>Thank you for registering with <b>HGSC² Digital Skills</b>.</p>
+        <p>Please verify your email address by clicking the button below:</p>
+        <a href="${verificationLink}" 
+           style="background-color:#007bff;color:#fff;padding:10px 20px;
+           border-radius:5px;text-decoration:none;">Verify Email</a>
+        <p>This link will expire in 1 hour.</p>
+      </div>
+    `;
 
-    res.status(200).json({
-      message: "Verification code sent to your email.",
-      tempUser: {
-        fullName,
-        email,
-        role,
-        phoneNumber,
-        country,
-        acceptedTerms,
-        profilePhoto,
-        verificationCode,
-      },
+    // 🔹 Send verification email
+    await apiInstance.sendTransacEmail(sendSmtpEmail);
+
+    res.status(201).json({
+      message:
+        "Registration successful! Please check your email to verify your account.",
+      user: { firstName, lastName, email, image: imageUrl, role: "student" },
     });
   } catch (error) {
-    console.error("❌ Registration error:", error.response?.body || error);
+    console.error("❌ Registration error:", error);
     res.status(500).json({
       message: "Error during registration or sending verification email.",
-      error: error.response?.body?.message || error.message,
+      error: error.message || error,
     });
   }
 };
