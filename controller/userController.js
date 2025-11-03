@@ -8,23 +8,20 @@ import User from "../module/userModule.js";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 
-// ✅ Initialize Brevo SDK
+// ✅ Initialize Brevo client safely
 const defaultClient = SibApiV3Sdk.ApiClient.instance;
 defaultClient.authentications["api-key"].apiKey = process.env.BREVO_API_KEY;
 const brevoEmailApi = new SibApiV3Sdk.TransactionalEmailsApi();
+console.log(process.env.BREVO_API_KEY);
 
-/**
- * ✅ REGISTER USER (Step 1: Send Verification Code)
- */
+/* ---------------------------------------------
+   📌 REGISTER USER
+---------------------------------------------- */
 export const registerUser = async (req, res) => {
   try {
     const { fullName, email, password, phoneNumber, country, acceptedTerms } =
       req.body;
 
-    // Auto role
-    const role = "student";
-
-    // Validations
     if (!fullName || !email || !password)
       return res
         .status(400)
@@ -34,17 +31,17 @@ export const registerUser = async (req, res) => {
       return res.status(400).json({ message: "Password too short" });
 
     if (acceptedTerms !== true && acceptedTerms !== "true")
-      return res.status(400).json({
-        message: "Please accept the terms & conditions before registering.",
-      });
+      return res
+        .status(400)
+        .json({ message: "Please accept the terms & conditions" });
 
     const existingUser = await User.findOne({ email });
     if (existingUser)
       return res.status(400).json({ message: "Email already registered" });
 
-    // ✅ Upload profile photo to Cloudinary
+    // ✅ Upload photo if available
     let profilePhoto = "";
-    if (req.file) {
+    if (req.file && req.file.buffer) {
       const streamUpload = () =>
         new Promise((resolve, reject) => {
           const stream = cloudinary.uploader.upload_stream(
@@ -53,8 +50,8 @@ export const registerUser = async (req, res) => {
               transformation: [{ width: 500, height: 500, crop: "fill" }],
             },
             (error, result) => {
-              if (result) resolve(result);
-              else reject(error);
+              if (error) reject(error);
+              else resolve(result);
             }
           );
           streamifier.createReadStream(req.file.buffer).pipe(stream);
@@ -67,24 +64,29 @@ export const registerUser = async (req, res) => {
     // ✅ Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // ✅ Temporarily store user data (not verified yet)
-    const tempUser = {
+    // ✅ Generate 6-digit code
+    const verificationCode = Math.floor(100000 + Math.random() * 900000);
+
+    // ✅ Temporarily store user (unverified)
+    const newUser = await User.create({
       fullName,
       email,
       password: hashedPassword,
-      role,
+      role: "student",
       phoneNumber,
       country,
       acceptedTerms,
       profilePhoto,
-    };
-
-    // ✅ Generate verification code (6 digits)
-    const verificationCode = Math.floor(100000 + Math.random() * 900000);
+      isVerified: false,
+      verificationCode,
+    });
 
     // ✅ Send verification email via Brevo
     const sendSmtpEmail = new SibApiV3Sdk.SendSmtpEmail({
-      sender: { name: "HGSC² Digital Skills", email: process.env.EMAIL_SENDER },
+      sender: {
+        name: "HGSC² Digital Skills",
+        email: process.env.EMAIL_SENDER,
+      },
       to: [{ email, name: fullName }],
       subject: "Verify Your HGSC² Digital Skills Account",
       htmlContent: `
@@ -92,8 +94,7 @@ export const registerUser = async (req, res) => {
           <h2>Welcome, ${fullName} 👋</h2>
           <p>Thank you for registering with <strong>HGSC² Digital Skills</strong>.</p>
           <p>Your verification code is:</p>
-          <h1 style="background:#1976d2;color:#fff;display:inline-block;
-            padding:10px 20px;border-radius:8px;">
+          <h1 style="background:#1976d2;color:#fff;display:inline-block;padding:10px 20px;border-radius:8px;">
             ${verificationCode}
           </h1>
           <p>This code expires in <b>10 minutes</b>.</p>
@@ -103,11 +104,15 @@ export const registerUser = async (req, res) => {
 
     await brevoEmailApi.sendTransacEmail(sendSmtpEmail);
 
-    // ✅ Return response with temp data (frontend will call verifyEmail next)
-    res.status(200).json({
+    res.status(201).json({
       message: "Verification code sent to your email.",
-      tempUser,
-      verificationCode,
+      user: {
+        id: newUser._id,
+        fullName,
+        email,
+        role: newUser.role,
+        profilePhoto,
+      },
     });
   } catch (error) {
     console.error("❌ Registration error:", error.response?.body || error);
@@ -118,63 +123,46 @@ export const registerUser = async (req, res) => {
   }
 };
 
-/**
- * ✅ VERIFY EMAIL (Step 2: Confirm Code and Save User)
- */
+/* ---------------------------------------------
+   📌 VERIFY EMAIL
+---------------------------------------------- */
 export const verifyEmail = async (req, res) => {
   try {
-    const {
-      fullName,
-      email,
-      password,
-      role,
-      phoneNumber,
-      country,
-      acceptedTerms,
-      code,
-      sentCode,
-      profilePhoto,
-    } = req.body;
+    const { email, code } = req.body;
 
     if (!email || !code)
       return res.status(400).json({ message: "Email and code are required" });
 
-    if (String(code) !== String(sentCode))
+    const user = await User.findOne({ email });
+    if (!user) return res.status(404).json({ message: "User not found" });
+
+    if (String(code) !== String(user.verificationCode))
       return res.status(400).json({ message: "Invalid verification code" });
 
-    // ✅ Create verified user
-    const newUser = await User.create({
-      fullName,
-      email,
-      password,
-      role: role?.toLowerCase() || "student",
-      phoneNumber,
-      country,
-      acceptedTerms,
-      profilePhoto,
-      isVerified: true,
-    });
+    user.isVerified = true;
+    user.verificationCode = undefined;
+    await user.save();
 
-    res.status(201).json({
-      message: "Email verified and user registered successfully.",
-      userId: newUser._id,
+    res.status(200).json({
+      message: "Email verified successfully.",
+      userId: user._id,
     });
   } catch (error) {
     console.error("❌ Verification error:", error);
-    res
-      .status(500)
-      .json({ message: "Verification failed", error: error.message });
+    res.status(500).json({
+      message: "Verification failed.",
+      error: error.message,
+    });
   }
 };
 
-/**
- * ✅ LOGIN USER
- */
+/* ---------------------------------------------
+   📌 LOGIN
+---------------------------------------------- */
 export const loginUser = async (req, res) => {
   try {
     const { email, password } = req.body;
     const user = await User.findOne({ email });
-
     if (!user) return res.status(404).json({ message: "User not found" });
 
     const validPassword = await bcrypt.compare(password, user.password);
@@ -182,9 +170,9 @@ export const loginUser = async (req, res) => {
       return res.status(401).json({ message: "Invalid credentials" });
 
     if (!user.isVerified)
-      return res
-        .status(403)
-        .json({ message: "Please verify your email first" });
+      return res.status(403).json({
+        message: "Please verify your email before logging in.",
+      });
 
     const token = jwt.sign(
       { id: user._id, role: user.role },
@@ -199,6 +187,7 @@ export const loginUser = async (req, res) => {
         id: user._id,
         fullName: user.fullName,
         role: user.role,
+        email: user.email,
       },
     });
   } catch (error) {
@@ -207,16 +196,18 @@ export const loginUser = async (req, res) => {
   }
 };
 
-/**
- * ✅ GET ALL USERS (Admin)
- */
+/* ---------------------------------------------
+   📌 GET ALL USERS
+---------------------------------------------- */
 export const getAllUsers = async (req, res) => {
   try {
     const users = await User.find().select("-password");
     res.json(users);
   } catch (error) {
-    res
-      .status(500)
-      .json({ message: "Error fetching users", error: error.message });
+    console.error("❌ Fetch users error:", error);
+    res.status(500).json({
+      message: "Error fetching users",
+      error: error.message,
+    });
   }
 };
