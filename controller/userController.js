@@ -1,8 +1,8 @@
 import dotenv from "dotenv";
 dotenv.config();
+import cloudinary from "../config/cloudnary.js";
 
 import SibApiV3Sdk from "sib-api-v3-sdk";
-import cloudinary from "../config/cloudnary.js";
 import streamifier from "streamifier";
 import User from "../module/userModule.js";
 import bcrypt from "bcryptjs";
@@ -58,7 +58,7 @@ export const registerUser = async (req, res) => {
     if (req.file && req.file.buffer) {
       const streamUpload = () =>
         new Promise((resolve, reject) => {
-          const stream = cloudinary.v2.uploader.upload_stream(
+          const stream = cloudinary.uploader.upload_stream(
             {
               folder: "hgsc_users",
               transformation: [{ width: 500, height: 500, crop: "fill" }],
