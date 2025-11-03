@@ -7,6 +7,7 @@ import streamifier from "streamifier";
 import User from "../module/userModule.js";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
+import { sendEmail } from "../utilitis/sendEmail.js";
 
 // ✅ Initialize Brevo client safely
 const defaultClient = SibApiV3Sdk.ApiClient.instance;
@@ -14,14 +15,26 @@ defaultClient.authentications["api-key"].apiKey = process.env.BREVO_API_KEY;
 const brevoEmailApi = new SibApiV3Sdk.TransactionalEmailsApi();
 console.log(process.env.BREVO_API_KEY);
 
-/* ---------------------------------------------
-   📌 REGISTER USER
----------------------------------------------- */
+// ✅ Cloudinary configuration
+// cloudinary.v2.config({
+//   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+//   api_key: process.env.CLOUDINARY_API_KEY,
+//   api_secret: process.env.CLOUDINARY_API_SECRET,
+// });
+
+// Temporary in-memory store for unverified users
+const pendingUsers = new Map();
+
+/**
+ * REGISTER USER (Stage 1)
+ * Generate OTP and send email, but don't save user yet.
+ */
 export const registerUser = async (req, res) => {
   try {
     const { fullName, email, password, phoneNumber, country, acceptedTerms } =
       req.body;
 
+    // Basic validations
     if (!fullName || !email || !password)
       return res
         .status(400)
@@ -35,16 +48,17 @@ export const registerUser = async (req, res) => {
         .status(400)
         .json({ message: "Please accept the terms & conditions" });
 
+    // Check if user already exists in database
     const existingUser = await User.findOne({ email });
     if (existingUser)
       return res.status(400).json({ message: "Email already registered" });
 
-    // ✅ Upload photo if available
+    // ✅ Upload profile photo if available
     let profilePhoto = "";
     if (req.file && req.file.buffer) {
       const streamUpload = () =>
         new Promise((resolve, reject) => {
-          const stream = cloudinary.uploader.upload_stream(
+          const stream = cloudinary.v2.uploader.upload_stream(
             {
               folder: "hgsc_users",
               transformation: [{ width: 500, height: 500, crop: "fill" }],
@@ -64,55 +78,44 @@ export const registerUser = async (req, res) => {
     // ✅ Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // ✅ Generate 6-digit code
+    // ✅ Generate 6-digit OTP
     const verificationCode = Math.floor(100000 + Math.random() * 900000);
 
-    // ✅ Temporarily store user (unverified)
-    const newUser = await User.create({
+    // ✅ Store user temporarily in memory
+    pendingUsers.set(email, {
       fullName,
       email,
-      password: hashedPassword,
-      role: "student",
+      hashedPassword,
       phoneNumber,
       country,
       acceptedTerms,
       profilePhoto,
-      isVerified: false,
       verificationCode,
+      createdAt: Date.now(),
     });
 
-    // ✅ Send verification email via Brevo
-    const sendSmtpEmail = new SibApiV3Sdk.SendSmtpEmail({
-      sender: {
-        name: "HGSC² Digital Skills",
-        email: process.env.EMAIL_SENDER,
-      },
-      to: [{ email, name: fullName }],
-      subject: "Verify Your HGSC² Digital Skills Account",
-      htmlContent: `
-        <div style="font-family: Arial, sans-serif; line-height:1.6;">
-          <h2>Welcome, ${fullName} 👋</h2>
-          <p>Thank you for registering with <strong>HGSC² Digital Skills</strong>.</p>
-          <p>Your verification code is:</p>
-          <h1 style="background:#1976d2;color:#fff;display:inline-block;padding:10px 20px;border-radius:8px;">
-            ${verificationCode}
-          </h1>
-          <p>This code expires in <b>10 minutes</b>.</p>
-        </div>
-      `,
-    });
+    // ✅ Send email
+    const html = `
+      <div style="font-family: Arial, sans-serif; line-height:1.6;">
+        <h2>Welcome, ${fullName} 👋</h2>
+        <p>Thank you for registering with <strong>HGSC² Digital Skills</strong>.</p>
+        <p>Your verification code is:</p>
+        <h1 style="background:#1976d2;color:#fff;display:inline-block;padding:10px 20px;border-radius:8px;">
+          ${verificationCode}
+        </h1>
+        <p>This code expires in <b>10 minutes</b>.</p>
+      </div>
+    `;
 
-    await brevoEmailApi.sendTransacEmail(sendSmtpEmail);
+    await sendEmail(
+      email,
+      "Verify Your HGSC² Digital Skills Account",
+      html,
+      fullName
+    );
 
-    res.status(201).json({
+    res.status(200).json({
       message: "Verification code sent to your email.",
-      user: {
-        id: newUser._id,
-        fullName,
-        email,
-        role: newUser.role,
-        profilePhoto,
-      },
     });
   } catch (error) {
     console.error("❌ Registration error:", error.response?.body || error);
@@ -122,10 +125,6 @@ export const registerUser = async (req, res) => {
     });
   }
 };
-
-/* ---------------------------------------------
-   📌 VERIFY EMAIL
----------------------------------------------- */
 export const verifyEmail = async (req, res) => {
   try {
     const { email, code } = req.body;
@@ -133,19 +132,40 @@ export const verifyEmail = async (req, res) => {
     if (!email || !code)
       return res.status(400).json({ message: "Email and code are required" });
 
-    const user = await User.findOne({ email });
-    if (!user) return res.status(404).json({ message: "User not found" });
+    const pendingUser = pendingUsers.get(email);
+    if (!pendingUser)
+      return res
+        .status(400)
+        .json({ message: "No pending registration for this email" });
 
-    if (String(code) !== String(user.verificationCode))
+    if (String(code) !== String(pendingUser.verificationCode))
       return res.status(400).json({ message: "Invalid verification code" });
 
-    user.isVerified = true;
-    user.verificationCode = undefined;
-    await user.save();
+    // ✅ Check expiry (10 mins)
+    if (Date.now() - pendingUser.createdAt > 10 * 60 * 1000) {
+      pendingUsers.delete(email);
+      return res.status(400).json({ message: "Verification code expired" });
+    }
+
+    // ✅ Save to MongoDB now
+    const newUser = await User.create({
+      fullName: pendingUser.fullName,
+      email: pendingUser.email,
+      password: pendingUser.hashedPassword,
+      phoneNumber: pendingUser.phoneNumber,
+      country: pendingUser.country,
+      acceptedTerms: pendingUser.acceptedTerms,
+      profilePhoto: pendingUser.profilePhoto,
+      isVerified: true,
+      role: "student",
+    });
+
+    // ✅ Remove from pending store
+    pendingUsers.delete(email);
 
     res.status(200).json({
-      message: "Email verified successfully.",
-      userId: user._id,
+      message: "Email verified and user created successfully.",
+      userId: newUser._id,
     });
   } catch (error) {
     console.error("❌ Verification error:", error);
@@ -155,7 +175,6 @@ export const verifyEmail = async (req, res) => {
     });
   }
 };
-
 /* ---------------------------------------------
    📌 LOGIN
 ---------------------------------------------- */
