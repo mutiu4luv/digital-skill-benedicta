@@ -4,99 +4,123 @@ dotenv.config();
 import SibApiV3Sdk from "sib-api-v3-sdk";
 import cloudinary from "../config/cloudnary.js";
 import streamifier from "streamifier";
-import User from "../module/userModule.js"; // adjust path
+import User from "../module/userModule.js";
 import bcrypt from "bcryptjs";
-import Brevo from "@getbrevo/brevo";
 import jwt from "jsonwebtoken";
 
+// ✅ Initialize Brevo SDK
 const defaultClient = SibApiV3Sdk.ApiClient.instance;
 defaultClient.authentications["api-key"].apiKey = process.env.BREVO_API_KEY;
 const brevoEmailApi = new SibApiV3Sdk.TransactionalEmailsApi();
+
+/**
+ * ✅ REGISTER USER (Step 1: Send Verification Code)
+ */
 export const registerUser = async (req, res) => {
   try {
-    const { firstName, lastName, email, password } = req.body;
+    const { fullName, email, password, phoneNumber, country, acceptedTerms } =
+      req.body;
 
-    if (!firstName || !lastName || !email || !password)
-      return res.status(400).json({ message: "All fields are required" });
+    // Auto role
+    const role = "student";
+
+    // Validations
+    if (!fullName || !email || !password)
+      return res
+        .status(400)
+        .json({ message: "All required fields are needed" });
+
+    if (password.length < 5)
+      return res.status(400).json({ message: "Password too short" });
+
+    if (acceptedTerms !== true && acceptedTerms !== "true")
+      return res.status(400).json({
+        message: "Please accept the terms & conditions before registering.",
+      });
 
     const existingUser = await User.findOne({ email });
     if (existingUser)
-      return res.status(400).json({ message: "User already exists" });
+      return res.status(400).json({ message: "Email already registered" });
 
-    // 🔹 Hash password
-    const hashedPassword = await bcrypt.hash(password, 10);
-
-    // 🔹 Upload image to Cloudinary
-    let imageUrl = "";
+    // ✅ Upload profile photo to Cloudinary
+    let profilePhoto = "";
     if (req.file) {
-      const uploadedImage = await cloudinary.v2.uploader.upload(req.file.path, {
-        folder: "students",
-      });
-      imageUrl = uploadedImage.secure_url;
+      const streamUpload = () =>
+        new Promise((resolve, reject) => {
+          const stream = cloudinary.uploader.upload_stream(
+            {
+              folder: "hgsc_users",
+              transformation: [{ width: 500, height: 500, crop: "fill" }],
+            },
+            (error, result) => {
+              if (result) resolve(result);
+              else reject(error);
+            }
+          );
+          streamifier.createReadStream(req.file.buffer).pipe(stream);
+        });
+
+      const uploaded = await streamUpload();
+      profilePhoto = uploaded.secure_url;
     }
 
-    // 🔹 Create new user (auto role = student)
-    const newUser = new User({
-      firstName,
-      lastName,
+    // ✅ Hash password
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    // ✅ Temporarily store user data (not verified yet)
+    const tempUser = {
+      fullName,
       email,
       password: hashedPassword,
-      image: imageUrl,
-      role: "student",
-      isVerified: false,
-    });
-    await newUser.save();
-
-    // 🔹 Generate verification token
-    const token = jwt.sign({ email }, process.env.JWT_SECRET, {
-      expiresIn: "1h",
-    });
-
-    // 🔹 Prepare Brevo client
-    const apiInstance = new Brevo.TransactionalEmailsApi();
-    const apiKey = apiInstance.authentications["apiKey"];
-    apiKey.apiKey = process.env.BREVO_API_KEY;
-
-    // 🔹 Email content
-    const verificationLink = `https://hgsccdigitalskills.vercel.app/verify-email?token=${token}`;
-    const sendSmtpEmail = new Brevo.SendSmtpEmail();
-
-    sendSmtpEmail.subject = "Verify Your HGSC² Digital Skills Account";
-    sendSmtpEmail.to = [{ email, name: `${firstName} ${lastName}` }];
-    sendSmtpEmail.sender = {
-      name: "HGSC² Digital Skills",
-      email: process.env.EMAIL_SENDER,
+      role,
+      phoneNumber,
+      country,
+      acceptedTerms,
+      profilePhoto,
     };
-    sendSmtpEmail.htmlContent = `
-      <div style="font-family: Arial, sans-serif; line-height: 1.5;">
-        <h2>Welcome, ${firstName}!</h2>
-        <p>Thank you for registering with <b>HGSC² Digital Skills</b>.</p>
-        <p>Please verify your email address by clicking the button below:</p>
-        <a href="${verificationLink}" 
-           style="background-color:#007bff;color:#fff;padding:10px 20px;
-           border-radius:5px;text-decoration:none;">Verify Email</a>
-        <p>This link will expire in 1 hour.</p>
-      </div>
-    `;
 
-    // 🔹 Send verification email
-    await apiInstance.sendTransacEmail(sendSmtpEmail);
+    // ✅ Generate verification code (6 digits)
+    const verificationCode = Math.floor(100000 + Math.random() * 900000);
 
-    res.status(201).json({
-      message:
-        "Registration successful! Please check your email to verify your account.",
-      user: { firstName, lastName, email, image: imageUrl, role: "student" },
+    // ✅ Send verification email via Brevo
+    const sendSmtpEmail = new SibApiV3Sdk.SendSmtpEmail({
+      sender: { name: "HGSC² Digital Skills", email: process.env.EMAIL_SENDER },
+      to: [{ email, name: fullName }],
+      subject: "Verify Your HGSC² Digital Skills Account",
+      htmlContent: `
+        <div style="font-family: Arial, sans-serif; line-height:1.6;">
+          <h2>Welcome, ${fullName} 👋</h2>
+          <p>Thank you for registering with <strong>HGSC² Digital Skills</strong>.</p>
+          <p>Your verification code is:</p>
+          <h1 style="background:#1976d2;color:#fff;display:inline-block;
+            padding:10px 20px;border-radius:8px;">
+            ${verificationCode}
+          </h1>
+          <p>This code expires in <b>10 minutes</b>.</p>
+        </div>
+      `,
+    });
+
+    await brevoEmailApi.sendTransacEmail(sendSmtpEmail);
+
+    // ✅ Return response with temp data (frontend will call verifyEmail next)
+    res.status(200).json({
+      message: "Verification code sent to your email.",
+      tempUser,
+      verificationCode,
     });
   } catch (error) {
-    console.error("❌ Registration error:", error);
+    console.error("❌ Registration error:", error.response?.body || error);
     res.status(500).json({
       message: "Error during registration or sending verification email.",
-      error: error.message || error,
+      error: error.response?.body?.message || error.message,
     });
   }
 };
 
-/* ✅ Verify Email Controller */
+/**
+ * ✅ VERIFY EMAIL (Step 2: Confirm Code and Save User)
+ */
 export const verifyEmail = async (req, res) => {
   try {
     const {
@@ -109,22 +133,20 @@ export const verifyEmail = async (req, res) => {
       acceptedTerms,
       code,
       sentCode,
-      profilePhoto, // pass from frontend
+      profilePhoto,
     } = req.body;
 
     if (!email || !code)
       return res.status(400).json({ message: "Email and code are required" });
 
-    if (code !== sentCode)
+    if (String(code) !== String(sentCode))
       return res.status(400).json({ message: "Invalid verification code" });
 
-    const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(password, salt);
-
+    // ✅ Create verified user
     const newUser = await User.create({
       fullName,
       email,
-      password: hashedPassword,
+      password,
       role: role?.toLowerCase() || "student",
       phoneNumber,
       country,
@@ -134,7 +156,7 @@ export const verifyEmail = async (req, res) => {
     });
 
     res.status(201).json({
-      message: "Email verified and user registered successfully",
+      message: "Email verified and user registered successfully.",
       userId: newUser._id,
     });
   } catch (error) {
@@ -145,11 +167,14 @@ export const verifyEmail = async (req, res) => {
   }
 };
 
-// 📌 Login
+/**
+ * ✅ LOGIN USER
+ */
 export const loginUser = async (req, res) => {
   try {
     const { email, password } = req.body;
     const user = await User.findOne({ email });
+
     if (!user) return res.status(404).json({ message: "User not found" });
 
     const validPassword = await bcrypt.compare(password, user.password);
@@ -177,11 +202,14 @@ export const loginUser = async (req, res) => {
       },
     });
   } catch (error) {
+    console.error("❌ Login error:", error);
     res.status(500).json({ message: "Login failed", error: error.message });
   }
 };
 
-// 📌 Get All Users (admin only)
+/**
+ * ✅ GET ALL USERS (Admin)
+ */
 export const getAllUsers = async (req, res) => {
   try {
     const users = await User.find().select("-password");
