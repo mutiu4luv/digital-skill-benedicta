@@ -139,7 +139,7 @@ export const registerUser = async (req, res) => {
  * VERIFY OTP (Stage 2)
  * Confirms user OTP and saves to database.
  */
-export const verifyOtp = async (req, res) => {
+export const verifyEmail = async (req, res) => {
   try {
     const { email, otp } = req.body;
 
@@ -183,56 +183,56 @@ export const verifyOtp = async (req, res) => {
     });
   }
 };
-export const verifyEmail = async (req, res) => {
-  try {
-    const { email, code } = req.body;
+// export const verifyEmail = async (req, res) => {
+//   try {
+//     const { email, code } = req.body;
 
-    if (!email || !code)
-      return res.status(400).json({ message: "Email and code are required" });
+//     if (!email || !code)
+//       return res.status(400).json({ message: "Email and code are required" });
 
-    const pendingUser = pendingUsers.get(email);
-    if (!pendingUser)
-      return res
-        .status(400)
-        .json({ message: "No pending registration for this email" });
+//     const pendingUser = pendingUsers.get(email);
+//     if (!pendingUser)
+//       return res
+//         .status(400)
+//         .json({ message: "No pending registration for this email" });
 
-    if (String(code) !== String(pendingUser.verificationCode))
-      return res.status(400).json({ message: "Invalid verification code" });
+//     if (String(code) !== String(pendingUser.verificationCode))
+//       return res.status(400).json({ message: "Invalid verification code" });
 
-    // ✅ Check expiry (10 mins)
-    if (Date.now() - pendingUser.createdAt > 10 * 60 * 1000) {
-      pendingUsers.delete(email);
-      return res.status(400).json({ message: "Verification code expired" });
-    }
+//     // ✅ Check expiry (10 mins)
+//     if (Date.now() - pendingUser.createdAt > 10 * 60 * 1000) {
+//       pendingUsers.delete(email);
+//       return res.status(400).json({ message: "Verification code expired" });
+//     }
 
-    // ✅ Save to MongoDB now
-    const newUser = await User.create({
-      fullName: pendingUser.fullName,
-      email: pendingUser.email,
-      password: pendingUser.hashedPassword,
-      phoneNumber: pendingUser.phoneNumber,
-      country: pendingUser.country,
-      acceptedTerms: pendingUser.acceptedTerms,
-      profilePhoto: pendingUser.profilePhoto,
-      isVerified: true,
-      role: "student",
-    });
+//     // ✅ Save to MongoDB now
+//     const newUser = await User.create({
+//       fullName: pendingUser.fullName,
+//       email: pendingUser.email,
+//       password: pendingUser.hashedPassword,
+//       phoneNumber: pendingUser.phoneNumber,
+//       country: pendingUser.country,
+//       acceptedTerms: pendingUser.acceptedTerms,
+//       profilePhoto: pendingUser.profilePhoto,
+//       isVerified: true,
+//       role: "student",
+//     });
 
-    // ✅ Remove from pending store
-    pendingUsers.delete(email);
+//     // ✅ Remove from pending store
+//     pendingUsers.delete(email);
 
-    res.status(200).json({
-      message: "Email verified and user created successfully.",
-      userId: newUser._id,
-    });
-  } catch (error) {
-    console.error("❌ Verification error:", error);
-    res.status(500).json({
-      message: "Verification failed.",
-      error: error.message,
-    });
-  }
-};
+//     res.status(200).json({
+//       message: "Email verified and user created successfully.",
+//       userId: newUser._id,
+//     });
+//   } catch (error) {
+//     console.error("❌ Verification error:", error);
+//     res.status(500).json({
+//       message: "Verification failed.",
+//       error: error.message,
+//     });
+//   }
+// };
 /* ---------------------------------------------
    📌 LOGIN
 ---------------------------------------------- */
