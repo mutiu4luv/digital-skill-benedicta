@@ -99,10 +99,10 @@ export const registerUser = async (req, res) => {
     // ✅ Construct email content
     const htmlContent = `
       <div style="font-family: Arial, sans-serif; line-height:1.6;">
-        <h2>Welcome, ${fullName} 👋</h2>
+        <h2 style="color: green;">Welcome, ${fullName} 👋</h2>
         <p>Thank you for registering with <strong>HGSC² Digital Skills</strong>.</p>
         <p>Your verification code is:</p>
-        <h1 style="background:#1976d2;color:#fff;display:inline-block;padding:10px 20px;border-radius:8px;">
+        <h1 style="background:green;color:#fff;display:inline-block;padding:10px 20px;border-radius:8px;">
           ${verificationCode}
         </h1>
         <p>This code expires in <b>10 minutes</b>.</p>
