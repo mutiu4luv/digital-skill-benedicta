@@ -27,7 +27,7 @@ const pendingUsers = new Map();
 
 /**
  * REGISTER USER (Stage 1)
- * Generate OTP and send email, but don't save user yet.
+ * Generate OTP and send verification email using Brevo.
  */
 export const registerUser = async (req, res) => {
   try {
@@ -48,31 +48,28 @@ export const registerUser = async (req, res) => {
         .status(400)
         .json({ message: "Please accept the terms & conditions" });
 
-    // Check if user already exists in database
     const existingUser = await User.findOne({ email });
     if (existingUser)
       return res.status(400).json({ message: "Email already registered" });
 
-    // ✅ Upload profile photo if available
+    // ✅ Upload profile photo if provided
     let profilePhoto = "";
     if (req.file && req.file.buffer) {
-      const streamUpload = () =>
-        new Promise((resolve, reject) => {
-          const stream = cloudinary.uploader.upload_stream(
-            {
-              folder: "hgsc_users",
-              transformation: [{ width: 500, height: 500, crop: "fill" }],
-            },
-            (error, result) => {
-              if (error) reject(error);
-              else resolve(result);
-            }
-          );
-          streamifier.createReadStream(req.file.buffer).pipe(stream);
-        });
+      const uploadResult = await new Promise((resolve, reject) => {
+        const stream = cloudinary.uploader.upload_stream(
+          {
+            folder: "hgsc_users",
+            transformation: [{ width: 500, height: 500, crop: "fill" }],
+          },
+          (error, result) => {
+            if (error) reject(error);
+            else resolve(result);
+          }
+        );
+        streamifier.createReadStream(req.file.buffer).pipe(stream);
+      });
 
-      const uploaded = await streamUpload();
-      profilePhoto = uploaded.secure_url;
+      profilePhoto = uploadResult.secure_url;
     }
 
     // ✅ Hash password
@@ -81,7 +78,7 @@ export const registerUser = async (req, res) => {
     // ✅ Generate 6-digit OTP
     const verificationCode = Math.floor(100000 + Math.random() * 900000);
 
-    // ✅ Store user temporarily in memory
+    // ✅ Save temporarily in memory
     pendingUsers.set(email, {
       fullName,
       email,
@@ -94,8 +91,13 @@ export const registerUser = async (req, res) => {
       createdAt: Date.now(),
     });
 
-    // ✅ Send email
-    const html = `
+    // ✅ Setup Brevo client here
+    const defaultClient = SibApiV3Sdk.ApiClient.instance;
+    defaultClient.authentications["api-key"].apiKey = process.env.BREVO_API_KEY;
+    const brevoEmailApi = new SibApiV3Sdk.TransactionalEmailsApi();
+
+    // ✅ Construct email content
+    const htmlContent = `
       <div style="font-family: Arial, sans-serif; line-height:1.6;">
         <h2>Welcome, ${fullName} 👋</h2>
         <p>Thank you for registering with <strong>HGSC² Digital Skills</strong>.</p>
@@ -107,21 +109,77 @@ export const registerUser = async (req, res) => {
       </div>
     `;
 
-    await sendEmail(
-      email,
-      "Verify Your HGSC² Digital Skills Account",
-      html,
-      fullName
-    );
+    const emailData = {
+      sender: { email: process.env.EMAIL_SENDER, name: "HGSC² Digital Skills" },
+      to: [{ email, name: fullName }],
+      subject: "Verify Your HGSC² Digital Skills Account",
+      htmlContent,
+    };
 
+    // ✅ Send email with Brevo
+    await brevoEmailApi.sendTransacEmail(emailData);
+
+    console.log(`✅ Verification email sent to ${email}`);
+
+    // ✅ Send success response
     res.status(200).json({
-      message: "Verification code sent to your email.",
+      message:
+        "Verification code sent to your email. Please check your inbox or spam folder.",
     });
   } catch (error) {
     console.error("❌ Registration error:", error.response?.body || error);
     res.status(500).json({
       message: "Error during registration or sending verification email.",
       error: error.response?.body?.message || error.message,
+    });
+  }
+};
+
+/**
+ * VERIFY OTP (Stage 2)
+ * Confirms user OTP and saves to database.
+ */
+export const verifyOtp = async (req, res) => {
+  try {
+    const { email, otp } = req.body;
+
+    if (!email || !otp)
+      return res.status(400).json({ message: "Email and OTP required" });
+
+    const pending = pendingUsers.get(email);
+    if (!pending)
+      return res.status(400).json({ message: "No pending verification found" });
+
+    if (pending.verificationCode !== Number(otp))
+      return res.status(400).json({ message: "Invalid OTP" });
+
+    if (Date.now() - pending.createdAt > 10 * 60 * 1000)
+      return res
+        .status(400)
+        .json({ message: "OTP expired, please register again" });
+
+    // ✅ Save verified user to database
+    const user = await User.create({
+      fullName: pending.fullName,
+      email: pending.email,
+      password: pending.hashedPassword,
+      phoneNumber: pending.phoneNumber,
+      country: pending.country,
+      acceptedTerms: pending.acceptedTerms,
+      profilePhoto: pending.profilePhoto,
+    });
+
+    pendingUsers.delete(email);
+
+    res.status(201).json({
+      message: "✅ Registration complete",
+      user,
+    });
+  } catch (error) {
+    console.error("❌ OTP verification error:", error);
+    res.status(500).json({
+      message: "OTP verification failed",
+      error: error.message,
     });
   }
 };
