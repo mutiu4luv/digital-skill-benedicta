@@ -146,33 +146,50 @@ export const verifyEmail = async (req, res) => {
     if (!email || !otp)
       return res.status(400).json({ message: "Email and OTP required" });
 
+    // 🔍 Check if this user exists in pending memory
     const pending = pendingUsers.get(email);
     if (!pending)
       return res.status(400).json({ message: "No pending verification found" });
 
+    // 🔢 Compare OTP
     if (pending.verificationCode !== Number(otp))
       return res.status(400).json({ message: "Invalid OTP" });
 
+    // ⏰ Check expiration (10 minutes)
     if (Date.now() - pending.createdAt > 10 * 60 * 1000)
       return res
         .status(400)
         .json({ message: "OTP expired, please register again" });
 
-    // ✅ Save verified user to database
-    const user = await User.create({
-      fullName: pending.fullName,
-      email: pending.email,
-      password: pending.hashedPassword,
-      phoneNumber: pending.phoneNumber,
-      country: pending.country,
-      acceptedTerms: pending.acceptedTerms,
-      profilePhoto: pending.profilePhoto,
-    });
+    // 🔎 Check if user already exists in the DB
+    let user = await User.findOne({ email });
 
+    if (user) {
+      // ✅ If already exists, just update verification fields
+      user.isVerified = true;
+      user.verificationCode = null;
+      await user.save();
+    } else {
+      // ✅ If not found (first registration), create the user and mark verified
+      user = await User.create({
+        fullName: pending.fullName,
+        email: pending.email,
+        password: pending.hashedPassword,
+        phoneNumber: pending.phoneNumber,
+        country: pending.country,
+        acceptedTerms: pending.acceptedTerms,
+        profilePhoto: pending.profilePhoto,
+        isVerified: true,
+        verificationCode: null,
+      });
+    }
+
+    // 🧹 Remove from pending memory
     pendingUsers.delete(email);
 
-    res.status(201).json({
-      message: "✅ Registration complete",
+    // ✅ Response
+    res.status(200).json({
+      message: "✅ Email verified successfully! You can now log in.",
       user,
     });
   } catch (error) {
@@ -183,6 +200,7 @@ export const verifyEmail = async (req, res) => {
     });
   }
 };
+
 // export const verifyEmail = async (req, res) => {
 //   try {
 //     const { email, code } = req.body;
