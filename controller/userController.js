@@ -294,10 +294,27 @@ export const loginUser = async (req, res) => {
 /* ---------------------------------------------
    📌 GET ALL USERS
 ---------------------------------------------- */
+// 📁 controllers/userController.js
 export const getAllUsers = async (req, res) => {
   try {
-    const users = await User.find().select("-password");
-    res.json(users);
+    // Fetch ALL users (including Admin, Coach, Student, etc.)
+    const users = await User.find({})
+      .select("-password") // hide passwords for security
+      .sort({ createdAt: -1 }); // newest first
+
+    // Optionally, include role summary or analytics
+    const summary = {
+      totalUsers: users.length,
+      totalAdmins: users.filter((u) => u.role === "owner").length,
+      totalCoaches: users.filter((u) => u.role === "coach").length,
+      totalStudents: users.filter((u) => u.role === "student").length,
+    };
+
+    res.status(200).json({
+      message: "✅ Users fetched successfully",
+      summary,
+      users,
+    });
   } catch (error) {
     console.error("❌ Fetch users error:", error);
     res.status(500).json({
