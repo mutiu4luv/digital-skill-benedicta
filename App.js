@@ -3,6 +3,7 @@ import dotenv from "dotenv";
 import mongoose from "mongoose";
 import cors from "cors";
 import userRoutes from "./routes/userRoutes.js";
+import videoRoutes from "./routes/videoRoutes.js";
 
 dotenv.config();
 
@@ -39,6 +40,7 @@ app.get("/", (req, res) => {
 
 // ✅ 4. Routes
 app.use("/api/users", userRoutes);
+app.use("/api/videos", videoRoutes);
 
 // ✅ 5. MongoDB Connection
 mongoose
