@@ -5,6 +5,8 @@ import {
   verifyEmail,
   loginUser,
   getAllUsers,
+  deleteUser,
+  updateUser,
 } from "../controller/userController.js";
 import { protect, authorizeRoles } from "../middleware/authMiddleware.js";
 
