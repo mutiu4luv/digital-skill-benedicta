@@ -263,78 +263,44 @@ export const getAllUsers = async (req, res) => {
   }
 };
 
-//  DELETE USER (Owner only)
+// 🗑 Delete user (Owner only)
 export const deleteUser = async (req, res) => {
   try {
-    const requester = req.user; // comes from protect middleware
     const { id } = req.params;
 
-    if (!requester || requester.role !== "owner") {
-      return res.status(403).json({
-        message: "Access denied. Only the owner can delete users.",
-      });
-    }
-
     const user = await User.findById(id);
-    if (!user) {
-      return res.status(404).json({ message: "User not found." });
-    }
+    if (!user) return res.status(404).json({ message: "User not found" });
 
-    // prevent owner from deleting self
-    if (user._id.toString() === requester._id.toString()) {
-      return res
-        .status(400)
-        .json({ message: "You cannot delete your own account." });
-    }
-
-    await user.deleteOne();
-
-    return res.status(200).json({ message: "User deleted successfully." });
+    await User.findByIdAndDelete(id);
+    res.status(200).json({ message: "User deleted successfully" });
   } catch (error) {
     console.error("❌ Delete user error:", error);
-    return res.status(500).json({
-      message: "Error deleting user",
-      error: error.message,
-    });
+    res
+      .status(500)
+      .json({ message: "Failed to delete user", error: error.message });
   }
 };
 
-/**
- * ✏️ UPDATE USER — Only Owner Can Edit
- */
+// ✏️ Edit user (Owner only)
 export const updateUser = async (req, res) => {
   try {
-    const requester = req.user;
     const { id } = req.params;
-    const { fullName, email, phoneNumber, country, role } = req.body;
-
-    if (!requester || requester.role !== "owner") {
-      return res.status(403).json({
-        message: "Access denied. Only the owner can edit users.",
-      });
-    }
+    const { fullName, email, role, phoneNumber } = req.body;
 
     const user = await User.findById(id);
-    if (!user) return res.status(404).json({ message: "User not found." });
+    if (!user) return res.status(404).json({ message: "User not found" });
 
-    // Update allowed fields
     user.fullName = fullName || user.fullName;
     user.email = email || user.email;
-    user.phoneNumber = phoneNumber || user.phoneNumber;
-    user.country = country || user.country;
     user.role = role || user.role;
+    user.phoneNumber = phoneNumber || user.phoneNumber;
 
     await user.save();
-
-    res.status(200).json({
-      message: "User updated successfully.",
-      user,
-    });
+    res.status(200).json({ message: "User updated successfully", user });
   } catch (error) {
     console.error("❌ Update user error:", error);
-    res.status(500).json({
-      message: "Error updating user",
-      error: error.message,
-    });
+    res
+      .status(500)
+      .json({ message: "Failed to update user", error: error.message });
   }
 };
