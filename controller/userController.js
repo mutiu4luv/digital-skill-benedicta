@@ -283,6 +283,7 @@ export const loginUser = async (req, res) => {
         fullName: user.fullName,
         role: user.role,
         email: user.email,
+        photo: user.profilePhoto,
       },
     });
   } catch (error) {
