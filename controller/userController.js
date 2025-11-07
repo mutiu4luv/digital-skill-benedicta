@@ -201,56 +201,6 @@ export const verifyEmail = async (req, res) => {
   }
 };
 
-// export const verifyEmail = async (req, res) => {
-//   try {
-//     const { email, code } = req.body;
-
-//     if (!email || !code)
-//       return res.status(400).json({ message: "Email and code are required" });
-
-//     const pendingUser = pendingUsers.get(email);
-//     if (!pendingUser)
-//       return res
-//         .status(400)
-//         .json({ message: "No pending registration for this email" });
-
-//     if (String(code) !== String(pendingUser.verificationCode))
-//       return res.status(400).json({ message: "Invalid verification code" });
-
-//     // ✅ Check expiry (10 mins)
-//     if (Date.now() - pendingUser.createdAt > 10 * 60 * 1000) {
-//       pendingUsers.delete(email);
-//       return res.status(400).json({ message: "Verification code expired" });
-//     }
-
-//     // ✅ Save to MongoDB now
-//     const newUser = await User.create({
-//       fullName: pendingUser.fullName,
-//       email: pendingUser.email,
-//       password: pendingUser.hashedPassword,
-//       phoneNumber: pendingUser.phoneNumber,
-//       country: pendingUser.country,
-//       acceptedTerms: pendingUser.acceptedTerms,
-//       profilePhoto: pendingUser.profilePhoto,
-//       isVerified: true,
-//       role: "student",
-//     });
-
-//     // ✅ Remove from pending store
-//     pendingUsers.delete(email);
-
-//     res.status(200).json({
-//       message: "Email verified and user created successfully.",
-//       userId: newUser._id,
-//     });
-//   } catch (error) {
-//     console.error("❌ Verification error:", error);
-//     res.status(500).json({
-//       message: "Verification failed.",
-//       error: error.message,
-//     });
-//   }
-// };
 /* ---------------------------------------------
    📌 LOGIN
 ---------------------------------------------- */
@@ -308,6 +258,84 @@ export const getAllUsers = async (req, res) => {
     console.error("❌ Fetch users error:", error);
     res.status(500).json({
       message: "Error fetching users",
+      error: error.message,
+    });
+  }
+};
+
+/**
+ * 🗑 DELETE USER — Only Owner Can Delete
+ */
+export const deleteUser = async (req, res) => {
+  try {
+    const requester = req.user; // Comes from auth middleware (decoded JWT)
+    const { id } = req.params;
+
+    if (!requester || requester.role !== "owner") {
+      return res.status(403).json({
+        message: "Access denied. Only the owner can delete users.",
+      });
+    }
+
+    const user = await User.findById(id);
+    if (!user) {
+      return res.status(404).json({ message: "User not found." });
+    }
+
+    // Prevent owner from deleting themselves
+    if (user._id.toString() === requester.id) {
+      return res
+        .status(400)
+        .json({ message: "You cannot delete your own account." });
+    }
+
+    await User.findByIdAndDelete(id);
+
+    res.status(200).json({ message: "User deleted successfully." });
+  } catch (error) {
+    console.error("❌ Delete user error:", error);
+    res.status(500).json({
+      message: "Error deleting user",
+      error: error.message,
+    });
+  }
+};
+
+/**
+ * ✏️ UPDATE USER — Only Owner Can Edit
+ */
+export const updateUser = async (req, res) => {
+  try {
+    const requester = req.user;
+    const { id } = req.params;
+    const { fullName, email, phoneNumber, country, role } = req.body;
+
+    if (!requester || requester.role !== "owner") {
+      return res.status(403).json({
+        message: "Access denied. Only the owner can edit users.",
+      });
+    }
+
+    const user = await User.findById(id);
+    if (!user) return res.status(404).json({ message: "User not found." });
+
+    // Update allowed fields
+    user.fullName = fullName || user.fullName;
+    user.email = email || user.email;
+    user.phoneNumber = phoneNumber || user.phoneNumber;
+    user.country = country || user.country;
+    user.role = role || user.role;
+
+    await user.save();
+
+    res.status(200).json({
+      message: "User updated successfully.",
+      user,
+    });
+  } catch (error) {
+    console.error("❌ Update user error:", error);
+    res.status(500).json({
+      message: "Error updating user",
       error: error.message,
     });
   }

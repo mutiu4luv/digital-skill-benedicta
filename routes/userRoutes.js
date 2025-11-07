@@ -18,5 +18,7 @@ router.post("/register", upload.single("profilePhoto"), registerUser);
 router.post("/verify-email", verifyEmail);
 router.post("/login", loginUser);
 router.get("/all", protect, authorizeRoles("owner"), getAllUsers);
+router.delete("/:id", protect, deleteUser);
+router.put("/:id", protect, updateUser);
 
 export default router;
