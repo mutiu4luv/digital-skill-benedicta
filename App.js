@@ -5,6 +5,8 @@ import cors from "cors";
 import userRoutes from "./routes/userRoutes.js";
 import videoRoutes from "./routes/videoRoutes.js";
 import barChartAnalysisRoutes from "./routes/barChartAnalysis.js";
+import analyticsRoutes from "./routes/analysis.js";
+import feedback from "./routes/feedback.js";
 
 dotenv.config();
 
@@ -43,6 +45,8 @@ app.get("/", (req, res) => {
 app.use("/api/users", userRoutes);
 app.use("/api/videos", videoRoutes);
 app.use("/api/analytics", barChartAnalysisRoutes);
+app.use("/api/analytics", analyticsRoutes);
+app.use("/api/feedbacks", feedback);
 
 // ✅ 5. MongoDB Connection
 mongoose

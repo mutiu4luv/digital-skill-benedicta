@@ -304,3 +304,25 @@ export const updateUser = async (req, res) => {
       .json({ message: "Failed to update user", error: error.message });
   }
 };
+
+export const getAllCoaches = async (req, res) => {
+  try {
+    // 🔹 Fetch all users with role = "coach"
+    const coaches = await User.find({ role: "coach" }).select(
+      "fullName email phoneNumber country profilePhoto"
+    );
+
+    res.status(200).json({
+      success: true,
+      total: coaches.length,
+      coaches,
+    });
+  } catch (error) {
+    console.error("❌ Error fetching coaches:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error fetching coaches",
+      error: error.message,
+    });
+  }
+};
