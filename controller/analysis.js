@@ -76,90 +76,102 @@ export const getCoachPerformance = async (req, res) => {
     if (!coachId) return res.status(400).json({ message: "Coach ID required" });
 
     // Get all feedback, assignments, and sessions for the coach
-    const feedbacks = await Feedback.find({ coach: coachId }); // FIX: Use 'Feedback' model
-    const assignments = await Assignment.find({ coach: coachId });
+    const feedbacks = await Feedback.find({ coach: coachId });
+
+    // 💡 Improvement: Filter assignments to only count those the coach has reviewed (assuming an 'isReviewed' field)
+    const assignmentsReviewed = await Assignment.find({
+      coach: coachId,
+      isReviewed: true,
+    });
+
     const sessions = await CoachingSession.find({ coach: coachId });
 
-    // Group by month
+    // Grouping structure initialization
     const monthlyData = {};
 
     // Helper function to get the month key (e.g., 'Jan', 'Feb')
     const getMonthKey = (date) =>
       new Date(date).toLocaleString("default", { month: "short" });
 
-    // Aggregate Feedback
+    // Helper to ensure month structure exists
+    const initializeMonth = (month) => {
+      if (!monthlyData[month]) {
+        monthlyData[month] = {
+          month,
+          sessionsCount: 0, // Changed to sessionsCount for clarity
+          studentsTaught: 0,
+          assignmentsReviewedCount: 0, // Changed for clarity
+          totalRating: 0,
+          ratingsCount: 0, // New field to track the total number of ratings
+        };
+      }
+    };
+
+    // 1. Aggregate Feedback & Ratings
     feedbacks.forEach((f) => {
       const month = getMonthKey(f.createdAt);
-      if (!monthlyData[month])
-        monthlyData[month] = {
-          month,
-          sessions: 0,
-          studentsTaught: 0,
-          assignmentsReviewed: 0,
-          avgRating: 0,
-          ratings: new Set(),
-          totalRating: 0,
-        };
+      initializeMonth(month);
 
       monthlyData[month].totalRating += f.rating;
-      monthlyData[month].ratings.add(f._id.toString()); // Use Set to count number of ratings
-      // NOTE: studentsTaught calculation is complex without more context. Assuming a rating equals a student interaction for now.
+      monthlyData[month].ratingsCount += 1; // Increment the count of ratings
     });
 
-    // Aggregate Sessions (assuming attended students are "studentsTaught")
+    // 2. Aggregate Sessions (Assuming attended students are "studentsTaught")
     sessions.forEach((s) => {
       const month = getMonthKey(s.createdAt);
-      if (!monthlyData[month])
-        monthlyData[month] = {
-          month,
-          sessions: 0,
-          studentsTaught: 0,
-          assignmentsReviewed: 0,
-          avgRating: 0,
-          ratings: new Set(),
-          totalRating: 0,
-        };
+      initializeMonth(month);
 
-      monthlyData[month].sessions += 1;
-      monthlyData[month].studentsTaught += s.attended.length; // Assuming 'attended' is the array of student IDs
+      monthlyData[month].sessionsCount += 1;
+      // Assuming 'attended' is the array of student IDs
+      monthlyData[month].studentsTaught += s.attended ? s.attended.length : 0;
     });
 
-    // Aggregate Assignments Reviewed
-    assignments.forEach((a) => {
-      const month = getMonthKey(a.createdAt);
-      if (!monthlyData[month])
-        monthlyData[month] = {
-          month,
-          sessions: 0,
-          studentsTaught: 0,
-          assignmentsReviewed: 0,
-          avgRating: 0,
-          ratings: new Set(),
-          totalRating: 0,
-        };
+    // 3. Aggregate Assignments Reviewed
+    // We are only iterating over assignments that are already filtered by { isReviewed: true } in the query
+    assignmentsReviewed.forEach((a) => {
+      const month = getMonthKey(a.updatedAt || a.createdAt); // Use updatedAt if possible, or createdAt
+      initializeMonth(month);
 
-      monthlyData[month].assignmentsReviewed += 1;
+      monthlyData[month].assignmentsReviewedCount += 1;
     });
 
     // Finalize data and calculate averages
-    const monthlyPerformance = Object.values(monthlyData).map((data) => ({
-      ...data,
-      avgRating:
-        data.ratings.size > 0
-          ? (data.totalRating / data.ratings.size).toFixed(1)
-          : 0, // Calculate average rating
-      ratings: undefined, // Remove internal array
-      totalRating: undefined, // Remove internal total
-    }));
+    const monthlyPerformance = Object.values(monthlyData).map((data) => {
+      const avgRating =
+        data.ratingsCount > 0 ? data.totalRating / data.ratingsCount : 0;
+
+      return {
+        month: data.month,
+        sessions: data.sessionsCount,
+        studentsTaught: data.studentsTaught,
+        assignmentsReviewed: data.assignmentsReviewedCount,
+        avgRating: avgRating.toFixed(1), // Calculate and format average rating
+      };
+    });
 
     // Sort by month (optional but recommended for charts)
-    // You might need a more robust date sorting if you span years
-    // For now, simple sort by month name:
-    monthlyPerformance.sort((a, b) => a.month.localeCompare(b.month));
+    // For more robust sorting, you'd track the month number, but name sort is fine for a single year view.
+    monthlyPerformance.sort((a, b) => {
+      const monthOrder = [
+        "Jan",
+        "Feb",
+        "Mar",
+        "Apr",
+        "May",
+        "Jun",
+        "Jul",
+        "Aug",
+        "Sep",
+        "Oct",
+        "Nov",
+        "Dec",
+      ];
+      return monthOrder.indexOf(a.month) - monthOrder.indexOf(b.month);
+    });
 
-    res.json(monthlyPerformance); // <<< FIX: Return the array of monthly performance objects
+    res.json(monthlyPerformance);
   } catch (err) {
-    console.error(err);
+    console.error("Coach performance fetch failed:", err);
     res
       .status(500)
       .json({ message: "Coach performance fetch failed", error: err.message });
