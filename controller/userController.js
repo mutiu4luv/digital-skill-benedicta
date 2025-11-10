@@ -307,21 +307,27 @@ export const updateUser = async (req, res) => {
 
 export const getAllCoaches = async (req, res) => {
   try {
-    // 🔹 Fetch all users with role = "coach"
-    const coaches = await User.find({ role: "coach" }).select(
-      "fullName email phoneNumber country profilePhoto"
+    const allUsers = await User.find().select(
+      "fullName email phoneNumber country profilePhoto role"
     );
+
+    // 🔹 Look closely at the 'role' field in the returned data to spot the typo.
+    console.log("--- DEBUG: ALL USERS AND ROLES ---");
+    allUsers.forEach((user) => {
+      console.log(`User: ${user.fullName || user.email}, Role: ${user.role}`);
+    });
+    console.log("----------------------------------");
 
     res.status(200).json({
       success: true,
-      total: coaches.length,
-      coaches,
+      total: allUsers.length,
+      coaches: allUsers, // Returning all users to inspect the data
     });
   } catch (error) {
-    console.error("❌ Error fetching coaches:", error);
+    console.error("❌ Error fetching users for debugging:", error);
     res.status(500).json({
       success: false,
-      message: "Error fetching coaches",
+      message: "Error fetching users for debugging",
       error: error.message,
     });
   }
