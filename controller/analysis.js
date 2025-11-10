@@ -1,7 +1,7 @@
 import CoachingSession from "../module/coachesSession.js";
 import Assignment from "../module/assignmentStudent.js";
 import User from "../module/userModule.js";
-import feedback from "../module/feedback.js";
+import Feedback from "../module/feedback.js";
 
 export const getEngagementAnalytics = async (req, res) => {
   try {
