@@ -75,15 +75,18 @@ export const getCoachPerformance = async (req, res) => {
     const { coachId } = req.query;
     if (!coachId) return res.status(400).json({ message: "Coach ID required" });
 
-    // Get all feedback, assignments, and sessions for the coach
+    // --- Core Queries: All data is filtered by the requested coachId ---
+
+    // 1. Get all feedbacks given TO this specific coach
     const feedbacks = await Feedback.find({ coach: coachId });
 
-    // 💡 Improvement: Filter assignments to only count those the coach has reviewed (assuming an 'isReviewed' field)
+    // 2. Get all assignments REVIEWED by this specific coach (assuming isReviewed: true means the coach completed the review)
     const assignmentsReviewed = await Assignment.find({
       coach: coachId,
       isReviewed: true,
     });
 
+    // 3. Get all sessions led by this specific coach
     const sessions = await CoachingSession.find({ coach: coachId });
 
     // Grouping structure initialization
@@ -98,41 +101,41 @@ export const getCoachPerformance = async (req, res) => {
       if (!monthlyData[month]) {
         monthlyData[month] = {
           month,
-          sessionsCount: 0, // Changed to sessionsCount for clarity
+          sessionsCount: 0,
           studentsTaught: 0,
-          assignmentsReviewedCount: 0, // Changed for clarity
+          assignmentsReviewedCount: 0,
           totalRating: 0,
-          ratingsCount: 0, // New field to track the total number of ratings
+          ratingsCount: 0,
         };
       }
     };
 
-    // 1. Aggregate Feedback & Ratings
+    // 1. Aggregate Feedback & Ratings (COUNTED FOR THE COACH)
     feedbacks.forEach((f) => {
       const month = getMonthKey(f.createdAt);
       initializeMonth(month);
 
       monthlyData[month].totalRating += f.rating;
-      monthlyData[month].ratingsCount += 1; // Increment the count of ratings
+      monthlyData[month].ratingsCount += 1; // Coach gets +1 rating count
     });
 
-    // 2. Aggregate Sessions (Assuming attended students are "studentsTaught")
+    // 2. Aggregate Sessions (COUNTED FOR THE COACH)
     sessions.forEach((s) => {
       const month = getMonthKey(s.createdAt);
       initializeMonth(month);
 
-      monthlyData[month].sessionsCount += 1;
-      // Assuming 'attended' is the array of student IDs
+      monthlyData[month].sessionsCount += 1; // Coach gets +1 session count
+      // Coach gets credit for every student who attended their session
       monthlyData[month].studentsTaught += s.attended ? s.attended.length : 0;
     });
 
-    // 3. Aggregate Assignments Reviewed
-    // We are only iterating over assignments that are already filtered by { isReviewed: true } in the query
+    // 3. Aggregate Assignments Reviewed (COUNTED FOR THE COACH)
     assignmentsReviewed.forEach((a) => {
-      const month = getMonthKey(a.updatedAt || a.createdAt); // Use updatedAt if possible, or createdAt
+      // Use updatedAt as the time of review, falling back to createdAt
+      const month = getMonthKey(a.updatedAt || a.createdAt);
       initializeMonth(month);
 
-      monthlyData[month].assignmentsReviewedCount += 1;
+      monthlyData[month].assignmentsReviewedCount += 1; // Coach gets +1 reviewed assignment count
     });
 
     // Finalize data and calculate averages
@@ -145,12 +148,12 @@ export const getCoachPerformance = async (req, res) => {
         sessions: data.sessionsCount,
         studentsTaught: data.studentsTaught,
         assignmentsReviewed: data.assignmentsReviewedCount,
-        avgRating: avgRating.toFixed(1), // Calculate and format average rating
+        // The Avg Rating is the coach's average rating for that month
+        avgRating: avgRating.toFixed(1),
       };
     });
 
     // Sort by month (optional but recommended for charts)
-    // For more robust sorting, you'd track the month number, but name sort is fine for a single year view.
     monthlyPerformance.sort((a, b) => {
       const monthOrder = [
         "Jan",
