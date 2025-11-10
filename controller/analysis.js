@@ -76,17 +76,20 @@ export const getCoachPerformance = async (req, res) => {
     if (!coachId) return res.status(400).json({ message: "Coach ID required" });
 
     // Get all feedback, assignments, and sessions for the coach
-    const feedbacks = await Feedback.find({ coach: coachId });
+    const feedbacks = await Feedback.find({ coach: coachId }); // FIX: Use 'Feedback' model
     const assignments = await Assignment.find({ coach: coachId });
     const sessions = await CoachingSession.find({ coach: coachId });
 
     // Group by month
     const monthlyData = {};
 
+    // Helper function to get the month key (e.g., 'Jan', 'Feb')
+    const getMonthKey = (date) =>
+      new Date(date).toLocaleString("default", { month: "short" });
+
+    // Aggregate Feedback
     feedbacks.forEach((f) => {
-      const month = new Date(f.createdAt).toLocaleString("default", {
-        month: "short",
-      });
+      const month = getMonthKey(f.createdAt);
       if (!monthlyData[month])
         monthlyData[month] = {
           month,
@@ -94,15 +97,18 @@ export const getCoachPerformance = async (req, res) => {
           studentsTaught: 0,
           assignmentsReviewed: 0,
           avgRating: 0,
-          ratings: [],
+          ratings: new Set(),
+          totalRating: 0,
         };
-      monthlyData[month].ratings.push(f.rating);
+
+      monthlyData[month].totalRating += f.rating;
+      monthlyData[month].ratings.add(f._id.toString()); // Use Set to count number of ratings
+      // NOTE: studentsTaught calculation is complex without more context. Assuming a rating equals a student interaction for now.
     });
 
+    // Aggregate Sessions (assuming attended students are "studentsTaught")
     sessions.forEach((s) => {
-      const month = new Date(s.createdAt).toLocaleString("default", {
-        month: "short",
-      });
+      const month = getMonthKey(s.createdAt);
       if (!monthlyData[month])
         monthlyData[month] = {
           month,
@@ -110,15 +116,17 @@ export const getCoachPerformance = async (req, res) => {
           studentsTaught: 0,
           assignmentsReviewed: 0,
           avgRating: 0,
-          ratings: [],
+          ratings: new Set(),
+          totalRating: 0,
         };
+
       monthlyData[month].sessions += 1;
+      monthlyData[month].studentsTaught += s.attended.length; // Assuming 'attended' is the array of student IDs
     });
 
+    // Aggregate Assignments Reviewed
     assignments.forEach((a) => {
-      const month = new Date(a.createdAt).toLocaleString("default", {
-        month: "short",
-      });
+      const month = getMonthKey(a.createdAt);
       if (!monthlyData[month])
         monthlyData[month] = {
           month,
@@ -126,26 +134,34 @@ export const getCoachPerformance = async (req, res) => {
           studentsTaught: 0,
           assignmentsReviewed: 0,
           avgRating: 0,
-          ratings: [],
+          ratings: new Set(),
+          totalRating: 0,
         };
+
       monthlyData[month].assignmentsReviewed += 1;
     });
 
-    // Calculate average ratings
-    Object.values(monthlyData).forEach((m) => {
-      if (m.ratings.length > 0)
-        m.avgRating = m.ratings.reduce((a, b) => a + b, 0) / m.ratings.length;
-      delete m.ratings;
-    });
+    // Finalize data and calculate averages
+    const monthlyPerformance = Object.values(monthlyData).map((data) => ({
+      ...data,
+      avgRating:
+        data.ratings.size > 0
+          ? (data.totalRating / data.ratings.size).toFixed(1)
+          : 0, // Calculate average rating
+      ratings: undefined, // Remove internal array
+      totalRating: undefined, // Remove internal total
+    }));
 
-    res.json({
-      coachId,
-      monthlyPerformance: Object.values(monthlyData),
-    });
-  } catch (error) {
-    console.error("❌ Error in getCoachPerformance:", error);
+    // Sort by month (optional but recommended for charts)
+    // You might need a more robust date sorting if you span years
+    // For now, simple sort by month name:
+    monthlyPerformance.sort((a, b) => a.month.localeCompare(b.month));
+
+    res.json(monthlyPerformance); // <<< FIX: Return the array of monthly performance objects
+  } catch (err) {
+    console.error(err);
     res
       .status(500)
-      .json({ message: "Error fetching coach performance", error });
+      .json({ message: "Coach performance fetch failed", error: err.message });
   }
 };
