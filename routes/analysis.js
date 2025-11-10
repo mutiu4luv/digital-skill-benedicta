@@ -8,6 +8,6 @@ import { protect } from "../middleware/authMiddleware.js";
 const router = express.Router();
 
 router.get("/engagement", protect, getEngagementAnalytics);
-router.get("/coach-performance", protect, getCoachPerformance);
+router.get("/coach", protect, getCoachPerformance);
 
 export default router;
