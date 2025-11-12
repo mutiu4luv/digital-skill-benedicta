@@ -7,7 +7,6 @@ import videoRoutes from "./routes/videoRoutes.js";
 import barChartAnalysisRoutes from "./routes/barChartAnalysis.js";
 import analyticsRoutes from "./routes/analysis.js";
 import feedback from "./routes/feedback.js";
-import coachUploadRoute from "./routes/coachUpload.js";
 
 dotenv.config();
 
@@ -48,7 +47,6 @@ app.use("/api/videos", videoRoutes);
 app.use("/api/analytics", barChartAnalysisRoutes);
 app.use("/api/analytics", analyticsRoutes);
 app.use("/api/feedbacks", feedback);
-app.use("/api/coach", coachUploadRoute);
 
 // ✅ 5. MongoDB Connection
 mongoose
