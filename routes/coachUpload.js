@@ -9,28 +9,46 @@ import { protect, authorizeRoles } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
 
-// Multer setup (temporarily store before Cloudinary upload)
-const storage = multer.diskStorage({});
-const upload = multer({ storage });
+// ✅ in-memory storage
+const upload = multer();
 
-// ✅ Routes
 router.post(
   "/upload-video",
   protect,
-  authorizeRoles("coach", "owner"),
   upload.single("file"),
+  (req, res, next) => {
+    console.log("🧩 Incoming /upload-video request");
+    console.log("Headers:", req.headers["content-type"]);
+    console.log("Body:", req.body);
+    console.log("File field name:", req.file?.fieldname);
+    console.log("File original name:", req.file?.originalname);
+    console.log("File mimetype:", req.file?.mimetype);
+    next();
+  },
   uploadVideo
 );
 
 router.post(
   "/upload-document",
   protect,
-  authorizeRoles("coach", "owner"),
   upload.single("file"),
+  (req, res, next) => {
+    console.log("🧩 Incoming /upload-document request");
+    console.log("Headers:", req.headers["content-type"]);
+    console.log("Body:", req.body);
+    console.log("File field name:", req.file?.fieldname);
+    console.log("File original name:", req.file?.originalname);
+    console.log("File mimetype:", req.file?.mimetype);
+    next();
+  },
   uploadDocument
 );
 
-// ✅ Students view all materials
-router.get("/materials", getAllMaterials);
+router.get(
+  "/materials/:courseId",
+  protect,
+  authorizeRoles("student", "coach", "owner"),
+  getAllMaterials
+);
 
 export default router;

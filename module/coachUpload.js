@@ -21,7 +21,11 @@ const materialSchema = new mongoose.Schema(
       ref: "User",
       required: true,
     },
+    unlockAt: { type: Date, default: Date.now }, // time when material becomes visible
+    createdAt: { type: Date, default: Date.now },
+    course: { type: mongoose.Schema.Types.ObjectId, ref: "Course" }, // new
   },
+
   { timestamps: true }
 );
 

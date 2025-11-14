@@ -1,0 +1,38 @@
+import express from "express";
+import {
+  assignCoach,
+  createCourse,
+  getAllCourses,
+  setClassSchedule,
+  getMyCourses,
+} from "../controller/corse.js";
+import { authorizeRoles, protect } from "../middleware/authMiddleware.js";
+
+const router = express.Router();
+
+// Coach controlling his class
+router.put(
+  "/:courseId/set-schedule",
+  protect,
+  authorizeRoles("coach"),
+  setClassSchedule
+);
+
+// Owner creates a course
+router.post("/", protect, authorizeRoles("owner"), createCourse);
+
+// Everyone can see all courses
+router.get("/", getAllCourses);
+
+// Student sees only courses he registered
+router.get(
+  "/my-courses",
+  protect,
+  authorizeRoles("student", "coach", "owner"),
+  getMyCourses
+);
+
+// Owner assigns coach
+router.put("/assign-coach", protect, authorizeRoles("owner"), assignCoach);
+
+export default router;

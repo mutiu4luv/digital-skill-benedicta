@@ -2,11 +2,17 @@ import express from "express";
 import dotenv from "dotenv";
 import mongoose from "mongoose";
 import cors from "cors";
+import "./utilitis/classSchedular.js";
 import userRoutes from "./routes/userRoutes.js";
 import videoRoutes from "./routes/videoRoutes.js";
 import barChartAnalysisRoutes from "./routes/barChartAnalysis.js";
 import analyticsRoutes from "./routes/analysis.js";
 import feedback from "./routes/feedback.js";
+import coachUploadRoute from "./routes/coachUpload.js";
+import courseRoute from "./routes/corse.js";
+import registrationRoutes from "./routes/registrationCourse.js";
+import "./cron/autoOpenClass.js";
+import "./cron/autoCloseClass.js";
 
 dotenv.config();
 
@@ -47,6 +53,9 @@ app.use("/api/videos", videoRoutes);
 app.use("/api/analytics", barChartAnalysisRoutes);
 app.use("/api/analytics", analyticsRoutes);
 app.use("/api/feedbacks", feedback);
+app.use("/api/coach", coachUploadRoute);
+app.use("/api/course", courseRoute);
+app.use("/api", registrationRoutes);
 
 // ✅ 5. MongoDB Connection
 mongoose

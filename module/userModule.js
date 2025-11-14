@@ -51,12 +51,15 @@ const userSchema = new mongoose.Schema(
       type: String,
       default: null,
     },
+    courses: [{ type: mongoose.Schema.Types.ObjectId, ref: "Course" }],
+    classDate: { type: Date },
     avgRating: {
       type: Number,
       default: 0,
     },
     isFirstClass: { type: Boolean, default: false },
   },
+
   { timestamps: true }
 );
 

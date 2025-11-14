@@ -1,32 +1,61 @@
 import Material from "../module/coachUpload.js";
 import cloudinary from "../config/cloudnary.js";
-import Material from "../module/coachUpload.js";
-import User from "../models/userModel.js"; // adjust path if needed
+import User from "../module/userModule.js";
+import streamifier from "streamifier";
+import Course from "../module/course.js";
 
-// ✅ Helper: Upload file to Cloudinary
-const uploadToCloudinary = async (filePath, folder, resourceType) => {
-  return await cloudinary.uploader.upload(filePath, {
-    folder,
-    resource_type: resourceType,
+// ✅ Upload helper
+const streamUpload = (buffer, folder, resourceType) => {
+  return new Promise((resolve, reject) => {
+    const stream = cloudinary.uploader.upload_stream(
+      { folder, resource_type: resourceType },
+      (error, result) => {
+        if (result) resolve(result);
+        else reject(error);
+      }
+    );
+    streamifier.createReadStream(buffer).pipe(stream);
   });
 };
 
-// ✅ Upload Video (Coach or Owner only)
+// ✅ Upload Video
+// ✅ Upload Video
 export const uploadVideo = async (req, res) => {
   try {
-    if (!req.file)
-      return res.status(400).json({ message: "No video file uploaded" });
-    const { title } = req.body;
+    const { title, courseId } = req.body; // <-- include courseId
     const coachId = req.user.id;
 
-    // Upload video to Cloudinary
-    const result = await uploadToCloudinary(req.file.path, "videos", "video");
+    if (!req.file)
+      return res.status(400).json({ message: "No video file uploaded" });
+    if (!courseId)
+      return res.status(400).json({ message: "Course ID is required" });
 
+    // Check course ownership
+    const course = await Course.findById(courseId);
+    if (!course) return res.status(404).json({ message: "Course not found" });
+    if (!course.coach.equals(coachId))
+      return res
+        .status(403)
+        .json({ message: "You are not the coach of this course" });
+
+    // Restrict upload if class is closed
+    if (!course.isClassOpen)
+      return res
+        .status(403)
+        .json({
+          message: "Class is closed. You can only upload during class time.",
+        });
+
+    // Upload to cloudinary
+    const result = await streamUpload(req.file.buffer, "videos", "video");
+
+    // Save video in DB
     const video = await Material.create({
       title,
       fileUrl: result.secure_url,
       type: "video",
       coach: coachId,
+      course: courseId, // ✅ link to course
     });
 
     res.status(201).json({ message: "✅ Video uploaded successfully", video });
@@ -38,90 +67,82 @@ export const uploadVideo = async (req, res) => {
   }
 };
 
-// ✅ Upload Document (Coach or Owner only)
+// ✅ Upload Document
 export const uploadDocument = async (req, res) => {
   try {
-    if (!req.file)
-      return res.status(400).json({ message: "No document file uploaded" });
-    const { title } = req.body;
+    const { title, courseId } = req.body;
     const coachId = req.user.id;
 
-    // Upload document to Cloudinary
-    const result = await uploadToCloudinary(req.file.path, "documents", "auto");
+    if (!req.file)
+      return res.status(400).json({ message: "No document file uploaded" });
+    if (!courseId)
+      return res.status(400).json({ message: "Course ID is required" });
+
+    const course = await Course.findById(courseId);
+    if (!course) return res.status(404).json({ message: "Course not found" });
+    if (!course.coach.equals(coachId))
+      return res
+        .status(403)
+        .json({ message: "You are not the coach of this course" });
+
+    if (!course.isClassOpen)
+      return res.status(403).json({
+        message: "Class is closed. You can only upload during class time.",
+      });
+
+    const result = await streamUpload(req.file.buffer, "documents", "auto");
 
     const document = await Material.create({
       title,
       fileUrl: result.secure_url,
       type: "document",
       coach: coachId,
+      course: courseId, // ✅ link to course
     });
 
-    res
-      .status(201)
-      .json({ message: "✅ Document uploaded successfully", document });
+    res.status(201).json({
+      message: "✅ Document uploaded successfully",
+      document,
+    });
   } catch (error) {
     console.error("❌ Document upload failed:", error);
-    res
-      .status(500)
-      .json({ message: "Document upload failed", error: error.message });
+    res.status(500).json({
+      message: "Document upload failed",
+      error: error.message,
+    });
   }
 };
 
 // ✅ Fetch all materials (for students)
 
 export const getAllMaterials = async (req, res) => {
-  try {
-    const userId = req.user.id;
-    const student = await User.findById(userId);
+  const { courseId } = req.params;
+  const userId = req.user.id;
 
-    if (!student) {
-      return res.status(404).json({ message: "User not found" });
-    }
+  const course = await Course.findById(courseId).populate("students");
+  if (!course) return res.status(404).json({ message: "Course not found" });
 
-    // ✅ Only students can access
-    if (student.role !== "student") {
-      return res
-        .status(403)
-        .json({ message: "Only students can access this route" });
-    }
+  // Restrict to enrolled students or course coach
+  const isStudentEnrolled = course.students.some(
+    (student) => student._id.toString() === userId
+  );
 
-    // ✅ Time-based access logic
-    const now = new Date();
-    const classDate = new Date(student.classDate);
-
-    const isSameDay =
-      now.getFullYear() === classDate.getFullYear() &&
-      now.getMonth() === classDate.getMonth() &&
-      now.getDate() === classDate.getDate();
-
-    const currentHour = now.getHours();
-    const isBetween8and11 = currentHour >= 20 && currentHour < 23;
-
-    if (!isSameDay || !isBetween8and11) {
-      return res.status(403).json({
-        message:
-          "Materials are only available between 8 PM and 11 PM on your class date.",
-      });
-    }
-
-    // ✅ Check assignment restriction — but skip if it's first class
-    if (!student.isFirstClass && !student.assignmentCompleted) {
-      return res.status(403).json({
-        message:
-          "You must complete your previous assignment before accessing materials.",
-      });
-    }
-
-    // ✅ Fetch materials
-    const materials = await Material.find()
-      .populate("coach", "fullName email")
-      .sort({ createdAt: -1 });
-
-    res.json(materials);
-  } catch (error) {
-    console.error("❌ Fetch materials failed:", error);
-    res
-      .status(500)
-      .json({ message: "Failed to fetch materials", error: error.message });
+  if (req.user.role === "student" && !isStudentEnrolled) {
+    return res
+      .status(403)
+      .json({ message: "You are not enrolled in this course" });
   }
+
+  if (!course.isClassOpen) {
+    return res
+      .status(403)
+      .json({ message: "Class is currently closed. Materials unavailable." });
+  }
+
+  // Fetch materials
+  const materials = await Material.find({ course: courseId })
+    .populate("coach", "fullName email")
+    .sort({ createdAt: -1 });
+
+  res.json({ message: "✅ Course materials fetched", materials });
 };
