@@ -45,3 +45,21 @@ export const getCoachesRatings = async (req, res) => {
     res.status(500).json({ message: "Error fetching coach ratings" });
   }
 };
+
+export const getCoachMonthlyRatings = async (req, res) => {
+  try {
+    const coachId = req.user._id; // Extracted from JWT via auth middleware
+
+    const ratings = await Feedback.find({ coach: coachId })
+      .select("rating createdAt")
+      .sort({ createdAt: 1 });
+
+    return res.json(ratings);
+  } catch (error) {
+    console.error("❌ Error fetching coach rating history:", error);
+    res.status(500).json({
+      message: "Error fetching rating history",
+      error: error.message,
+    });
+  }
+};
