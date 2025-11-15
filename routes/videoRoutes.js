@@ -5,7 +5,7 @@ import {
   getVideos,
   deleteVideo,
 } from "../controller/videoController.js";
-import { protect, isAdmin } from "../middleware/authMiddleware.js";
+import { protect, authorizeRoles } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
 
@@ -13,7 +13,13 @@ const router = express.Router();
 router.get("/", getVideos);
 
 // Admin-only routes
-router.post("/upload", protect, isAdmin, upload.single("video"), uploadVideo);
-router.delete("/:id", protect, isAdmin, deleteVideo);
+router.post(
+  "/upload",
+  protect,
+  authorizeRoles("coach"),
+  upload.single("video"),
+  uploadVideo
+);
+router.delete("/:id", protect, authorizeRoles("coach"), deleteVideo);
 
 export default router;
