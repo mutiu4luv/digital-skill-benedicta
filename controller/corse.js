@@ -1,5 +1,6 @@
 import Course from "../module/course.js";
 import User from "../module/userModule.js";
+import mongoose from "mongoose";
 
 // ---------------------------------------------------------
 // ✅ Coach sets class schedule
