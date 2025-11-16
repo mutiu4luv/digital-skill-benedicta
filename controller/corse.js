@@ -138,3 +138,26 @@ export const assignCoach = async (req, res) => {
       .json({ message: "Failed to assign coach", error: error.message });
   }
 };
+// ---------------------------------------------------------
+// OWNER: Delete a course
+// ---------------------------------------------------------
+export const deleteCourse = async (req, res) => {
+  try {
+    const { courseId } = req.params;
+
+    if (req.user.role !== "owner") {
+      return res.status(403).json({ message: "Only owner can delete courses" });
+    }
+
+    const course = await Course.findById(courseId);
+    if (!course) return res.status(404).json({ message: "Course not found" });
+
+    await course.remove();
+
+    res.json({ message: "Course deleted successfully" });
+  } catch (error) {
+    res
+      .status(500)
+      .json({ message: "Failed to delete course", error: error.message });
+  }
+};
