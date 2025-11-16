@@ -5,6 +5,7 @@ import {
   getAllCourses,
   setClassSchedule,
   getMyCourses,
+  deleteCourse,
 } from "../controller/corse.js";
 import { authorizeRoles, protect } from "../middleware/authMiddleware.js";
 
@@ -31,6 +32,7 @@ router.get(
   authorizeRoles("student", "coach", "owner"),
   getMyCourses
 );
+router.delete("/:courseId", protect, authorizeRoles("owner"), deleteCourse);
 
 // Owner assigns coach
 router.put("/assign-coach", protect, authorizeRoles("owner"), assignCoach);
