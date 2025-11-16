@@ -144,16 +144,15 @@ export const assignCoach = async (req, res) => {
 
 export const deleteCourse = async (req, res) => {
   try {
-    const { id } = req.params;
+    const { courseId } = req.params; // use courseId instead of id
 
-    if (!mongoose.Types.ObjectId.isValid(id)) {
+    if (!mongoose.Types.ObjectId.isValid(courseId)) {
       return res.status(400).json({ message: "Invalid course ID" });
     }
 
-    const course = await Course.findById(id);
+    const course = await Course.findById(courseId);
     if (!course) return res.status(404).json({ message: "Course not found" });
 
-    // Optional: check user role
     if (req.user.role !== "owner") {
       return res
         .status(403)
