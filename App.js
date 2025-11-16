@@ -11,6 +11,7 @@ import feedback from "./routes/feedback.js";
 import coachUploadRoute from "./routes/coachUpload.js";
 import courseRoute from "./routes/corse.js";
 import registrationRoutes from "./routes/registrationCourse.js";
+import cohort from "./routes/cohort.js";
 import "./cron/autoOpenClass.js";
 import "./cron/autoCloseClass.js";
 
@@ -56,6 +57,7 @@ app.use("/api/feedbacks", feedback);
 app.use("/api/coach", coachUploadRoute);
 app.use("/api/course", courseRoute);
 app.use("/api", registrationRoutes);
+app.use("/api/cohort", cohort);
 
 // ✅ 5. MongoDB Connection
 mongoose
