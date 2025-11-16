@@ -140,17 +140,29 @@ export const assignCoach = async (req, res) => {
 };
 // ---------------------------------------------------------
 // OWNER: Delete a course
-// ---------------------------------------------------------
-// OWNER: Delete a course
+
 export const deleteCourse = async (req, res) => {
   try {
-    const course = await Course.findById(req.params.id);
+    const { id } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ message: "Invalid course ID" });
+    }
+
+    const course = await Course.findById(id);
     if (!course) return res.status(404).json({ message: "Course not found" });
 
-    await course.remove();
+    // Optional: check user role
+    if (req.user.role !== "owner") {
+      return res
+        .status(403)
+        .json({ message: "Not authorized to delete this course" });
+    }
+
+    await course.deleteOne();
     res.json({ message: "Course deleted successfully" });
   } catch (error) {
-    console.error(error);
+    console.error("Delete course error:", error);
     res
       .status(500)
       .json({ message: "Failed to delete course", error: error.message });
