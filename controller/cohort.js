@@ -1,5 +1,4 @@
 import Cohort from "../module/cohort.js";
-
 import Course from "../module/course.js";
 
 export const createCohort = async (req, res) => {
@@ -7,19 +6,24 @@ export const createCohort = async (req, res) => {
   const ownerId = req.user.id;
 
   try {
+    // Get the course to fetch its coach
+    const course = await Course.findById(courseId);
+    if (!course) return res.status(404).json({ message: "Course not found" });
+
     const newCohort = await Cohort.create({
       name,
       courseId,
+      coachId: course.coach,
       ownerId,
       durationInDays,
       studentIds: [],
-      // coachId can be optional if derived from course
     });
 
     res
       .status(201)
       .json({ message: "Cohort created successfully", cohort: newCohort });
   } catch (err) {
+    console.error(err);
     res.status(500).json({ message: "Server error", error: err.message });
   }
 };
