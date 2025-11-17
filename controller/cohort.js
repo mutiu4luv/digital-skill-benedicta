@@ -3,7 +3,7 @@ import Cohort from "../module/cohort.js";
 import Course from "../module/course.js";
 
 export const createCohort = async (req, res) => {
-  const { courseId, studentIds } = req.body;
+  const { courseId, studentIds, name } = req.body; // include 'name'
   const ownerId = req.user.id;
 
   try {
@@ -15,7 +15,7 @@ export const createCohort = async (req, res) => {
     const newCohort = await Cohort.create({
       name,
       courseId,
-      coachId: course.coach, // get coach automatically
+      coachId: course.coach,
       ownerId,
       durationInDays: durationMap[course.duration],
       studentIds: studentIds || [],
