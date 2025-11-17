@@ -1,22 +1,24 @@
 import Cohort from "../module/cohort.js";
+
 import Course from "../module/course.js";
 
 export const createCohort = async (req, res) => {
-  const { name, courseId, durationInDays } = req.body;
+  const { courseId, studentIds } = req.body;
   const ownerId = req.user.id;
 
   try {
-    // Get the course to fetch its coach
     const course = await Course.findById(courseId);
     if (!course) return res.status(404).json({ message: "Course not found" });
+
+    const durationMap = { "1-month": 30, "3-months": 90, "6-months": 180 };
 
     const newCohort = await Cohort.create({
       name,
       courseId,
-      coachId: course.coach,
+      coachId: course.coach, // get coach automatically
       ownerId,
-      durationInDays,
-      studentIds: [],
+      durationInDays: durationMap[course.duration],
+      studentIds: studentIds || [],
     });
 
     res
