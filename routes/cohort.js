@@ -1,24 +1,28 @@
 import express from "express";
-import { startCohort, endCohort, createCohort } from "../controller/cohort.js";
+import {
+  createCohort,
+  endCohortByCourse,
+  getAllCohorts,
+  startCohortByCourse,
+} from "../controller/cohort.js";
 import { authorizeRoles, protect } from "../middleware/authMiddleware.js"; // auth middleware
 
 const router = express.Router();
 router.post("/", protect, authorizeRoles("owner"), createCohort);
+router.get("/", protect, authorizeRoles("owner", "coach"), getAllCohorts);
 
-// Start cohort
 router.put(
-  "/start/:cohortId",
+  "/start/course/:courseId",
   protect,
   authorizeRoles("owner", "coach"),
-  startCohort
+  startCohortByCourse
 );
 
-// End cohort
 router.put(
-  "/end/:cohortId",
+  "/end/course/:courseId",
   protect,
   authorizeRoles("owner", "coach"),
-  endCohort
+  endCohortByCourse
 );
 
 export default router;
