@@ -21,8 +21,12 @@ function convertDurationStringToDays(duration) {
 }
 export const createCohort = async (req, res) => {
   try {
-    const { name, ownerId, courses, startDate, endDate, studentIds } = req.body;
+    const ownerId = req.user.id; // AUTHENTICATED OWNER
+    const { name, courses, startDate, endDate, studentIds } = req.body;
 
+    // -------------------------
+    // 🔎 BASIC VALIDATION
+    // -------------------------
     if (!name || !ownerId) {
       return res
         .status(400)
@@ -35,6 +39,9 @@ export const createCohort = async (req, res) => {
         .json({ message: "At least one course is required." });
     }
 
+    // -------------------------
+    // 🔎 VALIDATE EACH COURSE
+    // -------------------------
     const validatedCourses = [];
 
     for (const course of courses) {
@@ -42,9 +49,9 @@ export const createCohort = async (req, res) => {
 
       const courseDoc = await Course.findById(courseId);
       if (!courseDoc) {
-        return res
-          .status(404)
-          .json({ message: `Course not found: ${courseId}` });
+        return res.status(404).json({
+          message: `Course not found: ${courseId}`,
+        });
       }
 
       const durationInDays = convertDurationStringToDays(courseDoc.duration);
@@ -62,6 +69,9 @@ export const createCohort = async (req, res) => {
       });
     }
 
+    // -------------------------
+    // 🔎 CREATE COHORT
+    // -------------------------
     const newCohort = await Cohort.create({
       name,
       ownerId,
@@ -76,7 +86,7 @@ export const createCohort = async (req, res) => {
       cohort: newCohort,
     });
   } catch (error) {
-    res.status(500).json({
+    return res.status(500).json({
       message: "Server error while creating cohort",
       error: error.message,
     });
