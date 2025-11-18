@@ -135,10 +135,13 @@ export const getCohortStudents = async (req, res) => {
 };
 // controllers/cohortController.js
 export const startCohortByCourse = async (req, res) => {
-  const { courseId } = req.params;
+  let { courseId } = req.params;
   const ownerId = req.user.id;
 
   try {
+    // convert to ObjectId
+    courseId = new mongoose.Types.ObjectId(courseId);
+
     const course = await Course.findById(courseId);
     if (!course) {
       return res.status(404).json({ message: "Course not found" });
@@ -155,7 +158,8 @@ export const startCohortByCourse = async (req, res) => {
         .json({ message: "Cohort not found for this course" });
     }
 
-    cohort.status = "started";
+    cohort.status = "in_progress";
+    cohort.startDate = new Date();
     await cohort.save();
 
     res.status(200).json({ message: "Cohort started successfully", cohort });
