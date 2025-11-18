@@ -136,39 +136,32 @@ export const getCohortStudents = async (req, res) => {
 };
 // controllers/cohortController.js
 export const startCohortByCourse = async (req, res) => {
+  const { courseId } = req.params; // matches :courseId in URL
+  const ownerId = req.user.id; // assuming authMiddleware sets req.user
+
   try {
-    const { courseId } = req.params;
+    const course = await Course.findById(courseId);
+    if (!course) {
+      return res.status(404).json({ message: "Course not found" });
+    }
 
-    const cohort = await Cohort.findOne({ courseId });
-    if (!cohort) return res.status(404).json({ message: "Cohort not found" });
-
-    if (cohort.status !== "not_started") {
+    const cohort = await Cohort.findOne({ courses: courseId, ownerId });
+    if (!cohort) {
       return res
-        .status(400)
-        .json({ message: "Cohort already started or completed" });
+        .status(404)
+        .json({ message: "Cohort not found for this course" });
     }
 
-    // Coach can only start their own course cohort
-    if (
-      req.user.role === "coach" &&
-      cohort.coachId.toString() !== req.user.id
-    ) {
-      return res.status(403).json({
-        message: "You cannot start a cohort for a course you do not coach",
-      });
-    }
-
-    // Owner can start any cohort
-    cohort.status = "in_progress";
-    cohort.startDate = new Date();
+    // Example: update a "status" field to "started"
+    cohort.status = "started";
     await cohort.save();
 
-    res.json({ message: "Cohort started successfully", cohort });
-  } catch (err) {
-    res.status(500).json({ message: err.message });
+    res.status(200).json({ message: "Cohort started successfully", cohort });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Server error", error: error.message });
   }
 };
-
 export const endCohortByCourse = async (req, res) => {
   try {
     const { courseId } = req.params;
@@ -220,7 +213,6 @@ export const deleteCohort = async (req, res) => {
   try {
     const ownerId = req.user.id;
     const { cohortId } = req.params;
-
     if (!cohortId) {
       return res.status(400).json({ message: "Cohort ID is required" });
     }
