@@ -14,14 +14,14 @@ router.get("/", protect, authorizeRoles("owner", "coach"), getAllCohorts);
 router.delete("/:cohortId", protect, authorizeRoles("owner"), deleteCohort);
 
 router.put(
-  "/start/course/:courseId",
+  "/start/course/:cohortId",
   protect,
   authorizeRoles("owner", "coach"),
   startCohortByCourse
 );
 
 router.put(
-  "/end/course/:courseId",
+  "/end/course/:cohortId",
   protect,
   authorizeRoles("owner", "coach"),
   endCohortByCourse

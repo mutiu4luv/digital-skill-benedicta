@@ -135,46 +135,58 @@ export const getCohortStudents = async (req, res) => {
   }
 };
 // controllers/cohortController.js
+
 export const startCohortByCourse = async (req, res) => {
-  let { courseId } = req.params;
+  const { cohortId } = req.params;
   const ownerId = req.user.id;
 
   try {
-    // convert to ObjectId
-    courseId = new mongoose.Types.ObjectId(courseId);
+    // 1. Get cohort using cohortId
+    const cohort = await Cohort.findOne({
+      _id: cohortId,
+      ownerId,
+    });
 
+    if (!cohort) {
+      return res.status(404).json({ message: "Cohort not found" });
+    }
+
+    // 2. Extract the REAL courseId from the cohort
+    if (!cohort.courses || cohort.courses.length === 0) {
+      return res
+        .status(400)
+        .json({ message: "No course assigned to this cohort" });
+    }
+
+    const courseId = cohort.courses[0].courseId;
+
+    // 3. Verify the course exists
     const course = await Course.findById(courseId);
     if (!course) {
       return res.status(404).json({ message: "Course not found" });
     }
 
-    const cohort = await Cohort.findOne({
-      "courses.courseId": courseId,
-      ownerId,
-    });
-
-    if (!cohort) {
-      return res
-        .status(404)
-        .json({ message: "Cohort not found for this course" });
-    }
-
+    // 4. Update cohort status
     cohort.status = "in_progress";
     cohort.startDate = new Date();
     await cohort.save();
 
-    res.status(200).json({ message: "Cohort started successfully", cohort });
+    res.status(200).json({
+      message: "Cohort started successfully",
+      cohort,
+      course,
+    });
   } catch (error) {
-    console.error(error);
+    console.error("Start Cohort Error:", error);
     res.status(500).json({ message: "Server error", error: error.message });
   }
 };
 
 export const endCohortByCourse = async (req, res) => {
   try {
-    const { courseId } = req.params;
+    const { cohortId } = req.params;
 
-    const cohort = await Cohort.findOne({ courseId });
+    const cohort = await Cohort.findOne({ _id: cohortId });
     if (!cohort) return res.status(404).json({ message: "Cohort not found" });
 
     if (cohort.status !== "in_progress") {
