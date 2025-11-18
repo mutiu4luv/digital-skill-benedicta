@@ -20,6 +20,10 @@ export const createCohort = async (req, res) => {
       durationInDays: durationMap[course.duration],
       studentIds: studentIds || [],
     });
+    console.log("Incoming courseId:", courseId);
+    console.log("Course found:", course);
+    console.log("Course duration:", course?.duration);
+    console.log("Mapped duration:", durationMap[course?.duration]);
 
     res
       .status(201)
