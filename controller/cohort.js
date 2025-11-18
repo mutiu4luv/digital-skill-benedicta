@@ -1,5 +1,4 @@
 import Cohort from "../module/cohort.js";
-
 import Course from "../module/course.js";
 
 function convertDurationStringToDays(duration) {
@@ -145,7 +144,7 @@ export const startCohortByCourse = async (req, res) => {
       return res.status(404).json({ message: "Course not found" });
     }
 
-    const cohort = await Cohort.findOne({ courses: courseId, ownerId });
+    const cohort = await cohort.findOne({ courses: courseId, ownerId });
     if (!cohort) {
       return res
         .status(404)
