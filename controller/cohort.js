@@ -3,27 +3,37 @@ import Cohort from "../module/cohort.js";
 import Course from "../module/course.js";
 
 export const createCohort = async (req, res) => {
-  const { courseId, studentIds, name } = req.body; // include 'name'
+  const { name, courses } = req.body; // courses is an array
   const ownerId = req.user.id;
 
-  try {
-    const course = await Course.findById(courseId);
-    if (!course) return res.status(404).json({ message: "Course not found" });
+  if (!courses || courses.length === 0)
+    return res.status(400).json({ message: "Courses are required" });
 
+  try {
     const durationMap = { "1-month": 30, "3-months": 90, "6-months": 180 };
+    const cohortCourses = [];
+
+    // Fetch each course and prepare data
+    for (const courseItem of courses) {
+      const course = await Course.findById(courseItem.courseId);
+      if (!course)
+        return res
+          .status(404)
+          .json({ message: `Course not found: ${courseItem.courseId}` });
+
+      cohortCourses.push({
+        courseId: course._id,
+        coachId: course.coach,
+        durationInDays: durationMap[courseItem.duration],
+      });
+    }
 
     const newCohort = await Cohort.create({
       name,
-      courseId,
-      coachId: course.coach,
       ownerId,
-      durationInDays: durationMap[course.duration],
-      studentIds: studentIds || [],
+      courses: cohortCourses, // save as array
+      studentIds: [], // empty at creation
     });
-    console.log("Incoming courseId:", courseId);
-    console.log("Course found:", course);
-    console.log("Course duration:", course?.duration);
-    console.log("Mapped duration:", durationMap[course?.duration]);
 
     res
       .status(201)
@@ -33,7 +43,47 @@ export const createCohort = async (req, res) => {
     res.status(500).json({ message: "Server error", error: err.message });
   }
 };
+//REGISTER STUDENT TO COHORT
 
+export const registerStudentToCohort = async (req, res) => {
+  const { cohortId } = req.params;
+  const studentId = req.user.id; // assume student is logged in
+
+  try {
+    const cohort = await Cohort.findById(cohortId);
+    if (!cohort) return res.status(404).json({ message: "Cohort not found" });
+
+    // Avoid duplicates
+    if (cohort.studentIds.includes(studentId)) {
+      return res.status(400).json({ message: "Student already registered" });
+    }
+
+    cohort.studentIds.push(studentId);
+    await cohort.save();
+
+    res
+      .status(200)
+      .json({ message: "Student registered successfully", cohort });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+};
+//GET STUDENTS IN A COHORT
+export const getCohortStudents = async (req, res) => {
+  try {
+    const cohort = await Cohort.findById(req.params.cohortId).populate(
+      "studentIds",
+      "name email"
+    );
+    if (!cohort) return res.status(404).json({ message: "Cohort not found" });
+
+    res.status(200).json({ students: cohort.studentIds });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+};
 // controllers/cohortController.js
 export const startCohortByCourse = async (req, res) => {
   try {
