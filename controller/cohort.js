@@ -3,7 +3,7 @@ import Cohort from "../module/cohort.js";
 import Course from "../module/course.js";
 
 export const createCohort = async (req, res) => {
-  const { name, courses } = req.body; // courses should be an array
+  const { name, courses, startDate, endDate } = req.body; // courses should be an array
   const ownerId = req.user.id;
 
   // Validate courses array
@@ -12,12 +12,10 @@ export const createCohort = async (req, res) => {
   }
 
   try {
-    // Map frontend duration to days
+    // Map frontend duration strings to days
     const durationMap = { "1-month": 30, "3-months": 90, "6-months": 180 };
     const cohortCourses = [];
-    let totalDuration = 0; // total duration of the cohort
 
-    // Process each course
     for (const courseItem of courses) {
       const { courseId, duration } = courseItem;
 
@@ -46,11 +44,9 @@ export const createCohort = async (req, res) => {
 
       cohortCourses.push({
         courseId: course._id,
-        coachId: course.coach,
+        coachId: course.coach, // assuming 'coach' is the field in Course model
         durationInDays,
       });
-
-      totalDuration += durationInDays;
     }
 
     // Create Cohort
@@ -59,7 +55,8 @@ export const createCohort = async (req, res) => {
       ownerId,
       courses: cohortCourses,
       studentIds: [],
-      durationInDays: totalDuration, // optional total duration
+      startDate: startDate ? new Date(startDate) : undefined,
+      endDate: endDate ? new Date(endDate) : undefined,
     });
 
     res
