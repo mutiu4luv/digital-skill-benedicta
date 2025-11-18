@@ -1,4 +1,4 @@
-import Cohort from "../module/cohort.js";
+import Cohort from "..//module/cohort.js";
 import Course from "../module/course.js";
 
 function convertDurationStringToDays(duration) {
