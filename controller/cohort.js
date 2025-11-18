@@ -203,11 +203,15 @@ export const endCohortByCourse = async (req, res) => {
 export const getAllCohorts = async (req, res) => {
   try {
     const cohorts = await Cohort.find()
-      .populate("courseId", "name duration")
-      .populate("coachId", "fullName email")
+      .populate("courses.courseId", "name duration")
+      .populate("courses.coachId", "fullName email")
       .populate("ownerId", "fullName email");
+
     res.json(cohorts);
   } catch (err) {
-    res.status(500).json({ message: "Server error", error: err.message });
+    res.status(500).json({
+      message: "Server error",
+      error: err.message,
+    });
   }
 };
