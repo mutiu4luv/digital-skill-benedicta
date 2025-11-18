@@ -3,45 +3,74 @@ import Cohort from "../module/cohort.js";
 import Course from "../module/course.js";
 
 export const createCohort = async (req, res) => {
-  const { name, courses } = req.body; // courses is an array
+  const { name, courses } = req.body; // courses should be an array
   const ownerId = req.user.id;
 
-  if (!courses || courses.length === 0)
+  // Validate courses array
+  if (!courses || !Array.isArray(courses) || courses.length === 0) {
     return res.status(400).json({ message: "Courses are required" });
+  }
 
   try {
+    // Map frontend duration to days
     const durationMap = { "1-month": 30, "3-months": 90, "6-months": 180 };
     const cohortCourses = [];
+    let totalDuration = 0; // total duration of the cohort
 
-    // Fetch each course and prepare data
+    // Process each course
     for (const courseItem of courses) {
-      const course = await Course.findById(courseItem.courseId);
-      if (!course)
+      const { courseId, duration } = courseItem;
+
+      // Validate courseId and duration
+      if (!courseId) {
+        return res
+          .status(400)
+          .json({ message: "Course ID is required for each course" });
+      }
+
+      if (!duration || !durationMap[duration]) {
+        return res.status(400).json({
+          message: `Invalid or missing duration for course ${courseId}`,
+        });
+      }
+
+      // Fetch course from DB
+      const course = await Course.findById(courseId);
+      if (!course) {
         return res
           .status(404)
-          .json({ message: `Course not found: ${courseItem.courseId}` });
+          .json({ message: `Course not found: ${courseId}` });
+      }
+
+      const durationInDays = durationMap[duration];
 
       cohortCourses.push({
         courseId: course._id,
         coachId: course.coach,
-        durationInDays: durationMap[courseItem.duration],
+        durationInDays,
       });
+
+      totalDuration += durationInDays;
     }
+
+    // Create Cohort
     const newCohort = await Cohort.create({
       name,
       ownerId,
       courses: cohortCourses,
       studentIds: [],
+      durationInDays: totalDuration, // optional total duration
     });
 
     res
       .status(201)
       .json({ message: "Cohort created successfully", cohort: newCohort });
   } catch (err) {
-    console.error(err);
+    console.error("❌ Cohort creation error:", err);
     res.status(500).json({ message: "Server error", error: err.message });
   }
 };
+
 //REGISTER STUDENT TO COHORT
 
 export const registerStudentToCohort = async (req, res) => {
