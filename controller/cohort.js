@@ -27,12 +27,11 @@ export const createCohort = async (req, res) => {
         durationInDays: durationMap[courseItem.duration],
       });
     }
-
     const newCohort = await Cohort.create({
       name,
       ownerId,
-      courses: cohortCourses, // save as array
-      studentIds: [], // empty at creation
+      courses: cohortCourses,
+      studentIds: [],
     });
 
     res
