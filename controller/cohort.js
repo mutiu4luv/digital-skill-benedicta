@@ -2,69 +2,84 @@ import Cohort from "../module/cohort.js";
 
 import Course from "../module/course.js";
 
-export const createCohort = async (req, res) => {
-  const { name, courses, startDate, endDate } = req.body; // courses should be an array
-  const ownerId = req.user.id;
+function convertDurationStringToDays(duration) {
+  if (!duration) return null;
 
-  // Validate courses array
-  if (!courses || !Array.isArray(courses) || courses.length === 0) {
-    return res.status(400).json({ message: "Courses are required" });
+  const [num, unit] = duration.split("-");
+
+  const n = parseInt(num);
+
+  if (unit === "months" || unit === "month") {
+    return n * 30;
   }
 
+  if (unit === "year") {
+    return n * 365;
+  }
+
+  return null;
+}
+export const createCohort = async (req, res) => {
   try {
-    // Map frontend duration strings to days
-    const durationMap = { "1-month": 30, "3-months": 90, "6-months": 180 };
-    const cohortCourses = [];
+    const { name, ownerId, courses, startDate, endDate, studentIds } = req.body;
 
-    for (const courseItem of courses) {
-      const { courseId, duration } = courseItem;
+    if (!name || !ownerId) {
+      return res
+        .status(400)
+        .json({ message: "Name and ownerId are required." });
+    }
 
-      // Validate courseId and duration
-      if (!courseId) {
-        return res
-          .status(400)
-          .json({ message: "Course ID is required for each course" });
-      }
+    if (!courses || !Array.isArray(courses) || courses.length === 0) {
+      return res
+        .status(400)
+        .json({ message: "At least one course is required." });
+    }
 
-      if (!duration || !durationMap[duration]) {
-        return res.status(400).json({
-          message: `Invalid or missing duration for course ${courseId}`,
-        });
-      }
+    const validatedCourses = [];
 
-      // Fetch course from DB
-      const course = await Course.findById(courseId);
-      if (!course) {
+    for (const course of courses) {
+      const { courseId, coachId } = course;
+
+      const courseDoc = await Course.findById(courseId);
+      if (!courseDoc) {
         return res
           .status(404)
           .json({ message: `Course not found: ${courseId}` });
       }
 
-      const durationInDays = durationMap[duration];
+      const durationInDays = convertDurationStringToDays(courseDoc.duration);
 
-      cohortCourses.push({
-        courseId: course._id,
-        coachId: course.coach, // assuming 'coach' is the field in Course model
+      if (!durationInDays) {
+        return res.status(400).json({
+          message: `Invalid duration format for course ${courseId}: ${courseDoc.duration}`,
+        });
+      }
+
+      validatedCourses.push({
+        courseId,
+        coachId,
         durationInDays,
       });
     }
 
-    // Create Cohort
     const newCohort = await Cohort.create({
       name,
       ownerId,
-      courses: cohortCourses,
-      studentIds: [],
-      startDate: startDate ? new Date(startDate) : undefined,
-      endDate: endDate ? new Date(endDate) : undefined,
+      courses: validatedCourses,
+      startDate,
+      endDate,
+      studentIds: studentIds || [],
     });
 
-    res
-      .status(201)
-      .json({ message: "Cohort created successfully", cohort: newCohort });
-  } catch (err) {
-    console.error("❌ Cohort creation error:", err);
-    res.status(500).json({ message: "Server error", error: err.message });
+    return res.status(201).json({
+      message: "Cohort created successfully",
+      cohort: newCohort,
+    });
+  } catch (error) {
+    res.status(500).json({
+      message: "Server error while creating cohort",
+      error: error.message,
+    });
   }
 };
 
