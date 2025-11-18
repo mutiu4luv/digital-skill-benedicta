@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import Cohort from "..//module/cohort.js";
 import Course from "../module/course.js";
 
