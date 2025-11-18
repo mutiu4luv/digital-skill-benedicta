@@ -1,6 +1,7 @@
 import express from "express";
 import {
   createCohort,
+  deleteCohort,
   endCohortByCourse,
   getAllCohorts,
   startCohortByCourse,
@@ -10,6 +11,7 @@ import { authorizeRoles, protect } from "../middleware/authMiddleware.js"; // au
 const router = express.Router();
 router.post("/", protect, authorizeRoles("owner"), createCohort);
 router.get("/", protect, authorizeRoles("owner", "coach"), getAllCohorts);
+router.delete("/:cohortId", protect, authorizeRoles("owner"), deleteCohort);
 
 router.put(
   "/start/course/:courseId",

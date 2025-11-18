@@ -215,3 +215,35 @@ export const getAllCohorts = async (req, res) => {
     });
   }
 };
+
+export const deleteCohort = async (req, res) => {
+  try {
+    const ownerId = req.user.id;
+    const { cohortId } = req.params;
+
+    if (!cohortId) {
+      return res.status(400).json({ message: "Cohort ID is required" });
+    }
+
+    const cohort = await Cohort.findById(cohortId);
+    if (!cohort) {
+      return res.status(404).json({ message: "Cohort not found" });
+    }
+
+    // Only owner can delete
+    if (cohort.ownerId.toString() !== ownerId.toString()) {
+      return res.status(403).json({
+        message: "You are not authorized to delete this cohort",
+      });
+    }
+
+    await Cohort.findByIdAndDelete(cohortId);
+
+    res.json({ message: "Cohort deleted successfully" });
+  } catch (error) {
+    res.status(500).json({
+      message: "Server error while deleting cohort",
+      error: error.message,
+    });
+  }
+};
