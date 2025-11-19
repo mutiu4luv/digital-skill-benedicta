@@ -189,35 +189,50 @@ export const startCohortByCourse = async (req, res) => {
 
 export const endCohortByCourse = async (req, res) => {
   try {
-    const { cohortId } = req.params;
+    const { cohortCourseId } = req.params;
+    const userId = req.user.id;
+    const userRole = req.user.role;
 
-    const cohort = await Cohort.findOne({ _id: cohortId });
-    if (!cohort) return res.status(404).json({ message: "Cohort not found" });
+    // Find cohort that contains this course
+    const cohort = await Cohort.findOne({
+      "courses._id": cohortCourseId,
+    });
 
-    if (cohort.status !== "in_progress") {
-      return res.status(400).json({ message: "Cohort is not in progress" });
+    if (!cohort) {
+      return res.status(404).json({ message: "Cohort course not found" });
     }
 
-    // Coach can only end their course cohort
-    if (
-      req.user.role === "coach" &&
-      cohort.coachId.toString() !== req.user.id
-    ) {
+    const courseItem = cohort.courses.id(cohortCourseId);
+    if (!courseItem) {
+      return res.status(404).json({ message: "Course not found in cohort" });
+    }
+
+    if (courseItem.status !== "in_progress") {
+      return res.status(400).json({ message: "Course is not in progress" });
+    }
+
+    // Coach can only end their own course
+    if (userRole === "coach" && courseItem.coachId.toString() !== userId) {
       return res.status(403).json({
-        message: "You cannot end a cohort for a course you do not coach",
+        message: "You cannot end a course you are not coaching",
       });
     }
 
-    // Owner can end any cohort
-    cohort.status = "completed";
-    cohort.endDate = new Date();
+    // End course
+    courseItem.status = "completed";
+    courseItem.endDate = new Date();
+
     await cohort.save();
 
-    res.json({ message: "Cohort ended successfully", cohort });
+    res.json({
+      message: "Course completed successfully",
+      course: courseItem,
+    });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 };
+
 export const getAllCohorts = async (req, res) => {
   try {
     const cohorts = await Cohort.find()
