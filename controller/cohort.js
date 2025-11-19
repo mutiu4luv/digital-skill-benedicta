@@ -141,36 +141,39 @@ export const startCohortByCourse = async (req, res) => {
   const ownerId = req.user.id;
 
   try {
-    // validate ObjectId
+    // Convert param to ObjectId safely
     cohortCourseId = new mongoose.Types.ObjectId(cohortCourseId);
 
-    // find cohort that contains this course entry
+    // Find the cohort that contains this course
     const cohort = await Cohort.findOne({
       ownerId,
       "courses._id": cohortCourseId,
     });
 
-    if (!cohort)
+    if (!cohort) {
       return res.status(404).json({ message: "Cohort course not found" });
+    }
 
-    // select the course inside the array
+    // Locate the specific course inside the cohort array
     const courseItem = cohort.courses.id(cohortCourseId);
 
-    if (courseItem.startDate)
-      return res
-        .status(400)
-        .json({ message: "This cohort course already started" });
+    if (!courseItem) {
+      return res.status(404).json({ message: "Course not found in cohort" });
+    }
 
+    // Start the course
+    courseItem.status = "in_progress";
     courseItem.startDate = new Date();
+
     await cohort.save();
 
-    res.status(200).json({
+    return res.json({
       message: "Cohort course started successfully",
-      cohort,
+      course: courseItem,
     });
   } catch (error) {
-    console.error("Start cohort course error:", error);
-    res.status(500).json({ message: "Server error starting cohort course" });
+    console.error("Start cohort error:", error);
+    return res.status(500).json({ message: "Server error" });
   }
 };
 
