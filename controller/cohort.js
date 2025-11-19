@@ -141,10 +141,9 @@ export const startCohortByCourse = async (req, res) => {
   const ownerId = req.user.id;
 
   try {
-    // Convert param to ObjectId safely
     cohortCourseId = new mongoose.Types.ObjectId(cohortCourseId);
 
-    // Find the cohort that contains this course
+    // Find cohort containing the course
     const cohort = await Cohort.findOne({
       ownerId,
       "courses._id": cohortCourseId,
@@ -154,11 +153,19 @@ export const startCohortByCourse = async (req, res) => {
       return res.status(404).json({ message: "Cohort course not found" });
     }
 
-    // Locate the specific course inside the cohort array
     const courseItem = cohort.courses.id(cohortCourseId);
 
     if (!courseItem) {
       return res.status(404).json({ message: "Course not found in cohort" });
+    }
+
+    // Prevent starting again
+    if (courseItem.status === "in_progress") {
+      return res.status(400).json({ message: "Course is already in progress" });
+    }
+
+    if (courseItem.status === "completed") {
+      return res.status(400).json({ message: "Course is already completed" });
     }
 
     // Start the course
