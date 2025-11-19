@@ -137,48 +137,40 @@ export const getCohortStudents = async (req, res) => {
 // controllers/cohortController.js
 
 export const startCohortByCourse = async (req, res) => {
-  const { cohortId } = req.params;
+  let { cohortCourseId } = req.params;
   const ownerId = req.user.id;
 
   try {
-    // 1. Get cohort using cohortId
+    // validate ObjectId
+    cohortCourseId = new mongoose.Types.ObjectId(cohortCourseId);
+
+    // find cohort that contains this course entry
     const cohort = await Cohort.findOne({
-      _id: cohortId,
       ownerId,
+      "courses._id": cohortCourseId,
     });
 
-    if (!cohort) {
-      return res.status(404).json({ message: "Cohort not found" });
-    }
+    if (!cohort)
+      return res.status(404).json({ message: "Cohort course not found" });
 
-    // 2. Extract the REAL courseId from the cohort
-    if (!cohort.courses || cohort.courses.length === 0) {
+    // select the course inside the array
+    const courseItem = cohort.courses.id(cohortCourseId);
+
+    if (courseItem.startDate)
       return res
         .status(400)
-        .json({ message: "No course assigned to this cohort" });
-    }
+        .json({ message: "This cohort course already started" });
 
-    const courseId = cohort.courses[0].courseId;
-
-    // 3. Verify the course exists
-    const course = await Course.findById(courseId);
-    if (!course) {
-      return res.status(404).json({ message: "Course not found" });
-    }
-
-    // 4. Update cohort status
-    cohort.status = "in_progress";
-    cohort.startDate = new Date();
+    courseItem.startDate = new Date();
     await cohort.save();
 
     res.status(200).json({
-      message: "Cohort started successfully",
+      message: "Cohort course started successfully",
       cohort,
-      course,
     });
   } catch (error) {
-    console.error("Start Cohort Error:", error);
-    res.status(500).json({ message: "Server error", error: error.message });
+    console.error("Start cohort course error:", error);
+    res.status(500).json({ message: "Server error starting cohort course" });
   }
 };
 
