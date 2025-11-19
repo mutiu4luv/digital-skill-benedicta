@@ -140,10 +140,13 @@ export const startCohortByCourse = async (req, res) => {
   let { cohortCourseId } = req.params;
   const ownerId = req.user.id;
 
-  try {
-    cohortCourseId = new mongoose.Types.ObjectId(cohortCourseId);
+  // Validate ID
+  if (!mongoose.Types.ObjectId.isValid(cohortCourseId)) {
+    return res.status(400).json({ message: "Invalid course ID" });
+  }
 
-    // Find cohort containing the course
+  try {
+    // Find the cohort containing this course
     const cohort = await Cohort.findOne({
       ownerId,
       "courses._id": cohortCourseId,
@@ -153,13 +156,13 @@ export const startCohortByCourse = async (req, res) => {
       return res.status(404).json({ message: "Cohort course not found" });
     }
 
+    // Get subdocument
     const courseItem = cohort.courses.id(cohortCourseId);
 
     if (!courseItem) {
       return res.status(404).json({ message: "Course not found in cohort" });
     }
 
-    // Prevent starting again
     if (courseItem.status === "in_progress") {
       return res.status(400).json({ message: "Course is already in progress" });
     }
