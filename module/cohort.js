@@ -1,5 +1,3 @@
-import mongoose from "mongoose";
-
 const cohortSchema = new mongoose.Schema(
   {
     name: { type: String, required: true, trim: true },
@@ -8,7 +6,7 @@ const cohortSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
       required: true,
-    }, // The creator of the cohort
+    },
 
     courses: [
       {
@@ -27,17 +25,15 @@ const cohortSchema = new mongoose.Schema(
           required: true,
           min: [1, "Duration must be at least 1 day"],
         },
+        status: {
+          type: String,
+          enum: ["not_started", "in_progress", "completed"],
+          default: "not_started",
+        },
+        startDate: { type: Date },
+        endDate: { type: Date },
       },
     ],
-
-    startDate: { type: Date },
-    endDate: { type: Date },
-
-    status: {
-      type: String,
-      enum: ["not_started", "in_progress", "completed"],
-      default: "not_started",
-    },
 
     studentIds: [
       {
@@ -48,5 +44,3 @@ const cohortSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
-
-export default mongoose.model("Cohort", cohortSchema);
