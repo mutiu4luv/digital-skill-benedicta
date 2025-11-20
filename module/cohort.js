@@ -1,3 +1,5 @@
+const mongoose = require("mongoose");
+
 const cohortSchema = new mongoose.Schema(
   {
     name: { type: String, required: true, trim: true },
@@ -30,8 +32,10 @@ const cohortSchema = new mongoose.Schema(
           enum: ["not_started", "in_progress", "completed"],
           default: "not_started",
         },
-        startDate: { type: Date },
-        endDate: { type: Date },
+
+        // Default null makes your response show undefined fields automatically
+        startDate: { type: Date, default: null },
+        endDate: { type: Date, default: null },
       },
     ],
 
@@ -44,3 +48,5 @@ const cohortSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+
+module.exports = mongoose.model("Cohort", cohortSchema);
