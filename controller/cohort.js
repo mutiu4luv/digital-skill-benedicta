@@ -66,31 +66,20 @@ export const createCohort = async (req, res) => {
       });
     }
 
-    const newCohort = await Cohort.create({
+    const newCohort = new Cohort({
       name,
       ownerId,
-      courses: validatedCourses,
+      courses: validatedCourses.map((c) =>
+        new Cohort.schema.path("courses").caster(c)
+      ),
       studentIds: studentIds || [],
     });
 
+    await newCohort.save();
+
     return res.status(201).json({
       message: "Cohort created successfully",
-      cohort: {
-        _id: newCohort._id,
-        name: newCohort.name,
-        ownerId: newCohort.ownerId,
-        studentIds: newCohort.studentIds,
-        createdAt: newCohort.createdAt,
-        updatedAt: newCohort.updatedAt,
-        courses: newCohort.courses.map((c) => ({
-          courseId: c.courseId,
-          coachId: c.coachId,
-          durationInDays: c.durationInDays,
-          status: c.status,
-          startDate: c.startDate,
-          endDate: c.endDate,
-        })),
-      },
+      cohort: newCohort.toObject(), // this will now include status/startDate/endDate
     });
   } catch (error) {
     return res.status(500).json({
