@@ -82,7 +82,7 @@ export const createCohort = async (req, res) => {
         studentIds: newCohort.studentIds,
         createdAt: newCohort.createdAt,
         updatedAt: newCohort.updatedAt,
-        courses: validatedCourses, // EXACT FORMAT YOU WANT
+        courses: newCohort.toObject().courses, // <--- FIX
       },
     });
   } catch (error) {
