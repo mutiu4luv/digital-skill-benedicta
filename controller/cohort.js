@@ -154,8 +154,14 @@ export const startCohortByCourse = async (req, res) => {
       return res.status(400).json({ message: "Course is already completed" });
     }
 
+    // 🔥 UPDATE COURSE STATUS
     courseItem.status = "in_progress";
     courseItem.startDate = new Date();
+
+    // 🔥 UPDATE COHORT STATUS IF FIRST COURSE STARTED
+    if (cohort.status === "not_started") {
+      cohort.status = "in_progress";
+    }
 
     await cohort.save();
 
@@ -165,10 +171,7 @@ export const startCohortByCourse = async (req, res) => {
 
     return res.json({
       message: "Cohort course started successfully",
-      courseId: courseItem._id,
-      status: courseItem.status,
-      startDate: courseItem.startDate,
-      endDate: courseItem.endDate,
+      cohortStatus: cohort.status,
       course: updated.courses.id(cohortCourseId),
     });
   } catch (error) {
