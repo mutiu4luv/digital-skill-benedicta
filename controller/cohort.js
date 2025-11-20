@@ -137,31 +137,22 @@ export const startCohortByCourse = async (req, res) => {
     });
 
     if (!cohort) {
-      return res.status(404).json({ message: "Cohort course not found" });
+      return res.status(404).json({ message: "Course not found in cohort" });
     }
 
     const courseItem = cohort.courses.id(cohortCourseId);
 
-    if (!courseItem) {
-      return res.status(404).json({ message: "Course not found in cohort" });
-    }
-
     if (courseItem.status === "in_progress") {
-      return res.status(400).json({ message: "Course is already in progress" });
+      return res.status(400).json({ message: "Course already started" });
     }
 
     if (courseItem.status === "completed") {
-      return res.status(400).json({ message: "Course is already completed" });
+      return res.status(400).json({ message: "Course already completed" });
     }
 
-    // 🔥 UPDATE COURSE STATUS
+    // 🔥 START THE COURSE ONLY
     courseItem.status = "in_progress";
     courseItem.startDate = new Date();
-
-    // 🔥 UPDATE COHORT STATUS IF FIRST COURSE STARTED
-    if (cohort.status === "not_started") {
-      cohort.status = "in_progress";
-    }
 
     await cohort.save();
 
@@ -170,9 +161,9 @@ export const startCohortByCourse = async (req, res) => {
     );
 
     return res.json({
-      message: "Cohort course started successfully",
-      cohortStatus: cohort.status,
-      course: updated.courses.id(cohortCourseId),
+      message: "Course started successfully",
+      course: updated.courses.id(cohortCourseId), // includes status
+      courses: updated.courses, // optional
     });
   } catch (error) {
     console.error("Start cohort error:", error);
