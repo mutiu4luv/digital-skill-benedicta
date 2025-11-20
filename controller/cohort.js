@@ -165,6 +165,10 @@ export const startCohortByCourse = async (req, res) => {
 
     return res.json({
       message: "Cohort course started successfully",
+      courseId: courseItem._id,
+      status: courseItem.status,
+      startDate: courseItem.startDate,
+      endDate: courseItem.endDate,
       course: updated.courses.id(cohortCourseId),
     });
   } catch (error) {
