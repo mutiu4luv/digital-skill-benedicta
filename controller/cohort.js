@@ -82,7 +82,14 @@ export const createCohort = async (req, res) => {
         studentIds: newCohort.studentIds,
         createdAt: newCohort.createdAt,
         updatedAt: newCohort.updatedAt,
-        courses: newCohort.toObject().courses, // <--- FIX
+        courses: newCohort.courses.map((c) => ({
+          courseId: c.courseId,
+          coachId: c.coachId,
+          durationInDays: c.durationInDays,
+          status: c.status,
+          startDate: c.startDate,
+          endDate: c.endDate,
+        })),
       },
     });
   } catch (error) {
