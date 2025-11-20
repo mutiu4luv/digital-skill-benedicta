@@ -21,12 +21,9 @@ function convertDurationStringToDays(duration) {
 }
 export const createCohort = async (req, res) => {
   try {
-    const ownerId = req.user.id; // AUTHENTICATED OWNER
+    const ownerId = req.user.id;
     const { name, courses, startDate, endDate, studentIds } = req.body;
 
-    // -------------------------
-    // 🔎 BASIC VALIDATION
-    // -------------------------
     if (!name || !ownerId) {
       return res
         .status(400)
@@ -39,9 +36,6 @@ export const createCohort = async (req, res) => {
         .json({ message: "At least one course is required." });
     }
 
-    // -------------------------
-    // 🔎 VALIDATE EACH COURSE
-    // -------------------------
     const validatedCourses = [];
 
     for (const course of courses) {
@@ -49,36 +43,30 @@ export const createCohort = async (req, res) => {
 
       const courseDoc = await Course.findById(courseId);
       if (!courseDoc) {
-        return res.status(404).json({
-          message: `Course not found: ${courseId}`,
-        });
+        return res
+          .status(404)
+          .json({ message: `Course not found: ${courseId}` });
       }
 
       const durationInDays = convertDurationStringToDays(courseDoc.duration);
-
-      if (!durationInDays) {
-        return res.status(400).json({
-          message: `Invalid duration format for course ${courseId}: ${courseDoc.duration}`,
-        });
-      }
 
       validatedCourses.push({
         courseId,
         coachId,
         durationInDays,
+        status: "not_started", // FIX
+        startDate: null,
+        endDate: null,
       });
     }
 
-    // -------------------------
-    // 🔎 CREATE COHORT
-    // -------------------------
     const newCohort = await Cohort.create({
       name,
       ownerId,
       courses: validatedCourses,
+      studentIds: studentIds || [],
       startDate,
       endDate,
-      studentIds: studentIds || [],
     });
 
     return res.status(201).json({
@@ -140,13 +128,11 @@ export const startCohortByCourse = async (req, res) => {
   let { cohortCourseId } = req.params;
   const ownerId = req.user.id;
 
-  // Validate ID
   if (!mongoose.Types.ObjectId.isValid(cohortCourseId)) {
     return res.status(400).json({ message: "Invalid course ID" });
   }
 
   try {
-    // Find the cohort containing this course
     const cohort = await Cohort.findOne({
       ownerId,
       "courses._id": cohortCourseId,
@@ -156,7 +142,6 @@ export const startCohortByCourse = async (req, res) => {
       return res.status(404).json({ message: "Cohort course not found" });
     }
 
-    // Get subdocument
     const courseItem = cohort.courses.id(cohortCourseId);
 
     if (!courseItem) {
@@ -171,15 +156,18 @@ export const startCohortByCourse = async (req, res) => {
       return res.status(400).json({ message: "Course is already completed" });
     }
 
-    // Start the course
     courseItem.status = "in_progress";
     courseItem.startDate = new Date();
 
     await cohort.save();
 
+    const updated = await Cohort.findById(cohort._id).populate(
+      "courses.courseId"
+    );
+
     return res.json({
       message: "Cohort course started successfully",
-      course: courseItem,
+      course: updated.courses.id(cohortCourseId),
     });
   } catch (error) {
     console.error("Start cohort error:", error);
