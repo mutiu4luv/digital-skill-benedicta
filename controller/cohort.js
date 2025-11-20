@@ -164,10 +164,10 @@ export const startCohortByCourse = async (req, res) => {
       message: "Course started successfully",
       course: {
         _id: courseItem._id,
-        courseId: courseItem.courseId,
+        courseId: courseItem.courseId, // populated if you want full details
         coachId: courseItem.coachId,
         durationInDays: courseItem.durationInDays,
-        status: courseItem.status,
+        status: courseItem.status, // explicitly include status
         startDate: courseItem.startDate,
         endDate: courseItem.endDate,
       },
