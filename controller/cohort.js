@@ -41,6 +41,12 @@ export const createCohort = async (req, res) => {
     for (const course of courses) {
       const { courseId, coachId } = course;
 
+      if (!courseId || !coachId) {
+        return res.status(400).json({
+          message: "Each course must include courseId and coachId",
+        });
+      }
+
       const courseDoc = await Course.findById(courseId);
       if (!courseDoc) {
         return res
@@ -54,7 +60,7 @@ export const createCohort = async (req, res) => {
         courseId,
         coachId,
         durationInDays,
-        status: "not_started", // from schema
+        status: "not_started",
         startDate: null,
         endDate: null,
       });
@@ -69,7 +75,15 @@ export const createCohort = async (req, res) => {
 
     return res.status(201).json({
       message: "Cohort created successfully",
-      cohort: newCohort,
+      cohort: {
+        _id: newCohort._id,
+        name: newCohort.name,
+        ownerId: newCohort.ownerId,
+        studentIds: newCohort.studentIds,
+        createdAt: newCohort.createdAt,
+        updatedAt: newCohort.updatedAt,
+        courses: validatedCourses, // EXACT FORMAT YOU WANT
+      },
     });
   } catch (error) {
     return res.status(500).json({
