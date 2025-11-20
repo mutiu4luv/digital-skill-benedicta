@@ -46,7 +46,7 @@ const cohortSchema = new mongoose.Schema(
       },
     ],
   },
-  { timestamps: true }
+  { timestamps: true, minimize: false }
 );
 
 module.exports = mongoose.model("Cohort", cohortSchema);
