@@ -22,7 +22,7 @@ function convertDurationStringToDays(duration) {
 export const createCohort = async (req, res) => {
   try {
     const ownerId = req.user.id;
-    const { name, courses, startDate, endDate, studentIds } = req.body;
+    const { name, courses, studentIds } = req.body;
 
     if (!name || !ownerId) {
       return res
@@ -54,7 +54,7 @@ export const createCohort = async (req, res) => {
         courseId,
         coachId,
         durationInDays,
-        status: "not_started", // FIX
+        status: "not_started", // from schema
         startDate: null,
         endDate: null,
       });
@@ -65,8 +65,6 @@ export const createCohort = async (req, res) => {
       ownerId,
       courses: validatedCourses,
       studentIds: studentIds || [],
-      startDate,
-      endDate,
     });
 
     return res.status(201).json({
