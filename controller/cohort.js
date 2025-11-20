@@ -93,13 +93,32 @@ export const createCohort = async (req, res) => {
 
 export const registerStudentToCohort = async (req, res) => {
   const { cohortId } = req.params;
-  const studentId = req.user.id; // assume student is logged in
+  const studentId = req.user?.id; // make sure user is logged in
+
+  if (!studentId) {
+    return res
+      .status(401)
+      .json({ message: "You must be logged in to register" });
+  }
 
   try {
-    const cohort = await Cohort.findById(cohortId);
-    if (!cohort) return res.status(404).json({ message: "Cohort not found" });
+    // Verify user exists
+    const user = await User.findById(studentId);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
 
-    // Avoid duplicates
+    const cohort = await Cohort.findById(cohortId);
+    if (!cohort) {
+      return res.status(404).json({ message: "Cohort not found" });
+    }
+
+    // Check if cohort has courses
+    if (!cohort.courses || cohort.courses.length === 0) {
+      return res.status(400).json({ message: "This cohort has no courses" });
+    }
+
+    // Avoid duplicate registration
     if (cohort.studentIds.includes(studentId)) {
       return res.status(400).json({ message: "Student already registered" });
     }
@@ -107,14 +126,31 @@ export const registerStudentToCohort = async (req, res) => {
     cohort.studentIds.push(studentId);
     await cohort.save();
 
-    res
-      .status(200)
-      .json({ message: "Student registered successfully", cohort });
+    res.status(200).json({
+      message: "Student registered successfully",
+      cohort: {
+        _id: cohort._id,
+        name: cohort.name,
+        courses: cohort.courses.map((c) => ({
+          courseId: c.courseId,
+          coachId: c.coachId,
+          durationInDays: c.durationInDays,
+          status: c.status,
+          startDate: c.startDate,
+          endDate: c.endDate,
+        })),
+        studentIds: cohort.studentIds,
+        status: cohort.status,
+        createdAt: cohort.createdAt,
+        updatedAt: cohort.updatedAt,
+      },
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Server error", error: err.message });
   }
 };
+
 //GET STUDENTS IN A COHORT
 export const getCohortStudents = async (req, res) => {
   try {
