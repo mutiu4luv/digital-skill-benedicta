@@ -8,6 +8,7 @@ import {
   deleteCourse,
 } from "../controller/corse.js";
 import { authorizeRoles, protect } from "../middleware/authMiddleware.js";
+import upload from "../middleware/multer.js";
 
 const router = express.Router();
 
@@ -20,7 +21,13 @@ router.put(
 );
 
 // Owner creates a course
-router.post("/", protect, authorizeRoles("owner"), createCourse);
+router.post(
+  "/",
+  protect,
+  upload.single("image"), // field name in frontend form
+  authorizeRoles("owner"),
+  createCourse
+);
 
 // Everyone can see all courses
 router.get("/", getAllCourses);

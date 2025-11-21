@@ -30,6 +30,8 @@ const courseSchema = new mongoose.Schema(
       required: [true, "Course name is required"],
       trim: true,
     },
+    image: { type: String, default: "" }, // URL from Cloudinary
+
     category: {
       type: String,
       required: [true, "Category is required"],
