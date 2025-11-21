@@ -339,7 +339,7 @@ export const getActiveCohort = async (req, res) => {
 
 export const getNotActiveCohort = async (req, res) => {
   try {
-    // A cohort is active when its courses have NOT started
+    // Find a cohort that has at least one not-started course
     const cohort = await Cohort.findOne({
       "courses.status": "not_started",
     })
@@ -348,14 +348,24 @@ export const getNotActiveCohort = async (req, res) => {
       .populate("studentIds");
 
     if (!cohort) {
-      return res.status(404).json({ message: "No active cohort available" });
+      return res.status(404).json({ message: "❌ No active cohort available" });
     }
 
-    return res.status(200).json({ cohort });
+    // Filter only the not-started courses
+    const notStartedCourses = cohort.courses.filter(
+      (c) => c.status === "not_started"
+    );
+
+    return res.status(200).json({
+      cohortName: cohort.name,
+      cohortId: cohort._id,
+      notStartedCourses,
+    });
   } catch (err) {
     console.error(err);
-    return res
-      .status(500)
-      .json({ message: "Server error", error: err.message });
+    return res.status(500).json({
+      message: "Server error",
+      error: err.message,
+    });
   }
 };
