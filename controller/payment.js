@@ -97,12 +97,10 @@ export const getPendingConfirmationStudents = async (req, res) => {
   try {
     const students = await User.find({
       role: "student",
-      paid: false,
-      paymentConfirmed: false,
+      $or: [{ paid: false }, { paymentConfirmed: false }],
     }).select(
       "fullName email phoneNumber registeredCohort paid paymentConfirmed"
     );
-
     return res.status(200).json({ students });
   } catch (err) {
     console.error("Fetch Pending Payments Error:", err);
