@@ -1,7 +1,7 @@
+import cloudinary from "../config/cloudnary.js";
 import Course from "../module/course.js";
 import User from "../module/userModule.js";
 import mongoose from "mongoose";
-import cloudinary from "../config/cloudnary.js";
 
 // ---------------------------------------------------------
 // ✅ Coach sets class schedule
@@ -47,20 +47,24 @@ export const setClassSchedule = async (req, res) => {
 
 export const createCourse = async (req, res) => {
   try {
-    const { name, category, description, coachId, duration, image } = req.body;
+    const { name, category, description, coachId, duration } = req.body;
+    let imageUrl = "";
 
     // Validate required fields
     if (!name || !category || !coachId || !duration) {
       return res.status(400).json({ message: "Missing required fields" });
     }
 
-    // Validate duration format (fixed)
-    const durationRegex = /^(1-month|3-months|6-months|1-year)$/;
-    if (!durationRegex.test(duration)) {
-      return res.status(400).json({
-        message:
-          'Invalid duration format! Use "1-month", "3-months", "6-months", or "1-year"',
-      });
+    // Upload image if file exists
+    if (req.file) {
+      const uploaded = await cloudinary.uploader.upload_stream(
+        { folder: "courses" },
+        (error, result) => {
+          if (error) throw new Error(error.message);
+          imageUrl = result.secure_url;
+        }
+      );
+      uploaded.end(req.file.buffer);
     }
 
     const newCourse = await Course.create({
@@ -70,7 +74,7 @@ export const createCourse = async (req, res) => {
       coach: coachId,
       createdBy: req.user.id,
       duration,
-      image: image || "",
+      image: imageUrl,
     });
 
     res.status(201).json({ message: "Course created", course: newCourse });
