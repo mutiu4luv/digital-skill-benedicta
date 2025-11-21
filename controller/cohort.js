@@ -104,24 +104,18 @@ export const registerStudentToCohort = async (req, res) => {
   }
 
   try {
-    // 1️⃣ Validate student exists
+    // Validate student
     const student = await userModule.findById(studentId);
-    if (!student) {
-      return res.status(404).json({ message: "Student not found" });
-    }
+    if (!student) return res.status(404).json({ message: "Student not found" });
 
-    // 2️⃣ Validate cohort exists
+    // Validate cohort
     const cohort = await Cohort.findById(cohortId);
-    if (!cohort) {
-      return res.status(404).json({ message: "Cohort not found" });
-    }
+    if (!cohort) return res.status(404).json({ message: "Cohort not found" });
 
-    // 3️⃣ Ensure cohort has courses
     if (!cohort.courses || cohort.courses.length === 0) {
       return res.status(400).json({ message: "This cohort has no courses" });
     }
 
-    // 4️⃣ Validate selected courseId exists inside cohort
     const selectedCourse = cohort.courses.find(
       (c) => c.courseId.toString() === courseId
     );
@@ -132,33 +126,56 @@ export const registerStudentToCohort = async (req, res) => {
       });
     }
 
-    // 5️⃣ Avoid duplicate registration
-    if (cohort.studentIds.includes(studentId)) {
-      return res
-        .status(400)
-        .json({ message: "You already registered for this cohort" });
+    // Initialize array if empty
+    if (!student.registeredCohorts) {
+      student.registeredCohorts = [];
     }
 
-    // 6️⃣ Save student to cohort
-    cohort.studentIds.push(studentId);
+    // ❌ Prevent registering same course again in same cohort
+    const alreadyRegistered = student.registeredCohorts.some(
+      (reg) =>
+        reg.cohortId.toString() === cohortId.toString() &&
+        reg.courseId.toString() === courseId.toString()
+    );
+
+    if (alreadyRegistered) {
+      return res.status(400).json({
+        message: "You have already registered for this course in this cohort",
+      });
+    }
+
+    // Add new registration
+    student.registeredCohorts.push({
+      cohortId,
+      courseId,
+      registeredAt: new Date(),
+    });
+
+    // payment required again for each course
+    student.paid = false;
+
+    await student.save();
+
+    // Add student to cohort (avoid duplicates)
+    if (!cohort.studentIds.includes(studentId)) {
+      cohort.studentIds.push(studentId);
+    }
+
     await cohort.save();
 
-    res.status(200).json({
-      message: "Registration successful",
-      registeredCourse: {
-        courseId: selectedCourse.courseId,
-        coachId: selectedCourse.coachId,
-        durationInDays: selectedCourse.durationInDays,
-      },
+    return res.status(200).json({
+      message: "Course registration successful.",
       cohort: {
         cohortId: cohort._id,
         cohortName: cohort.name,
-        students: cohort.studentIds.length,
       },
+      selectedCourse,
     });
   } catch (err) {
     console.error("Registration Error:", err);
-    res.status(500).json({ message: "Server error", error: err.message });
+    return res
+      .status(500)
+      .json({ message: "Server error", error: err.message });
   }
 };
 

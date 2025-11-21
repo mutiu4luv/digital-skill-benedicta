@@ -58,6 +58,27 @@ const userSchema = new mongoose.Schema(
       default: 0,
     },
     isFirstClass: { type: Boolean, default: false },
+    paid: {
+      type: Boolean,
+      default: false,
+    },
+    registeredCohort: {
+      cohortId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Cohort",
+        default: null,
+      },
+      courseId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Course",
+        default: null,
+      },
+      registeredAt: { type: Date, default: null },
+    },
+    paymentConfirmed: {
+      type: Boolean,
+      default: false,
+    },
   },
 
   { timestamps: true }
