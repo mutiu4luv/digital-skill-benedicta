@@ -95,17 +95,17 @@ export const adminConfirmPayment = async (req, res) => {
 // GET /api/payment/pending-confirmation
 export const getPendingConfirmationStudents = async (req, res) => {
   try {
-    // Fetch students who have registered a cohort but payment is not confirmed
     const students = await User.find({
-      "registeredCohort.cohortId": { $ne: null },
-      $or: [{ paid: false }, { paymentConfirmed: false }],
+      role: "student",
+      paid: false,
+      paymentConfirmed: false,
     }).select(
       "fullName email phoneNumber registeredCohort paid paymentConfirmed"
     );
 
     return res.status(200).json({ students });
   } catch (err) {
-    console.error("Fetch Pending Students Error:", err);
+    console.error("Fetch Pending Payments Error:", err);
     return res.status(500).json({
       message: "Server error",
       error: err.message,
