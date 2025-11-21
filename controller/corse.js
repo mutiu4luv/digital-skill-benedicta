@@ -45,34 +45,22 @@ export const setClassSchedule = async (req, res) => {
 // ---------------------------------------------------------
 export const createCourse = async (req, res) => {
   try {
+    console.log("Request body:", req.body);
+
     const { name, category, description, coachId, duration } = req.body;
-
-    if (req.user.role !== "owner") {
-      return res.status(403).json({ message: "Only owner can create courses" });
-    }
-
-    const existing = await Course.findOne({ name });
-    if (existing) {
-      return res.status(400).json({ message: "Course already exists" });
-    }
 
     const newCourse = await Course.create({
       name,
       category,
       description,
-      coach: coachId || null,
-      createdBy: req.user.id,
-      duration, // save duration here
+      coachId,
+      duration,
     });
 
-    res.status(201).json({
-      message: "Course created successfully",
-      course: newCourse,
-    });
+    res.status(201).json({ message: "Course created", course: newCourse });
   } catch (error) {
-    res
-      .status(500)
-      .json({ message: "Failed to create course", error: error.message });
+    console.error("Create course error:", error);
+    res.status(500).json({ message: "Server error", error: error.message });
   }
 };
 
