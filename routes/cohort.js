@@ -6,6 +6,7 @@ import {
   getNotActiveCohort,
   getAllCohorts,
   startCohortByCourse,
+  registerStudentToCohort,
 } from "../controller/cohort.js";
 import { authorizeRoles, protect } from "../middleware/authMiddleware.js"; // auth middleware
 
@@ -27,6 +28,11 @@ router.put(
   protect,
   authorizeRoles("owner", "coach"),
   endCohortByCourse
+);
+router.post(
+  "/student/register-cohort/:cohortId",
+  protect,
+  registerStudentToCohort
 );
 
 export default router;

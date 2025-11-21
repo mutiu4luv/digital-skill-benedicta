@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 import Cohort from "..//module/cohort.js";
 import Course from "../module/course.js";
+import userModule from "../module/userModule.js";
 
 function convertDurationStringToDays(duration) {
   if (!duration) return null;
@@ -93,7 +94,8 @@ export const createCohort = async (req, res) => {
 
 export const registerStudentToCohort = async (req, res) => {
   const { cohortId } = req.params;
-  const studentId = req.user?.id; // make sure user is logged in
+  const { courseId } = req.body;
+  const studentId = req.user?.id;
 
   if (!studentId) {
     return res
@@ -102,51 +104,60 @@ export const registerStudentToCohort = async (req, res) => {
   }
 
   try {
-    // Verify user exists
-    const user = await User.findById(studentId);
-    if (!user) {
-      return res.status(404).json({ message: "User not found" });
+    // 1️⃣ Validate student exists
+    const student = await userModule.findById(studentId);
+    if (!student) {
+      return res.status(404).json({ message: "Student not found" });
     }
 
+    // 2️⃣ Validate cohort exists
     const cohort = await Cohort.findById(cohortId);
     if (!cohort) {
       return res.status(404).json({ message: "Cohort not found" });
     }
 
-    // Check if cohort has courses
+    // 3️⃣ Ensure cohort has courses
     if (!cohort.courses || cohort.courses.length === 0) {
       return res.status(400).json({ message: "This cohort has no courses" });
     }
 
-    // Avoid duplicate registration
-    if (cohort.studentIds.includes(studentId)) {
-      return res.status(400).json({ message: "Student already registered" });
+    // 4️⃣ Validate selected courseId exists inside cohort
+    const selectedCourse = cohort.courses.find(
+      (c) => c.courseId.toString() === courseId
+    );
+
+    if (!selectedCourse) {
+      return res.status(400).json({
+        message: "Selected course does not belong to this cohort",
+      });
     }
 
+    // 5️⃣ Avoid duplicate registration
+    if (cohort.studentIds.includes(studentId)) {
+      return res
+        .status(400)
+        .json({ message: "You already registered for this cohort" });
+    }
+
+    // 6️⃣ Save student to cohort
     cohort.studentIds.push(studentId);
     await cohort.save();
 
     res.status(200).json({
-      message: "Student registered successfully",
+      message: "Registration successful",
+      registeredCourse: {
+        courseId: selectedCourse.courseId,
+        coachId: selectedCourse.coachId,
+        durationInDays: selectedCourse.durationInDays,
+      },
       cohort: {
-        _id: cohort._id,
-        name: cohort.name,
-        courses: cohort.courses.map((c) => ({
-          courseId: c.courseId,
-          coachId: c.coachId,
-          durationInDays: c.durationInDays,
-          status: c.status,
-          startDate: c.startDate,
-          endDate: c.endDate,
-        })),
-        studentIds: cohort.studentIds,
-        status: cohort.status,
-        createdAt: cohort.createdAt,
-        updatedAt: cohort.updatedAt,
+        cohortId: cohort._id,
+        cohortName: cohort.name,
+        students: cohort.studentIds.length,
       },
     });
   } catch (err) {
-    console.error(err);
+    console.error("Registration Error:", err);
     res.status(500).json({ message: "Server error", error: err.message });
   }
 };
