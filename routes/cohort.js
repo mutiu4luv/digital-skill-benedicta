@@ -3,6 +3,7 @@ import {
   createCohort,
   deleteCohort,
   endCohortByCourse,
+  getNotActiveCohort,
   getAllCohorts,
   startCohortByCourse,
 } from "../controller/cohort.js";
@@ -12,6 +13,7 @@ const router = express.Router();
 router.post("/", protect, authorizeRoles("owner"), createCohort);
 router.get("/", protect, authorizeRoles("owner", "coach"), getAllCohorts);
 router.delete("/:cohortId", protect, authorizeRoles("owner"), deleteCohort);
+router.get("/cohort/active", protect, getNotActiveCohort);
 
 router.put(
   "/start/course/:cohortCourseId",

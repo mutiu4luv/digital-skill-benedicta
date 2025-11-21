@@ -316,3 +316,46 @@ export const deleteCohort = async (req, res) => {
     });
   }
 };
+
+export const getActiveCohort = async (req, res) => {
+  try {
+    // Find cohort with status "active"
+    const cohort = await Cohort.findOne({ status: "active" })
+      .populate("courses.courseId")
+      .populate("studentIds");
+
+    if (!cohort) {
+      return res.status(404).json({ message: "No active cohort available" });
+    }
+
+    return res.status(200).json({ cohort });
+  } catch (err) {
+    console.error(err);
+    return res
+      .status(500)
+      .json({ message: "Server error", error: err.message });
+  }
+};
+
+export const getNotActiveCohort = async (req, res) => {
+  try {
+    // A cohort is active when its courses have NOT started
+    const cohort = await Cohort.findOne({
+      "courses.status": "not_started",
+    })
+      .populate("courses.courseId")
+      .populate("courses.coachId")
+      .populate("studentIds");
+
+    if (!cohort) {
+      return res.status(404).json({ message: "No active cohort available" });
+    }
+
+    return res.status(200).json({ cohort });
+  } catch (err) {
+    console.error(err);
+    return res
+      .status(500)
+      .json({ message: "Server error", error: err.message });
+  }
+};
