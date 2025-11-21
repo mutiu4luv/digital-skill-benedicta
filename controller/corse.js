@@ -45,15 +45,18 @@ export const setClassSchedule = async (req, res) => {
 // ---------------------------------------------------------
 export const createCourse = async (req, res) => {
   try {
-    console.log("Request body:", req.body);
-
     const { name, category, description, coachId, duration } = req.body;
+
+    if (!name || !category || !coachId || !duration) {
+      return res.status(400).json({ message: "Missing required fields" });
+    }
 
     const newCourse = await Course.create({
       name,
       category,
-      description,
-      coachId,
+      description: description || "",
+      coach: coachId, // ✅ matches schema
+      createdBy: req.user.id, // ✅ owner creating the course
       duration,
     });
 
