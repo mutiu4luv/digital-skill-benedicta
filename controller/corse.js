@@ -47,29 +47,20 @@ export const setClassSchedule = async (req, res) => {
 
 export const createCourse = async (req, res) => {
   try {
-    const { name, category, description, coachId, duration } = req.body;
-    const file = req.file; // from multer
+    const { name, category, description, coachId, duration, image } = req.body;
 
     // Validate required fields
     if (!name || !category || !coachId || !duration) {
       return res.status(400).json({ message: "Missing required fields" });
     }
 
-    // Validate duration
-    const durationRegex = /^(?:[1-9]|1[0-2])-months$|^[1-9]-year$/;
+    // Validate duration format (fixed)
+    const durationRegex = /^(1-month|3-months|6-months|1-year)$/;
     if (!durationRegex.test(duration)) {
       return res.status(400).json({
         message:
-          'Invalid duration format! Use "3-months", "6-months", or "1-year"',
+          'Invalid duration format! Use "1-month", "3-months", "6-months", or "1-year"',
       });
-    }
-
-    let imageUrl = "";
-    if (file) {
-      const result = await cloudinary.uploader.upload(file.path, {
-        folder: "courses",
-      });
-      imageUrl = result.secure_url;
     }
 
     const newCourse = await Course.create({
@@ -79,7 +70,7 @@ export const createCourse = async (req, res) => {
       coach: coachId,
       createdBy: req.user.id,
       duration,
-      image: imageUrl,
+      image: image || "",
     });
 
     res.status(201).json({ message: "Course created", course: newCourse });

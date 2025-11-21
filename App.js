@@ -67,6 +67,7 @@ app.use((req, res, next) => {
 
 // ✅ 2. JSON parser
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
 // ✅ 3. Test route
 app.get("/", (req, res) => {
