@@ -48,23 +48,22 @@ export const setClassSchedule = async (req, res) => {
 export const createCourse = async (req, res) => {
   try {
     const { name, category, description, coachId, duration } = req.body;
-    let imageUrl = "";
 
-    // Validate required fields
     if (!name || !category || !coachId || !duration) {
       return res.status(400).json({ message: "Missing required fields" });
     }
 
-    // Upload image if file exists
+    let imageUrl = "";
+
     if (req.file) {
-      const uploaded = await cloudinary.uploader.upload_stream(
-        { folder: "courses" },
-        (error, result) => {
-          if (error) throw new Error(error.message);
-          imageUrl = result.secure_url;
-        }
-      );
-      uploaded.end(req.file.buffer);
+      imageUrl = await new Promise((resolve, reject) => {
+        cloudinary.uploader
+          .upload_stream({ folder: "courses" }, (error, result) => {
+            if (error) reject(error);
+            else resolve(result.secure_url);
+          })
+          .end(req.file.buffer);
+      });
     }
 
     const newCourse = await Course.create({
