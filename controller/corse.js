@@ -56,10 +56,21 @@ export const createCourse = async (req, res) => {
 
     if (req.file) {
       try {
-        console.log("Uploading file at path:", req.file.path); // Debug log
-        const result = await cloudinary.uploader.upload(req.file.path, {
-          folder: "courses",
-        });
+        // Use Cloudinary upload_stream for buffer
+        const streamUpload = (buffer) => {
+          return new Promise((resolve, reject) => {
+            const stream = cloudinary.uploader.upload_stream(
+              { folder: "courses" },
+              (error, result) => {
+                if (result) resolve(result);
+                else reject(error);
+              }
+            );
+            stream.end(buffer);
+          });
+        };
+
+        const result = await streamUpload(req.file.buffer);
         imageUrl = result.secure_url;
       } catch (err) {
         console.error("Cloudinary upload failed:", err);
