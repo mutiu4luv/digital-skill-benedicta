@@ -55,13 +55,14 @@ const courseSchema = new mongoose.Schema(
       required: [true, "Duration is required"],
       validate: {
         validator: function (v) {
-          // Only allow formats like "3-months", "6-months", "1-year"
-          return /^(?:[1-9]|1[0-2])-months$|^[1-9]-year$/.test(v);
+          // Allow "1-month" as well now
+          return /^(?:1|[3-9]|1[0-2])-months$|^[1-9]-year$/.test(v);
         },
         message: (props) =>
-          `${props.value} is not a valid duration! Use "3-months", "6-months", or "1-year"`,
+          `${props.value} is not a valid duration! Use "1-month", "3-months", "6-months", or "1-year"`,
       },
     },
+
     students: [
       {
         type: mongoose.Schema.Types.ObjectId,
