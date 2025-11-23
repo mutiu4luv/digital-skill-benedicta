@@ -50,17 +50,22 @@ const courseSchema = new mongoose.Schema(
       ref: "User",
       required: true,
     },
+    // duration: {
+    //   type: String,
+    //   required: [true, "Duration is required"],
+    //   validate: {
+    //     validator: function (v) {
+    //       // Allow "1-month" as well now
+    //       return /^(?:1|[3-9]|1[0-2])-months$|^[1-9]-year$/.test(v);
+    //     },
+    //     message: (props) =>
+    //       `${props.value} is not a valid duration! Use "1-month", "3-months", "6-months", or "1-year"`,
+    //   },
+    // },
     duration: {
       type: String,
       required: [true, "Duration is required"],
-      validate: {
-        validator: function (v) {
-          // Allow "1-month" as well now
-          return /^(?:1|[3-9]|1[0-2])-months$|^[1-9]-year$/.test(v);
-        },
-        message: (props) =>
-          `${props.value} is not a valid duration! Use "1-month", "3-months", "6-months", or "1-year"`,
-      },
+      enum: ["1-month", "3-months", "6-months", "1-year"],
     },
 
     students: [
