@@ -44,7 +44,6 @@ export const setClassSchedule = async (req, res) => {
 // ---------------------------------------------------------
 // ✅ OWNER: Create course
 // ---------------------------------------------------------
-
 export const createCourse = async (req, res) => {
   try {
     const { name, category, description, coachId, duration } = req.body;
@@ -56,14 +55,20 @@ export const createCourse = async (req, res) => {
     let imageUrl = "";
 
     if (req.file) {
-      imageUrl = await new Promise((resolve, reject) => {
-        cloudinary.uploader
-          .upload_stream({ folder: "courses" }, (error, result) => {
-            if (error) reject(error);
-            else resolve(result.secure_url);
-          })
-          .end(req.file.buffer);
-      });
+      try {
+        console.log("Uploading file at path:", req.file.path); // Debug log
+        const result = await cloudinary.uploader.upload(req.file.path, {
+          folder: "courses",
+        });
+        imageUrl = result.secure_url;
+      } catch (err) {
+        console.error("Cloudinary upload failed:", err);
+        return res
+          .status(500)
+          .json({ message: "Failed to upload image", error: err.message });
+      }
+    } else {
+      console.log("No file uploaded");
     }
 
     const newCourse = await Course.create({
@@ -79,10 +84,9 @@ export const createCourse = async (req, res) => {
     res.status(201).json({ message: "Course created", course: newCourse });
   } catch (error) {
     console.error("Create course error:", error);
-    res.status(500).json({ message: "Server error", error: error.message });
+    res.status(500).json({ message: error.message, stack: error.stack });
   }
 };
-
 // ---------------------------------------------------------
 // PUBLIC: Get all courses
 // ---------------------------------------------------------

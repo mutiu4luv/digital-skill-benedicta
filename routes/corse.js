@@ -21,11 +21,18 @@ router.put(
 );
 
 // Owner creates a course
+// router.post(
+//   "/",
+//   protect,
+//   upload.single("image"), // field name in frontend form
+//   authorizeRoles("owner"),
+//   createCourse
+// );
 router.post(
   "/",
   protect,
-  upload.single("image"), // field name in frontend form
   authorizeRoles("owner"),
+  upload.single("image"),
   createCourse
 );
 
