@@ -5,22 +5,35 @@ export const confirmPayment = async (req, res) => {
   try {
     const { studentId, courseId } = req.body;
 
-    const user = await User.findByIdAndUpdate(
-      studentId,
-      {
-        paid: true,
-        paymentConfirmed: true,
-        registeredCohort: {
-          courseId,
-          registeredAt: new Date(),
-        },
-      },
-      { new: true }
-    );
+    if (!studentId || !courseId) {
+      return res.status(400).json({ message: "Missing studentId or courseId" });
+    }
+
+    const user = await User.findById(studentId);
+    if (!user) {
+      return res.status(404).json({ message: "Student not found" });
+    }
+
+    // Ensure registeredCohort exists
+    if (!user.registeredCohort) {
+      user.registeredCohort = {};
+    }
+
+    // Update payment fields
+    user.paid = true;
+    user.paymentConfirmed = true;
+
+    // Update registeredCohort fields
+    user.registeredCohort.courseId = courseId;
+    user.registeredCohort.registeredAt =
+      user.registeredCohort.registeredAt || new Date();
+    // Keeps original date if already set
+
+    const updatedUser = await user.save();
 
     return res.status(200).json({
-      message: "Payment confirmed",
-      user,
+      message: "Payment confirmed successfully",
+      user: updatedUser,
     });
   } catch (err) {
     console.error("Confirm Payment Error:", err);
