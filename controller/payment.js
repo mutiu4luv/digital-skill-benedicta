@@ -1,40 +1,30 @@
 import User from "../module/userModule.js";
 
+// paymentController.js
 export const confirmPayment = async (req, res) => {
   try {
-    const userId = req.user.id;
+    const { studentId, courseId } = req.body;
 
-    const user = await User.findById(userId);
-    if (!user) return res.status(404).json({ message: "User not found" });
-
-    if (!user.registeredCohorts || user.registeredCohorts.length === 0) {
-      return res
-        .status(400)
-        .json({ message: "You have no pending registrations" });
-    }
-
-    // get last registration
-    const lastReg = user.registeredCohorts[user.registeredCohorts.length - 1];
-
-    if (lastReg.paid) {
-      return res.status(400).json({ message: "Payment already confirmed" });
-    }
-
-    lastReg.paid = true;
-
-    await user.save();
+    const user = await User.findByIdAndUpdate(
+      studentId,
+      {
+        paid: true,
+        paymentConfirmed: true,
+        registeredCohort: {
+          courseId,
+          registeredAt: new Date(),
+        },
+      },
+      { new: true }
+    );
 
     return res.status(200).json({
-      message: "Payment confirmed for your most recent course.",
-      course: lastReg.courseId,
-      cohort: lastReg.cohortId,
+      message: "Payment confirmed",
+      user,
     });
   } catch (err) {
-    console.error(err);
-    return res.status(500).json({
-      message: "Server error",
-      error: err.message,
-    });
+    console.error("Confirm Payment Error:", err);
+    return res.status(500).json({ message: "Server error" });
   }
 };
 
