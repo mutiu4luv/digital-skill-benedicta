@@ -101,7 +101,7 @@ export const getPendingConfirmationStudents = async (req, res) => {
     }).select(
       "fullName email phoneNumber registeredCohort paid paymentConfirmed"
     );
-    console.log("Pending students:", students); // <--- add this
+
     return res.status(200).json({ students });
   } catch (err) {
     console.error("Fetch Pending Payments Error:", err);
