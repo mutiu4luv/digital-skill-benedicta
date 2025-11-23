@@ -20,6 +20,7 @@ function convertDurationStringToDays(duration) {
 
   return null;
 }
+
 export const createCohort = async (req, res) => {
   try {
     const ownerId = req.user.id;
@@ -67,12 +68,11 @@ export const createCohort = async (req, res) => {
       });
     }
 
+    // ✅ Directly assign the array to the courses field
     const newCohort = new Cohort({
       name,
       ownerId,
-      courses: validatedCourses.map((c) =>
-        new Cohort.schema.path("courses").caster(c)
-      ),
+      courses: validatedCourses,
       studentIds: studentIds || [],
     });
 
@@ -80,9 +80,10 @@ export const createCohort = async (req, res) => {
 
     return res.status(201).json({
       message: "Cohort created successfully",
-      cohort: newCohort.toObject(), // this will now include status/startDate/endDate
+      cohort: newCohort.toObject(),
     });
   } catch (error) {
+    console.error("Create cohort error:", error);
     return res.status(500).json({
       message: "Server error while creating cohort",
       error: error.message,
