@@ -1,3 +1,4 @@
+import path from "path";
 import cloudinary from "../config/cloudnary.js";
 import Course from "../module/course.js";
 import User from "../module/userModule.js";
@@ -44,6 +45,7 @@ export const setClassSchedule = async (req, res) => {
 // ---------------------------------------------------------
 // ✅ OWNER: Create course
 // ---------------------------------------------------------
+
 export const createCourse = async (req, res) => {
   try {
     const { name, category, description, coachId, duration } = req.body;
@@ -56,21 +58,9 @@ export const createCourse = async (req, res) => {
 
     if (req.file) {
       try {
-        // Use Cloudinary upload_stream for buffer
-        const streamUpload = (buffer) => {
-          return new Promise((resolve, reject) => {
-            const stream = cloudinary.uploader.upload_stream(
-              { folder: "courses" },
-              (error, result) => {
-                if (result) resolve(result);
-                else reject(error);
-              }
-            );
-            stream.end(buffer);
-          });
-        };
-
-        const result = await streamUpload(req.file.buffer);
+        const result = await cloudinary.uploader.upload(req.file.path, {
+          folder: "courses",
+        });
         imageUrl = result.secure_url;
       } catch (err) {
         console.error("Cloudinary upload failed:", err);
@@ -78,8 +68,6 @@ export const createCourse = async (req, res) => {
           .status(500)
           .json({ message: "Failed to upload image", error: err.message });
       }
-    } else {
-      console.log("No file uploaded");
     }
 
     const newCourse = await Course.create({
@@ -92,12 +80,15 @@ export const createCourse = async (req, res) => {
       image: imageUrl,
     });
 
-    res.status(201).json({ message: "Course created", course: newCourse });
+    return res
+      .status(201)
+      .json({ message: "Course created", course: newCourse });
   } catch (error) {
     console.error("Create course error:", error);
-    res.status(500).json({ message: error.message, stack: error.stack });
+    res.status(500).json({ message: error.message });
   }
 };
+
 // ---------------------------------------------------------
 // PUBLIC: Get all courses
 // ---------------------------------------------------------
