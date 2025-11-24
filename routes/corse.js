@@ -9,6 +9,7 @@ import {
 } from "../controller/corse.js";
 import { authorizeRoles, protect } from "../middleware/authMiddleware.js";
 import upload from "../middleware/multer.js";
+import { verifyPayment } from "../middleware/verifyPayment.js";
 
 const router = express.Router();
 
@@ -44,6 +45,8 @@ router.get(
   "/my-courses",
   protect,
   authorizeRoles("student", "coach", "owner"),
+  verifyPayment, // Ensure payment is done
+
   getMyCourses
 );
 router.delete("/:courseId", protect, authorizeRoles("owner"), deleteCourse);

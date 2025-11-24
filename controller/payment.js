@@ -1,3 +1,4 @@
+import cohort from "../module/cohort.js";
 import User from "../module/userModule.js";
 
 // paymentController.js
@@ -113,4 +114,80 @@ export const getPendingConfirmationStudents = async (req, res) => {
       error: err.message,
     });
   }
+};
+
+// COHORT BASED PAYMENT CONFIRMATION
+
+export const confirmCoursePayment = async (req, res) => {
+  try {
+    const { studentId, cohortId, courseId } = req.body;
+
+    const cohort = await cohort.findById(cohortId);
+    if (!cohort) return res.status(404).json({ message: "Cohort not found" });
+
+    let student = cohort.studentIds.find(
+      (s) => s.studentId.toString() === studentId
+    );
+
+    if (!student) {
+      student = {
+        studentId,
+        enrollments: [],
+      };
+      cohort.studentIds.push(student);
+    }
+
+    let enrollment = student.enrollments.find(
+      (e) => e.courseId.toString() === courseId
+    );
+
+    if (!enrollment) {
+      student.enrollments.push({
+        courseId,
+        paid: true,
+        paymentConfirmed: true,
+        hasAccess: true,
+        paidAt: new Date(),
+      });
+    } else {
+      enrollment.paid = true;
+      enrollment.paymentConfirmed = true;
+      enrollment.hasAccess = true;
+      enrollment.paidAt = new Date();
+    }
+
+    await cohort.save();
+
+    return res.status(200).json({
+      message: "Payment confirmed, access granted.",
+      cohort,
+    });
+  } catch (error) {
+    console.error("Payment Error:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+// CHECK ACCESS BASED ON PAYMENT AND ENROLLMENT
+
+export const checkAccess = async (req, res) => {
+  const { cohortId, studentId, courseId } = req.params;
+
+  const cohort = await cohort.findById(cohortId);
+  if (!cohort) return res.status(404).json({ access: false });
+
+  const student = cohort.studentIds.find(
+    (s) => s.studentId.toString() === studentId
+  );
+  if (!student) return res.status(403).json({ access: false });
+
+  const enrollment = student.enrollments.find(
+    (e) => e.courseId.toString() === courseId
+  );
+
+  if (!enrollment || !enrollment.hasAccess) {
+    return res.status(403).json({ access: false });
+  }
+
+  return res.status(200).json({ access: true });
 };

@@ -49,8 +49,25 @@ const cohortSchema = new mongoose.Schema(
 
     studentIds: [
       {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "User",
+        studentId: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "User",
+          required: true,
+        },
+
+        enrollments: [
+          {
+            courseId: {
+              type: mongoose.Schema.Types.ObjectId,
+              ref: "Course",
+              required: true,
+            },
+            paid: { type: Boolean, default: false },
+            paymentConfirmed: { type: Boolean, default: false },
+            hasAccess: { type: Boolean, default: false },
+            paidAt: { type: Date, default: null },
+          },
+        ],
       },
     ],
   },

@@ -2,6 +2,8 @@ import express from "express";
 
 import {
   adminConfirmPayment,
+  checkAccess,
+  confirmCoursePayment,
   confirmPayment,
   getPaidStudents,
   getPendingConfirmationStudents,
@@ -10,8 +12,16 @@ import { protect } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
 router.get("/pending-confirmation", protect, getPendingConfirmationStudents);
-router.post("/confirm", protect, confirmPayment);
+// router.post("/confirm", protect, confirmPayment);
 router.get("/paid-students", protect, getPaidStudents);
 router.put("/users/:id/confirm-payment", protect, adminConfirmPayment);
+// ----------------------
+// CONFIRM PAYMENT
+// ----------------------
+router.post("/confirm", protect, confirmCoursePayment);
 
+// ----------------------
+// CHECK ACCESS
+// ----------------------
+router.get("/access/:cohortId/:courseId/:studentId", protect, checkAccess);
 export default router;
