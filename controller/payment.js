@@ -1,4 +1,4 @@
-import cohort from "../module/cohort.js";
+import Cohort from "../module/cohort.js";
 import User from "../module/userModule.js";
 
 // paymentController.js
@@ -122,27 +122,43 @@ export const confirmCoursePayment = async (req, res) => {
   try {
     const { studentId, cohortId, courseId } = req.body;
 
-    const cohort = await cohort.findById(cohortId);
-    if (!cohort) return res.status(404).json({ message: "Cohort not found" });
+    // FIXED: use Cohort model
+    const foundCohort = await Cohort.findById(cohortId);
+    if (!foundCohort)
+      return res.status(404).json({ message: "Cohort not found" });
 
-    let student = cohort.studentIds.find(
-      (s) => s.studentId.toString() === studentId
+    // FIX: Normalize studentIds array
+    if (!Array.isArray(foundCohort.studentIds)) {
+      foundCohort.studentIds = [];
+    }
+
+    // Find this student
+    let studentEntry = foundCohort.studentIds.find(
+      (s) => s.studentId.toString() === studentId.toString()
     );
 
-    if (!student) {
-      student = {
+    // If not found, create
+    if (!studentEntry) {
+      studentEntry = {
         studentId,
         enrollments: [],
       };
-      cohort.studentIds.push(student);
+      foundCohort.studentIds.push(studentEntry);
     }
 
-    let enrollment = student.enrollments.find(
-      (e) => e.courseId.toString() === courseId
+    // Ensure enrollments array exists
+    if (!Array.isArray(studentEntry.enrollments)) {
+      studentEntry.enrollments = [];
+    }
+
+    // Find enrollment for this course
+    let enrollment = studentEntry.enrollments.find(
+      (e) => e.courseId.toString() === courseId.toString()
     );
 
     if (!enrollment) {
-      student.enrollments.push({
+      // New Enrollment
+      studentEntry.enrollments.push({
         courseId,
         paid: true,
         paymentConfirmed: true,
@@ -150,17 +166,18 @@ export const confirmCoursePayment = async (req, res) => {
         paidAt: new Date(),
       });
     } else {
+      // Update existing enrollment
       enrollment.paid = true;
       enrollment.paymentConfirmed = true;
       enrollment.hasAccess = true;
       enrollment.paidAt = new Date();
     }
 
-    await cohort.save();
+    await foundCohort.save();
 
     return res.status(200).json({
       message: "Payment confirmed, access granted.",
-      cohort,
+      cohort: foundCohort,
     });
   } catch (error) {
     console.error("Payment Error:", error);
@@ -173,7 +190,7 @@ export const confirmCoursePayment = async (req, res) => {
 export const checkAccess = async (req, res) => {
   const { cohortId, studentId, courseId } = req.params;
 
-  const cohort = await cohort.findById(cohortId);
+  const cohort = await Cohort.findById(cohortId);
   if (!cohort) return res.status(404).json({ access: false });
 
   const student = cohort.studentIds.find(
