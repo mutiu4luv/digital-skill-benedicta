@@ -105,17 +105,11 @@ export const registerStudentToCohort = async (req, res) => {
   }
 
   try {
-    // Validate student
     const student = await userModule.findById(studentId);
     if (!student) return res.status(404).json({ message: "Student not found" });
 
-    // Validate cohort
     const cohort = await Cohort.findById(cohortId);
     if (!cohort) return res.status(404).json({ message: "Cohort not found" });
-
-    if (!cohort.courses || cohort.courses.length === 0) {
-      return res.status(400).json({ message: "This cohort has no courses" });
-    }
 
     const selectedCourse = cohort.courses.find(
       (c) => c.courseId.toString() === courseId
@@ -127,12 +121,12 @@ export const registerStudentToCohort = async (req, res) => {
       });
     }
 
-    // Initialize array if empty
-    if (!student.registeredCohorts) {
+    // Ensure student.registeredCohorts exists
+    if (!Array.isArray(student.registeredCohorts)) {
       student.registeredCohorts = [];
     }
 
-    // ❌ Prevent registering same course again in same cohort
+    // Prevent duplicate registration
     const alreadyRegistered = student.registeredCohorts.some(
       (reg) =>
         reg.cohortId.toString() === cohortId.toString() &&
@@ -145,19 +139,20 @@ export const registerStudentToCohort = async (req, res) => {
       });
     }
 
-    // Add new registration
+    // Register student
     student.registeredCohorts.push({
       cohortId,
       courseId,
       registeredAt: new Date(),
     });
 
-    // payment required again for each course
+    // Require payment for this course
     student.paid = false;
+    student.paymentConfirmed = false;
 
     await student.save();
 
-    // Add student to cohort (avoid duplicates)
+    // Add student to cohort
     if (!cohort.studentIds.includes(studentId)) {
       cohort.studentIds.push(studentId);
     }
@@ -166,11 +161,11 @@ export const registerStudentToCohort = async (req, res) => {
 
     return res.status(200).json({
       message: "Course registration successful.",
+      selectedCourse,
       cohort: {
         cohortId: cohort._id,
         cohortName: cohort.name,
       },
-      selectedCourse,
     });
   } catch (err) {
     console.error("Registration Error:", err);
