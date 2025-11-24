@@ -105,11 +105,17 @@ export const registerStudentToCohort = async (req, res) => {
   }
 
   try {
+    // 1️⃣ Validate student
     const student = await userModule.findById(studentId);
     if (!student) return res.status(404).json({ message: "Student not found" });
 
+    // 2️⃣ Validate cohort
     const cohort = await Cohort.findById(cohortId);
     if (!cohort) return res.status(404).json({ message: "Cohort not found" });
+
+    if (!cohort.courses || cohort.courses.length === 0) {
+      return res.status(400).json({ message: "This cohort has no courses" });
+    }
 
     const selectedCourse = cohort.courses.find(
       (c) => c.courseId.toString() === courseId
@@ -121,16 +127,56 @@ export const registerStudentToCohort = async (req, res) => {
       });
     }
 
-    // Ensure student.registeredCohorts exists
-    if (!Array.isArray(student.registeredCohorts)) {
-      student.registeredCohorts = [];
+    // 3️⃣ NORMALIZE old studentIds shape:
+    //    convert raw ObjectId entries into { studentId, enrollments: [] }
+    if (!Array.isArray(cohort.studentIds)) {
+      cohort.studentIds = [];
+    } else {
+      cohort.studentIds = cohort.studentIds
+        .map((entry) => {
+          // If entry is a plain ObjectId (old schema)
+          if (
+            typeof entry === "string" ||
+            entry instanceof mongoose.Types.ObjectId
+          ) {
+            return {
+              studentId: entry,
+              enrollments: [],
+            };
+          }
+
+          // If entry is already in new shape, keep it
+          if (entry && entry.studentId) {
+            if (!Array.isArray(entry.enrollments)) {
+              entry.enrollments = [];
+            }
+            return entry;
+          }
+
+          // Fallback: skip invalid entries
+          return null;
+        })
+        .filter(Boolean);
     }
 
-    // Prevent duplicate registration
-    const alreadyRegistered = student.registeredCohorts.some(
-      (reg) =>
-        reg.cohortId.toString() === cohortId.toString() &&
-        reg.courseId.toString() === courseId.toString()
+    // 4️⃣ Find or create this student entry inside cohort.studentIds
+    let studentEntry = cohort.studentIds.find(
+      (s) => s.studentId.toString() === studentId.toString()
+    );
+
+    if (!studentEntry) {
+      studentEntry = {
+        studentId,
+        enrollments: [],
+      };
+      cohort.studentIds.push(studentEntry);
+    } else if (!Array.isArray(studentEntry.enrollments)) {
+      studentEntry.enrollments = [];
+    }
+
+    // 5️⃣ Check if already registered for this course in this cohort
+    const alreadyRegistered = studentEntry.enrollments.some(
+      (reg) => reg.courseId.toString() === courseId.toString()
     );
 
     if (alreadyRegistered) {
@@ -139,33 +185,29 @@ export const registerStudentToCohort = async (req, res) => {
       });
     }
 
-    // Register student
-    student.registeredCohorts.push({
-      cohortId,
+    // 6️⃣ Add new enrollment for this course
+    studentEntry.enrollments.push({
       courseId,
-      registeredAt: new Date(),
+      paid: false,
+      paymentConfirmed: false,
+      hasAccess: false,
+      paidAt: null,
     });
 
-    // Require payment for this course
+    // Optionally reset per-student global flags if you still use them
     student.paid = false;
     student.paymentConfirmed = false;
 
     await student.save();
-
-    // Add student to cohort
-    if (!cohort.studentIds.includes(studentId)) {
-      cohort.studentIds.push(studentId);
-    }
-
     await cohort.save();
 
     return res.status(200).json({
       message: "Course registration successful.",
-      selectedCourse,
       cohort: {
         cohortId: cohort._id,
         cohortName: cohort.name,
       },
+      selectedCourse,
     });
   } catch (err) {
     console.error("Registration Error:", err);
