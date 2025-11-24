@@ -94,8 +94,10 @@ export const createCourse = async (req, res) => {
 // ---------------------------------------------------------
 export const getAllCourses = async (req, res) => {
   try {
+    res.setHeader("Cache-Control", "no-store");
+
     const courses = await Course.find().populate("coach", "fullName email");
-    res.json(courses);
+    res.status(200).json(courses);
   } catch (error) {
     res
       .status(500)
