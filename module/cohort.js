@@ -66,6 +66,7 @@ const cohortSchema = new mongoose.Schema(
             paymentConfirmed: { type: Boolean, default: false },
             hasAccess: { type: Boolean, default: false },
             paidAt: { type: Date, default: null },
+            registeredAt: { type: Date, default: null },
           },
         ],
       },

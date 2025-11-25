@@ -103,7 +103,9 @@ export const getPendingConfirmationStudents = async (req, res) => {
     // Find all cohorts with students who have pending payments
     const cohorts = await Cohort.find({
       "studentIds.enrollments.paymentConfirmed": false,
-    }).populate("studentIds.studentId", "fullName email phoneNumber");
+    })
+      .populate("studentIds.studentId", "fullName email phoneNumber")
+      .populate("studentIds.enrollments.courseId", "name"); // <-- populate course name
 
     const pendingStudents = [];
 
@@ -120,7 +122,8 @@ export const getPendingConfirmationStudents = async (req, res) => {
               paymentConfirmed: enrollment.paymentConfirmed,
               registeredCohort: {
                 cohortId: cohort._id,
-                courseId: enrollment.courseId || null,
+                courseId: enrollment.courseId?._id || null,
+                courseName: enrollment.courseId?.name || "-", // <-- course name here
                 registeredAt: enrollment.registeredAt || null,
               },
             });
