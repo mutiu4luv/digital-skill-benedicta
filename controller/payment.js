@@ -97,22 +97,42 @@ export const adminConfirmPayment = async (req, res) => {
 };
 
 // GET /api/payment/pending-confirmation
+
 export const getPendingConfirmationStudents = async (req, res) => {
   try {
-    const students = await User.find({
-      role: "student",
-      $or: [{ paid: false }, { paymentConfirmed: false }],
-    }).select(
-      "fullName email phoneNumber registeredCohort paid paymentConfirmed"
-    );
+    // Find all cohorts with students who have pending payments
+    const cohorts = await Cohort.find({
+      "studentIds.enrollments.paymentConfirmed": false,
+    }).populate("studentIds.studentId", "fullName email phoneNumber");
 
-    return res.status(200).json({ students });
+    const pendingStudents = [];
+
+    cohorts.forEach((cohort) => {
+      cohort.studentIds.forEach((student) => {
+        student.enrollments.forEach((enrollment) => {
+          if (!enrollment.paymentConfirmed) {
+            pendingStudents.push({
+              _id: student.studentId._id,
+              fullName: student.studentId.fullName,
+              email: student.studentId.email,
+              phoneNumber: student.studentId.phoneNumber,
+              paid: enrollment.paid,
+              paymentConfirmed: enrollment.paymentConfirmed,
+              registeredCohort: {
+                cohortId: cohort._id,
+                courseId: enrollment.courseId || null,
+                registeredAt: enrollment.registeredAt || null,
+              },
+            });
+          }
+        });
+      });
+    });
+
+    return res.status(200).json({ students: pendingStudents });
   } catch (err) {
     console.error("Fetch Pending Payments Error:", err);
-    return res.status(500).json({
-      message: "Server error",
-      error: err.message,
-    });
+    return res.status(500).json({ message: "Server Error" });
   }
 };
 
