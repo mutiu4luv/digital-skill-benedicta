@@ -382,34 +382,56 @@ export const deleteCohort = async (req, res) => {
     });
   }
 };
-
+//GET ACTIVE COHORTS
 export const getActiveCohorts = async (req, res) => {
   try {
-    // Find all cohorts with status "not_started"
-    const cohorts = await Cohort.find({ status: "not_started" })
+    const cohorts = await Cohort.find()
       .populate("courses.courseId")
+      .populate("courses.coachId")
       .populate("studentIds");
 
     if (!cohorts || cohorts.length === 0) {
-      return res.status(404).json({ message: "No not_ cohorts available" });
+      return res.status(404).json({ message: "No cohorts found" });
     }
 
-    // Add a `notStartedCourses` property for each cohort
-    const transformedCohorts = cohorts.map((cohort) => {
+    // Transform each cohort to include only sorted not-started courses
+    const result = cohorts.map((cohort) => {
+      // Filter and sort not-started courses
+      const notStartedCourses = cohort.courses
+        .filter((course) => course.status === "not_started")
+        .sort((a, b) => {
+          const aName = a?.courseId?.name || "";
+          const bName = b?.courseId?.name || "";
+          return aName.localeCompare(bName);
+        })
+        .map((c) => ({
+          _id: c._id,
+          status: c.status,
+          courseId: c.courseId || null,
+          coachId: c.coachId || null,
+        }));
+
       return {
-        ...cohort.toObject(), // convert Mongoose doc to plain object
-        notStartedCourses: cohort.courses.filter(
-          (course) => course.status === "not_started"
-        ),
+        cohortName: cohort.cohortName || cohort.name,
+        cohortId: cohort._id,
+        notStartedCourses,
       };
     });
 
-    return res.status(200).json({ cohorts: transformedCohorts });
+    // Optionally, sort cohorts by name
+    result.sort((a, b) => {
+      const nameA = a.cohortName || "";
+      const nameB = b.cohortName || "";
+      return nameA.localeCompare(nameB);
+    });
+
+    return res.status(200).json({ cohorts: result });
   } catch (err) {
-    console.error(err);
-    return res
-      .status(500)
-      .json({ message: "Server error", error: err.message });
+    console.error("Get Active Cohorts Error:", err);
+    return res.status(500).json({
+      message: "Server error",
+      error: err.message,
+    });
   }
 };
 
