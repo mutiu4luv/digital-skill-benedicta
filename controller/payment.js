@@ -180,14 +180,14 @@ export const confirmCoursePayment = async (req, res) => {
       // ✅ Student submitted payment, but admin must confirm
       studentEntry.enrollments.push({
         courseId,
-        paid: true,
+        paid: false,
         paymentConfirmed: false, // initially false
         hasAccess: false, // initially false
         paidAt: new Date(),
       });
     } else {
       // Update existing enrollment
-      enrollment.paid = true;
+      enrollment.paid = false;
       enrollment.paymentConfirmed = false; // reset in case admin needs to confirm
       enrollment.hasAccess = false; // reset access
       enrollment.paidAt = new Date();
