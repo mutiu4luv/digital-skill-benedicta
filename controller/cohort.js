@@ -385,8 +385,8 @@ export const deleteCohort = async (req, res) => {
 
 export const getActiveCohorts = async (req, res) => {
   try {
-    // Find all cohorts that have at least one course not started
-    const cohorts = await Cohort.find({ "courses.status": "not_started" })
+    // Find all cohorts with status "active"
+    const cohorts = await Cohort.find({ status: "active" })
       .populate("courses.courseId")
       .populate("studentIds");
 
@@ -394,7 +394,17 @@ export const getActiveCohorts = async (req, res) => {
       return res.status(404).json({ message: "No active cohorts available" });
     }
 
-    return res.status(200).json({ cohorts });
+    // Add a `notStartedCourses` property for each cohort
+    const transformedCohorts = cohorts.map((cohort) => {
+      return {
+        ...cohort.toObject(), // convert Mongoose doc to plain object
+        notStartedCourses: cohort.courses.filter(
+          (course) => course.status === "not_started"
+        ),
+      };
+    });
+
+    return res.status(200).json({ cohorts: transformedCohorts });
   } catch (err) {
     console.error(err);
     return res
