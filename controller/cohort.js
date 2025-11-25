@@ -383,18 +383,18 @@ export const deleteCohort = async (req, res) => {
   }
 };
 
-export const getActiveCohort = async (req, res) => {
+export const getActiveCohorts = async (req, res) => {
   try {
-    // Find cohort with status "active"
-    const cohort = await Cohort.findOne({ status: "active" })
+    // Find all cohorts with status "active"
+    const cohorts = await Cohort.find({ status: "active" })
       .populate("courses.courseId")
       .populate("studentIds");
 
-    if (!cohort) {
-      return res.status(404).json({ message: "No active cohort available" });
+    if (!cohorts || cohorts.length === 0) {
+      return res.status(404).json({ message: "No active cohorts available" });
     }
 
-    return res.status(200).json({ cohort });
+    return res.status(200).json({ cohorts });
   } catch (err) {
     console.error(err);
     return res
@@ -402,6 +402,7 @@ export const getActiveCohort = async (req, res) => {
       .json({ message: "Server error", error: err.message });
   }
 };
+
 export const getNotActiveCohort = async (req, res) => {
   try {
     // Find a cohort that has at least one not-started course
