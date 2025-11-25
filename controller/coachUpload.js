@@ -3,6 +3,7 @@ import cloudinary from "../config/cloudnary.js";
 import User from "../module/userModule.js";
 import streamifier from "streamifier";
 import Course from "../module/course.js";
+import Cohort from "../module/cohort.js";
 
 // ✅ Upload helper
 const streamUpload = (buffer, folder, resourceType) => {
@@ -149,33 +150,59 @@ export const getAssignedCoaches = async (req, res) => {
   try {
     const studentId = req.user.id;
 
-    // 1️⃣ Fetch the student with registered courses (if you store courses in student)
-    const student = await User.findById(studentId).populate({
-      path: "courses",
-      select: "coach name",
+    // 1️⃣ Find all cohorts where the student is enrolled
+    const cohorts = await Cohort.find({
+      "studentIds.studentId": studentId,
+    }).populate({
+      path: "courses.courseId",
+      select: "name coach",
       populate: {
         path: "coach",
         select: "fullName email profilePhoto avgRating",
       },
     });
 
-    if (!student) {
-      return res.status(404).json({ message: "Student not found" });
+    if (!cohorts || cohorts.length === 0) {
+      return res.status(404).json({
+        message: "You are not enrolled in any cohort yet.",
+      });
     }
 
-    // 2️⃣ Collect all coaches
+    // 2️⃣ Collect all paid course coaches where cohort course status is "in_progress"
     const coachMap = new Map();
-    student.courses.forEach((course) => {
-      if (course.coach) {
-        coachMap.set(course.coach._id.toString(), course.coach);
-      }
+
+    cohorts.forEach((cohort) => {
+      const studentEntry = Cohort.studentIds.find(
+        (s) => s.studentId.toString() === studentId
+      );
+
+      if (!studentEntry) return;
+
+      studentEntry.enrollments.forEach((enrollment) => {
+        if (!enrollment.paid) return;
+
+        // Find the course in cohort.courses and check if in_progress
+        const courseInCohort = cohort.courses.find(
+          (c) =>
+            c.courseId._id.toString() === enrollment.courseId.toString() &&
+            c.status === "in_progress"
+        );
+
+        if (courseInCohort && courseInCohort.courseId.coach) {
+          coachMap.set(
+            courseInCohort.courseId.coach._id.toString(),
+            courseInCohort.courseId.coach
+          );
+        }
+      });
     });
 
     const uniqueCoaches = Array.from(coachMap.values());
 
     if (uniqueCoaches.length === 0) {
       return res.status(404).json({
-        message: "You have no assigned coaches yet. Attend a class first!",
+        message:
+          "You have no assigned coaches at the moment. Only active courses are considered.",
       });
     }
 

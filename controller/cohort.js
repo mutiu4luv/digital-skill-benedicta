@@ -396,57 +396,65 @@ export const getActiveCohorts = async (req, res) => {
       return res.status(404).json({ message: "No cohorts found" });
     }
 
-    // Transform each cohort to include only valid, sorted not-started courses
-    const result = cohorts.map((cohort) => {
-      const notStartedCourses = cohort.courses
-        // Keep only courses that are not started AND have a valid courseId
-        .filter((course) => course.status === "not_started" && course.courseId)
-        // Sort by course name
-        .sort((a, b) => {
-          const aName = a.courseId.name || "";
-          const bName = b.courseId.name || "";
-          return aName.localeCompare(bName);
-        })
-        // Map to clean object for frontend
-        .map((c) => ({
-          _id: c._id,
-          status: c.status,
-          courseId: {
-            _id: c.courseId._id,
-            name: c.courseId.name,
-            category: c.courseId.category,
-            description: c.courseId.description,
-            image: c.courseId.image,
-            duration: c.courseId.duration,
-            coach: c.courseId.coach,
-            isClassOpen: c.courseId.isClassOpen || false,
-            students: c.courseId.students || [],
-          },
-          coachId: c.coachId
-            ? {
-                _id: c.coachId._id,
-                fullName: c.coachId.fullName,
-                email: c.coachId.email,
-                profilePhoto: c.coachId.profilePhoto || "",
-                phoneNumber: c.coachId.phoneNumber,
-                avgRating: c.coachId.avgRating || 0,
-              }
-            : null,
-        }));
+    const activeCohorts = cohorts
+      .map((cohort) => {
+        // Keep only courses that are not_started
+        const notStartedCourses = cohort.courses
+          .filter(
+            (course) => course.status === "not_started" && course.courseId
+          )
+          .sort((a, b) => {
+            const aName = a.courseId.name || "";
+            const bName = b.courseId.name || "";
+            return aName.localeCompare(bName);
+          })
+          .map((c) => ({
+            _id: c._id,
+            status: c.status,
+            courseId: {
+              _id: c.courseId._id,
+              name: c.courseId.name,
+              category: c.courseId.category,
+              description: c.courseId.description,
+              image: c.courseId.image,
+              duration: c.courseId.duration,
+              coach: c.courseId.coach,
+              isClassOpen: c.courseId.isClassOpen || false,
+              students: c.courseId.students || [],
+            },
+            coachId: c.coachId
+              ? {
+                  _id: c.coachId._id,
+                  fullName: c.coachId.fullName,
+                  email: c.coachId.email,
+                  profilePhoto: c.coachId.profilePhoto || "",
+                  phoneNumber: c.coachId.phoneNumber,
+                  avgRating: c.coachId.avgRating || 0,
+                }
+              : null,
+          }));
 
-      return {
-        cohortName: cohort.cohortName || cohort.name || "",
-        cohortId: cohort._id,
-        notStartedCourses,
-      };
-    });
+        // Skip cohort if no not-started courses
+        if (notStartedCourses.length === 0) return null;
+
+        return {
+          cohortName: cohort.cohortName || cohort.name || "",
+          cohortId: cohort._id,
+          notStartedCourses,
+        };
+      })
+      .filter(Boolean); // remove null cohorts
+
+    if (activeCohorts.length === 0) {
+      return res.status(404).json({ message: "No active cohorts found" });
+    }
 
     // Optional: sort cohorts by name
-    result.sort((a, b) =>
+    activeCohorts.sort((a, b) =>
       (a.cohortName || "").localeCompare(b.cohortName || "")
     );
 
-    return res.status(200).json({ cohorts: result });
+    return res.status(200).json({ cohorts: activeCohorts });
   } catch (err) {
     console.error("Get Active Cohorts Error:", err);
     return res.status(500).json({
