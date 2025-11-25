@@ -92,6 +92,7 @@ export const adminConfirmPayment = async (req, res) => {
     // ✅ Confirm payment
     enrollment.paymentConfirmed = true;
     enrollment.hasAccess = true;
+    enrollment.paid = true;
 
     await foundCohort.save();
 

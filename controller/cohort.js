@@ -386,80 +386,73 @@ export const deleteCohort = async (req, res) => {
 
 export const getActiveCohorts = async (req, res) => {
   try {
-    // Fetch cohorts and populate related fields
-    const cohorts = await Cohort.find()
+    const userId = req.user.id;
+
+    // 1️⃣ FIND the cohort where THIS student is enrolled
+    const cohort = await Cohort.findOne({
+      "studentIds.studentId": userId,
+    })
       .populate("courses.courseId")
-      .populate("courses.coachId")
-      .populate("studentIds");
+      .populate("courses.coachId");
 
-    if (!cohorts || cohorts.length === 0) {
-      return res.status(404).json({ message: "No cohorts found" });
+    if (!cohort) {
+      return res.status(404).json({
+        message: "You are not enrolled in any cohort yet.",
+      });
     }
 
-    const activeCohorts = cohorts
-      .map((cohort) => {
-        // Keep only courses that are not_started
-        const notStartedCourses = cohort.courses
-          .filter(
-            (course) => course.status === "not_started" && course.courseId
-          )
-          .sort((a, b) => {
-            const aName = a.courseId.name || "";
-            const bName = b.courseId.name || "";
-            return aName.localeCompare(bName);
-          })
-          .map((c) => ({
-            _id: c._id,
-            status: c.status,
-            courseId: {
-              _id: c.courseId._id,
-              name: c.courseId.name,
-              category: c.courseId.category,
-              description: c.courseId.description,
-              image: c.courseId.image,
-              duration: c.courseId.duration,
-              coach: c.courseId.coach,
-              isClassOpen: c.courseId.isClassOpen || false,
-              students: c.courseId.students || [],
-            },
-            coachId: c.coachId
-              ? {
-                  _id: c.coachId._id,
-                  fullName: c.coachId.fullName,
-                  email: c.coachId.email,
-                  profilePhoto: c.coachId.profilePhoto || "",
-                  phoneNumber: c.coachId.phoneNumber,
-                  avgRating: c.coachId.avgRating || 0,
-                }
-              : null,
-          }));
-
-        // Skip cohort if no not-started courses
-        if (notStartedCourses.length === 0) return null;
-
-        return {
-          cohortName: cohort.cohortName || cohort.name || "",
-          cohortId: cohort._id,
-          notStartedCourses,
-        };
-      })
-      .filter(Boolean); // remove null cohorts
-
-    if (activeCohorts.length === 0) {
-      return res.status(404).json({ message: "No active cohorts found" });
-    }
-
-    // Optional: sort cohorts by name
-    activeCohorts.sort((a, b) =>
-      (a.cohortName || "").localeCompare(b.cohortName || "")
+    // 2️⃣ FIND user's enrollment inside that cohort
+    const enrollment = cohort.enrollments.find(
+      (e) => e.courseId.toString() === e.courseId.toString()
     );
 
-    return res.status(200).json({ cohorts: activeCohorts });
-  } catch (err) {
-    console.error("Get Active Cohorts Error:", err);
+    // If the user has NO enrollment in this cohort
+    if (!cohort.enrollments || cohort.enrollments.length === 0) {
+      return res.status(404).json({
+        message: "You have not paid for any course in this cohort.",
+      });
+    }
+
+    // 3️⃣ FILTER only courses that user paid + are in progress
+    const activeCourses = cohort.courses.filter((course) => {
+      const match = cohort.enrollments.find(
+        (e) => e.courseId.toString() === course.courseId._id.toString()
+      );
+
+      return (
+        match &&
+        match.paymentConfirmed === true &&
+        course.status === "in_progress"
+      );
+    });
+
+    if (activeCourses.length === 0) {
+      return res.status(404).json({
+        message:
+          "You have no active in-progress course. Your cohort may have ended.",
+      });
+    }
+
+    // 4️⃣ Prepare response of only active coaches
+    const coaches = activeCourses.map((c) => ({
+      courseName: c.courseId.name,
+      coachName: c.coachId.fullName,
+      coachEmail: c.coachId.email,
+      coachPhone: c.coachId.phoneNumber,
+      status: c.status,
+      startDate: c.startDate,
+      endDate: c.endDate,
+    }));
+
+    return res.status(200).json({
+      message: "Coach fetched successfully",
+      coaches,
+    });
+  } catch (error) {
+    console.error("getMyCoach Error:", error);
     return res.status(500).json({
-      message: "Server error",
-      error: err.message,
+      message: "Internal server error",
+      error: error.message,
     });
   }
 };

@@ -145,54 +145,67 @@ export const getAllMaterials = async (req, res) => {
 
   res.json({ message: "✅ Course materials fetched", materials });
 };
+
 // ✅ Get all coaches assigned to a student
 export const getAssignedCoaches = async (req, res) => {
   try {
     const studentId = req.user.id;
 
-    // 1️⃣ Find all cohorts where the student is enrolled
+    // Find all cohorts where this student is enrolled
     const cohorts = await Cohort.find({
       "studentIds.studentId": studentId,
-    }).populate({
-      path: "courses.courseId",
-      select: "name coach",
-      populate: {
-        path: "coach",
-        select: "fullName email profilePhoto avgRating",
-      },
-    });
+    })
+      .populate({
+        path: "courses.courseId",
+        select: "name coach",
+        populate: {
+          path: "coach",
+          select: "fullName email profilePhoto avgRating",
+        },
+      })
+      .populate("studentIds.studentId"); // Ensure student objects are populated
 
     if (!cohorts || cohorts.length === 0) {
-      return res.status(404).json({
-        message: "You are not enrolled in any cohort yet.",
-      });
+      return res
+        .status(404)
+        .json({ message: "You are not enrolled in any cohort yet." });
     }
 
-    // 2️⃣ Collect all paid course coaches where cohort course status is "in_progress"
     const coachMap = new Map();
 
     cohorts.forEach((cohort) => {
-      const studentEntry = Cohort.studentIds.find(
-        (s) => s.studentId.toString() === studentId
+      // Find the student object in this cohort
+      const studentData = cohort.studentIds.find(
+        (s) => s.studentId.toString() === studentId.toString()
       );
+      if (!studentData || !Array.isArray(studentData.enrollments)) return;
 
-      if (!studentEntry) return;
-
-      studentEntry.enrollments.forEach((enrollment) => {
-        if (!enrollment.paid) return;
-
-        // Find the course in cohort.courses and check if in_progress
-        const courseInCohort = cohort.courses.find(
-          (c) =>
-            c.courseId._id.toString() === enrollment.courseId.toString() &&
-            c.status === "in_progress"
-        );
-
-        if (courseInCohort && courseInCohort.courseId.coach) {
-          coachMap.set(
-            courseInCohort.courseId.coach._id.toString(),
-            courseInCohort.courseId.coach
+      studentData.enrollments.forEach((enrollment) => {
+        // Only include if paymentConfirmed
+        if (enrollment.paymentConfirmed) {
+          // Find the course in the cohort that matches the enrollment and is in progress
+          const courseInCohort = cohort.courses.find(
+            (c) =>
+              c.courseId &&
+              c.courseId._id.toString() === enrollment.courseId.toString() &&
+              c.status === "in_progress"
           );
+
+          // Get the coach from the course
+          if (
+            courseInCohort &&
+            courseInCohort.courseId.coach &&
+            courseInCohort.courseId.coach._id
+          ) {
+            const coach = courseInCohort.courseId.coach;
+            coachMap.set(coach._id.toString(), {
+              _id: coach._id,
+              fullName: coach.fullName,
+              email: coach.email,
+              profilePhoto: coach.profilePhoto,
+              avgRating: coach.avgRating,
+            });
+          }
         }
       });
     });
@@ -202,7 +215,7 @@ export const getAssignedCoaches = async (req, res) => {
     if (uniqueCoaches.length === 0) {
       return res.status(404).json({
         message:
-          "You have no assigned coaches at the moment. Only active courses are considered.",
+          "You have no assigned coaches for in-progress courses at the moment.",
       });
     }
 
