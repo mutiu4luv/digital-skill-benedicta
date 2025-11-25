@@ -61,27 +61,35 @@ export const getPaidStudents = async (req, res) => {
 // ADMIN: Confirm Payment for a Student
 export const adminConfirmPayment = async (req, res) => {
   try {
-    const { cohortId, courseId, studentId } = req.body;
+    const { cohortId, courseId } = req.body;
+    const studentId = req.params.id;
 
     const foundCohort = await Cohort.findById(cohortId);
     if (!foundCohort)
       return res.status(404).json({ message: "Cohort not found" });
 
-    let studentEntry = foundCohort.studentIds.find(
-      (s) => s.studentId.toString() === studentId.toString()
-    );
+    // Log for debugging
+    console.log("foundCohort.studentIds:", foundCohort.studentIds);
+
+    const studentEntry = foundCohort.studentIds.find((s) => {
+      // Support both plain ObjectId and nested studentId
+      const id = s.studentId ? s.studentId.toString() : s._id?.toString();
+      return id === studentId;
+    });
+
     if (!studentEntry)
       return res
         .status(404)
         .json({ message: "Student not found in this cohort" });
 
-    let enrollment = studentEntry.enrollments.find(
+    const enrollment = studentEntry.enrollments?.find(
       (e) => e.courseId.toString() === courseId.toString()
     );
+
     if (!enrollment)
       return res.status(404).json({ message: "Enrollment not found" });
 
-    // ✅ Admin confirms payment
+    // ✅ Confirm payment
     enrollment.paymentConfirmed = true;
     enrollment.hasAccess = true;
 
