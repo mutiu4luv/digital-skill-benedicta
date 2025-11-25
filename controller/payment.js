@@ -61,38 +61,38 @@ export const getPaidStudents = async (req, res) => {
 // ADMIN: Confirm Payment for a Student
 export const adminConfirmPayment = async (req, res) => {
   try {
-    const userId = req.params.id; // student id
-    const { courseId } = req.body; // course inside array
+    const { cohortId, courseId, studentId } = req.body;
 
-    const user = await User.findById(userId);
-    if (!user) return res.status(404).json({ message: "User not found" });
+    const foundCohort = await Cohort.findById(cohortId);
+    if (!foundCohort)
+      return res.status(404).json({ message: "Cohort not found" });
 
-    // find course record inside user.courses array
-    const courseRecord = user.courses.find(
-      (c) => c._id.toString() === courseId
+    let studentEntry = foundCohort.studentIds.find(
+      (s) => s.studentId.toString() === studentId.toString()
     );
-
-    if (!courseRecord) {
+    if (!studentEntry)
       return res
         .status(404)
-        .json({ message: "Course not found for this user" });
-    }
+        .json({ message: "Student not found in this cohort" });
 
-    courseRecord.paid = true;
-    courseRecord.paymentConfirmed = true;
+    let enrollment = studentEntry.enrollments.find(
+      (e) => e.courseId.toString() === courseId.toString()
+    );
+    if (!enrollment)
+      return res.status(404).json({ message: "Enrollment not found" });
 
-    await user.save();
+    // ✅ Admin confirms payment
+    enrollment.paymentConfirmed = true;
+    enrollment.hasAccess = true;
+
+    await foundCohort.save();
 
     return res.status(200).json({
-      message: "Payment successfully confirmed",
-      userId,
-      courseId,
+      message: "Payment confirmed by admin. Student now has access.",
     });
-  } catch (err) {
-    console.error("Admin Confirm Payment Error:", err);
-    return res
-      .status(500)
-      .json({ message: "Server error", error: err.message });
+  } catch (error) {
+    console.error("Admin Payment Confirmation Error:", error);
+    res.status(500).json({ message: "Server error" });
   }
 };
 
@@ -131,6 +131,7 @@ export const confirmCoursePayment = async (req, res) => {
       foundCohort.studentIds = [];
     }
 
+    // Find student entry
     let studentEntry = foundCohort.studentIds.find(
       (s) => s.studentId.toString() === studentId.toString()
     );
@@ -147,29 +148,33 @@ export const confirmCoursePayment = async (req, res) => {
       studentEntry.enrollments = [];
     }
 
+    // Find enrollment for this course
     let enrollment = studentEntry.enrollments.find(
       (e) => e.courseId.toString() === courseId.toString()
     );
 
     if (!enrollment) {
+      // ✅ Student submitted payment, but admin must confirm
       studentEntry.enrollments.push({
         courseId,
         paid: true,
-        paymentConfirmed: true,
-        hasAccess: true,
+        paymentConfirmed: false, // initially false
+        hasAccess: false, // initially false
         paidAt: new Date(),
       });
     } else {
+      // Update existing enrollment
       enrollment.paid = true;
-      enrollment.paymentConfirmed = true;
-      enrollment.hasAccess = true;
+      enrollment.paymentConfirmed = false; // reset in case admin needs to confirm
+      enrollment.hasAccess = false; // reset access
       enrollment.paidAt = new Date();
     }
 
     await foundCohort.save();
 
     return res.status(200).json({
-      message: "Payment confirmed, access granted.",
+      message:
+        "Payment submitted. Waiting for admin confirmation to grant access.",
     });
   } catch (error) {
     console.error("Payment Error:", error);

@@ -4,7 +4,6 @@ import {
   adminConfirmPayment,
   checkAccess,
   confirmCoursePayment,
-  confirmPayment,
   getPaidStudents,
   getPendingConfirmationStudents,
 } from "../controller/payment.js";
