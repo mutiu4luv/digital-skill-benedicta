@@ -385,13 +385,13 @@ export const deleteCohort = async (req, res) => {
 
 export const getActiveCohorts = async (req, res) => {
   try {
-    // Find all cohorts with status "active"
-    const cohorts = await Cohort.find({ status: "active" })
+    // Find all cohorts with status "not_started"
+    const cohorts = await Cohort.find({ status: "not_started" })
       .populate("courses.courseId")
       .populate("studentIds");
 
     if (!cohorts || cohorts.length === 0) {
-      return res.status(404).json({ message: "No active cohorts available" });
+      return res.status(404).json({ message: "No not_ cohorts available" });
     }
 
     // Add a `notStartedCourses` property for each cohort
