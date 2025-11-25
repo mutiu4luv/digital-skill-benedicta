@@ -4,6 +4,7 @@ import {
   uploadVideo,
   uploadDocument,
   getAllMaterials,
+  getAssignedCoaches,
 } from "../controller/coachUpload.js";
 import { protect, authorizeRoles } from "../middleware/authMiddleware.js";
 
@@ -50,5 +51,6 @@ router.get(
   authorizeRoles("student", "coach", "owner"),
   getAllMaterials
 );
+router.get("/coaches", protect, getAssignedCoaches);
 
 export default router;

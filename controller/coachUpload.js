@@ -40,11 +40,9 @@ export const uploadVideo = async (req, res) => {
 
     // Restrict upload if class is closed
     if (!course.isClassOpen)
-      return res
-        .status(403)
-        .json({
-          message: "Class is closed. You can only upload during class time.",
-        });
+      return res.status(403).json({
+        message: "Class is closed. You can only upload during class time.",
+      });
 
     // Upload to cloudinary
     const result = await streamUpload(req.file.buffer, "videos", "video");
@@ -145,4 +143,48 @@ export const getAllMaterials = async (req, res) => {
     .sort({ createdAt: -1 });
 
   res.json({ message: "✅ Course materials fetched", materials });
+};
+// ✅ Get all coaches assigned to a student
+export const getAssignedCoaches = async (req, res) => {
+  try {
+    const studentId = req.user.id;
+
+    // 1️⃣ Fetch the student with registered courses (if you store courses in student)
+    const student = await User.findById(studentId).populate({
+      path: "courses",
+      select: "coach name",
+      populate: {
+        path: "coach",
+        select: "fullName email profilePhoto avgRating",
+      },
+    });
+
+    if (!student) {
+      return res.status(404).json({ message: "Student not found" });
+    }
+
+    // 2️⃣ Collect all coaches
+    const coachMap = new Map();
+    student.courses.forEach((course) => {
+      if (course.coach) {
+        coachMap.set(course.coach._id.toString(), course.coach);
+      }
+    });
+
+    const uniqueCoaches = Array.from(coachMap.values());
+
+    if (uniqueCoaches.length === 0) {
+      return res.status(404).json({
+        message: "You have no assigned coaches yet. Attend a class first!",
+      });
+    }
+
+    res.status(200).json({
+      message: "✅ Assigned coaches fetched successfully",
+      coaches: uniqueCoaches,
+    });
+  } catch (error) {
+    console.error("❌ Fetch assigned coaches failed:", error);
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
 };
