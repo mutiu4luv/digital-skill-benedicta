@@ -4,6 +4,7 @@ import User from "../module/userModule.js";
 import streamifier from "streamifier";
 import Course from "../module/course.js";
 import Cohort from "../module/cohort.js";
+import mongoose from "mongoose";
 
 // ✅ Upload helper
 const streamUpload = (buffer, folder, resourceType) => {
@@ -147,23 +148,35 @@ export const getAllMaterials = async (req, res) => {
 };
 
 // ✅ Get all coaches assigned to a student
+
 export const getAssignedCoaches = async (req, res) => {
   try {
     const studentId = req.user.id;
 
-    // Find all cohorts where this student is enrolled
+    // Convert to ObjectId for comparison
+    let studentObjectId;
+    try {
+      studentObjectId = new mongoose.Types.ObjectId(studentId);
+    } catch {
+      studentObjectId = null; // in case the id is already string
+    }
+
+    // Fetch cohorts where student exists (string or ObjectId)
     const cohorts = await Cohort.find({
-      "studentIds.studentId": studentId,
-    })
-      .populate({
-        path: "courses.courseId",
-        select: "name coach",
-        populate: {
-          path: "coach",
-          select: "fullName email profilePhoto avgRating",
-        },
-      })
-      .populate("studentIds.studentId"); // Ensure student objects are populated
+      $or: [
+        { "studentIds.studentId": studentId }, // string match
+        ...(studentObjectId
+          ? [{ "studentIds.studentId": studentObjectId }]
+          : []), // ObjectId match
+      ],
+    }).populate({
+      path: "courses.courseId",
+      select: "name coach",
+      populate: {
+        path: "coach",
+        select: "fullName email profilePhoto avgRating",
+      },
+    });
 
     if (!cohorts || cohorts.length === 0) {
       return res
@@ -173,42 +186,41 @@ export const getAssignedCoaches = async (req, res) => {
 
     const coachMap = new Map();
 
-    cohorts.forEach((cohort) => {
+    for (const cohort of cohorts) {
       // Find the student object in this cohort
       const studentData = cohort.studentIds.find(
-        (s) => s.studentId.toString() === studentId.toString()
+        (s) =>
+          s.studentId.toString() === studentId.toString() ||
+          s.studentId === studentId
       );
-      if (!studentData || !Array.isArray(studentData.enrollments)) return;
 
-      studentData.enrollments.forEach((enrollment) => {
-        // Only include if paymentConfirmed
-        if (enrollment.paymentConfirmed) {
-          // Find the course in the cohort that matches the enrollment and is in progress
-          const courseInCohort = cohort.courses.find(
-            (c) =>
-              c.courseId &&
-              c.courseId._id.toString() === enrollment.courseId.toString() &&
-              c.status === "in_progress"
-          );
+      if (!studentData || !Array.isArray(studentData.enrollments)) continue;
 
-          // Get the coach from the course
-          if (
-            courseInCohort &&
-            courseInCohort.courseId.coach &&
-            courseInCohort.courseId.coach._id
-          ) {
-            const coach = courseInCohort.courseId.coach;
-            coachMap.set(coach._id.toString(), {
-              _id: coach._id,
-              fullName: coach.fullName,
-              email: coach.email,
-              profilePhoto: coach.profilePhoto,
-              avgRating: coach.avgRating,
-            });
-          }
+      for (const enrollment of studentData.enrollments) {
+        // Only consider enrollments that are confirmed
+        if (!enrollment.paymentConfirmed) continue;
+
+        // Find the course in this cohort that is in progress
+        const courseInCohort = cohort.courses.find(
+          (c) =>
+            c.courseId &&
+            c.courseId._id.toString() === enrollment.courseId.toString() &&
+            c.status === "in_progress" &&
+            c.courseId.coach
+        );
+
+        if (courseInCohort) {
+          const coach = courseInCohort.courseId.coach;
+          coachMap.set(coach._id.toString(), {
+            _id: coach._id,
+            fullName: coach.fullName,
+            email: coach.email,
+            profilePhoto: coach.profilePhoto,
+            avgRating: coach.avgRating,
+          });
         }
-      });
-    });
+      }
+    }
 
     const uniqueCoaches = Array.from(coachMap.values());
 
@@ -219,12 +231,14 @@ export const getAssignedCoaches = async (req, res) => {
       });
     }
 
-    res.status(200).json({
+    return res.status(200).json({
       message: "✅ Assigned coaches fetched successfully",
       coaches: uniqueCoaches,
     });
   } catch (error) {
     console.error("❌ Fetch assigned coaches failed:", error);
-    res.status(500).json({ message: "Server error", error: error.message });
+    return res
+      .status(500)
+      .json({ message: "Server error", error: error.message });
   }
 };

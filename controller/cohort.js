@@ -3,6 +3,7 @@ import Cohort from "..//module/cohort.js";
 import Course from "../module/course.js";
 import userModule from "../module/userModule.js";
 
+//CREATE COHORT
 function convertDurationStringToDays(duration) {
   if (!duration) return null;
 
@@ -487,6 +488,101 @@ export const getNotActiveCohort = async (req, res) => {
     return res.status(500).json({
       message: "Server error",
       error: err.message,
+    });
+  }
+};
+
+//✅ Get all coaches assigned to students
+
+export const getCoachesAssignedToStudents = async (req, res) => {
+  try {
+    // Load all cohorts with students and courses populated
+    const cohorts = await Cohort.find()
+      .populate({
+        path: "courses.courseId",
+        select: "name duration coach",
+      })
+      .populate({
+        path: "courses.coachId",
+        select: "fullName email profilePhoto avgRating",
+      })
+      .populate({
+        path: "studentIds.studentId",
+        select: "fullName email profilePhoto paymentConfirmed",
+      });
+
+    const results = [];
+
+    // Loop through all cohorts
+    for (const cohort of cohorts) {
+      // Loop through all students in this cohort
+      for (const studentEntry of cohort.studentIds) {
+        const student = studentEntry.studentId;
+
+        if (!student) continue; // skip invalid
+
+        const studentData = {
+          studentId: student._id,
+          fullName: student.fullName,
+          email: student.email,
+          profilePhoto: student.profilePhoto,
+          assignedCoaches: [],
+        };
+
+        // Loop through all enrollments of this student
+        for (const enroll of studentEntry.enrollments) {
+          // Only return coach if student has paid + payment confirmed
+          if (
+            !enroll.paid ||
+            !enroll.paymentConfirmed ||
+            !student.paymentConfirmed
+          ) {
+            continue;
+          }
+
+          // Find matching course in cohort.course[]
+          const courseMatch = cohort.courses.find(
+            (c) =>
+              c.courseId &&
+              c.courseId._id.toString() === enroll.courseId.toString()
+          );
+
+          if (!courseMatch) continue;
+
+          // If course is completed → DO NOT return coach
+          if (courseMatch.status === "completed") continue;
+
+          // Only return if course is in_progress
+          if (courseMatch.status !== "in_progress") continue;
+
+          // Push coach assigned to this student for this course
+          studentData.assignedCoaches.push({
+            courseId: courseMatch.courseId._id,
+            courseName: courseMatch.courseId.name,
+            coachId: courseMatch.coachId?._id,
+            coachName: courseMatch.coachId?.fullName,
+            coachEmail: courseMatch.coachId?.email,
+            coachPhoto: courseMatch.coachId?.profilePhoto,
+            courseStatus: courseMatch.status,
+          });
+        }
+
+        // Only add students who have at least 1 coach
+        if (studentData.assignedCoaches.length > 0) {
+          results.push(studentData);
+        }
+      }
+    }
+
+    return res.status(200).json({
+      message: "Coaches assigned to students fetched successfully",
+      students: results,
+    });
+  } catch (error) {
+    console.error("❌ Error fetching coaches per student:", error);
+    return res.status(500).json({
+      message: "Server error",
+      error: error.message,
     });
   }
 };
