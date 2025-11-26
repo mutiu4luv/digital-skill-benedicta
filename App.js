@@ -15,6 +15,7 @@ import payment from "./routes/payment.js";
 import cohort from "./routes/cohort.js";
 import "./cron/autoOpenClass.js";
 import "./cron/autoCloseClass.js";
+import assignmentStudent from "./routes/assignment.js";
 
 dotenv.config();
 
@@ -85,6 +86,7 @@ app.use("/api/course", courseRoute);
 app.use("/api", registrationRoutes);
 app.use("/api/cohort", cohort);
 app.use("/api/payment", payment);
+app.use("/api/assignment", assignmentStudent);
 
 // ✅ 5. MongoDB Connection
 mongoose
