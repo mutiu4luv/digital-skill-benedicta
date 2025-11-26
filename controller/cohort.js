@@ -385,76 +385,135 @@ export const deleteCohort = async (req, res) => {
 };
 //GET ACTIVE COHORTS
 
+// export const getActiveCohorts = async (req, res) => {
+//   try {
+//     const userId = req.user.id;
+
+//     // 1️⃣ FIND the cohort where THIS student is enrolled
+//     const cohort = await Cohort.findOne({
+//       "studentIds.studentId": userId,
+//     })
+//       .populate("courses.courseId")
+//       .populate("courses.coachId");
+
+//     if (!cohort) {
+//       return res.status(404).json({
+//         message: "You are not enrolled in any cohort yet.",
+//       });
+//     }
+
+//     // 2️⃣ FIND user's enrollment inside that cohort
+//     const enrollment = cohort.enrollments.find(
+//       (e) => e.courseId.toString() === e.courseId.toString()
+//     );
+
+//     // If the user has NO enrollment in this cohort
+//     if (!cohort.enrollments || cohort.enrollments.length === 0) {
+//       return res.status(404).json({
+//         message: "You have not paid for any course in this cohort.",
+//       });
+//     }
+
+//     // 3️⃣ FILTER only courses that user paid + are in progress
+//     const activeCourses = cohort.courses.filter((course) => {
+//       const match = cohort.enrollments.find(
+//         (e) => e.courseId.toString() === course.courseId._id.toString()
+//       );
+
+//       return (
+//         match &&
+//         match.paymentConfirmed === true &&
+//         course.status === "in_progress"
+//       );
+//     });
+
+//     if (activeCourses.length === 0) {
+//       return res.status(404).json({
+//         message:
+//           "You have no active in-progress course. Your cohort may have ended.",
+//       });
+//     }
+
+//     // 4️⃣ Prepare response of only active coaches
+//     const coaches = activeCourses.map((c) => ({
+//       courseName: c.courseId.name,
+//       coachName: c.coachId.fullName,
+//       coachEmail: c.coachId.email,
+//       coachPhone: c.coachId.phoneNumber,
+//       status: c.status,
+//       startDate: c.startDate,
+//       endDate: c.endDate,
+//     }));
+
+//     return res.status(200).json({
+//       message: "Coach fetched successfully",
+//       coaches,
+//     });
+//   } catch (error) {
+//     console.error("getMyCoach Error:", error);
+//     return res.status(500).json({
+//       message: "Internal server error",
+//       error: error.message,
+//     });
+//   }
+// };
+
 export const getActiveCohorts = async (req, res) => {
   try {
     const userId = req.user.id;
 
-    // 1️⃣ FIND the cohort where THIS student is enrolled
-    const cohort = await Cohort.findOne({
+    // 1️⃣ Find all cohorts where student is enrolled
+    const cohorts = await Cohort.find({
       "studentIds.studentId": userId,
     })
       .populate("courses.courseId")
       .populate("courses.coachId");
 
-    if (!cohort) {
-      return res.status(404).json({
-        message: "You are not enrolled in any cohort yet.",
-      });
+    if (!cohorts || cohorts.length === 0) {
+      return res.status(200).json({ cohorts: [] });
     }
 
-    // 2️⃣ FIND user's enrollment inside that cohort
-    const enrollment = cohort.enrollments.find(
-      (e) => e.courseId.toString() === e.courseId.toString()
-    );
+    // 2️⃣ Map cohorts to only include in-progress courses
+    const activeCohorts = cohorts.map((cohort) => {
+      // Courses that are "in_progress"
+      const inProgressCourses = cohort.courses
+        .filter((c) => c.status === "in_progress")
+        .map((c) => {
+          // Check if student is enrolled in this course
+          const enrollment = cohort.enrollments.find(
+            (e) => e.courseId.toString() === c.courseId._id.toString()
+          );
 
-    // If the user has NO enrollment in this cohort
-    if (!cohort.enrollments || cohort.enrollments.length === 0) {
-      return res.status(404).json({
-        message: "You have not paid for any course in this cohort.",
-      });
-    }
+          return {
+            courseId: c.courseId._id,
+            name: c.courseId.name,
+            category: c.courseId.category,
+            duration: c.durationInDays + " days",
+            coachId: c.coachId._id,
+            coachName: c.coachId.fullName,
+            coachEmail: c.coachId.email,
+            coachPhone: c.coachId.phoneNumber,
+            status: c.status,
+            startDate: c.startDate,
+            endDate: c.endDate,
+            enrolled: enrollment ? true : false,
+            paymentConfirmed: enrollment?.paymentConfirmed || false,
+          };
+        });
 
-    // 3️⃣ FILTER only courses that user paid + are in progress
-    const activeCourses = cohort.courses.filter((course) => {
-      const match = cohort.enrollments.find(
-        (e) => e.courseId.toString() === course.courseId._id.toString()
-      );
-
-      return (
-        match &&
-        match.paymentConfirmed === true &&
-        course.status === "in_progress"
-      );
+      return {
+        cohortId: cohort._id,
+        cohortName: cohort.name,
+        startDate: cohort.startDate,
+        endDate: cohort.endDate,
+        courses: inProgressCourses,
+      };
     });
 
-    if (activeCourses.length === 0) {
-      return res.status(404).json({
-        message:
-          "You have no active in-progress course. Your cohort may have ended.",
-      });
-    }
-
-    // 4️⃣ Prepare response of only active coaches
-    const coaches = activeCourses.map((c) => ({
-      courseName: c.courseId.name,
-      coachName: c.coachId.fullName,
-      coachEmail: c.coachId.email,
-      coachPhone: c.coachId.phoneNumber,
-      status: c.status,
-      startDate: c.startDate,
-      endDate: c.endDate,
-    }));
-
-    return res.status(200).json({
-      message: "Coach fetched successfully",
-      coaches,
-    });
-  } catch (error) {
-    console.error("getMyCoach Error:", error);
-    return res.status(500).json({
-      message: "Internal server error",
-      error: error.message,
-    });
+    return res.status(200).json({ cohorts: activeCohorts });
+  } catch (err) {
+    console.error("getActiveCohorts Error:", err);
+    return res.status(500).json({ message: "Internal server error" });
   }
 };
 
