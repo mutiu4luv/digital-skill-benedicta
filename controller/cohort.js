@@ -383,80 +383,6 @@ export const deleteCohort = async (req, res) => {
     });
   }
 };
-//GET ACTIVE COHORTS
-
-// export const getActiveCohorts = async (req, res) => {
-//   try {
-//     const userId = req.user.id;
-
-//     // 1️⃣ FIND the cohort where THIS student is enrolled
-//     const cohort = await Cohort.findOne({
-//       "studentIds.studentId": userId,
-//     })
-//       .populate("courses.courseId")
-//       .populate("courses.coachId");
-
-//     if (!cohort) {
-//       return res.status(404).json({
-//         message: "You are not enrolled in any cohort yet.",
-//       });
-//     }
-
-//     // 2️⃣ FIND user's enrollment inside that cohort
-//     const enrollment = cohort.enrollments.find(
-//       (e) => e.courseId.toString() === e.courseId.toString()
-//     );
-
-//     // If the user has NO enrollment in this cohort
-//     if (!cohort.enrollments || cohort.enrollments.length === 0) {
-//       return res.status(404).json({
-//         message: "You have not paid for any course in this cohort.",
-//       });
-//     }
-
-//     // 3️⃣ FILTER only courses that user paid + are in progress
-//     const activeCourses = cohort.courses.filter((course) => {
-//       const match = cohort.enrollments.find(
-//         (e) => e.courseId.toString() === course.courseId._id.toString()
-//       );
-
-//       return (
-//         match &&
-//         match.paymentConfirmed === true &&
-//         course.status === "in_progress"
-//       );
-//     });
-
-//     if (activeCourses.length === 0) {
-//       return res.status(404).json({
-//         message:
-//           "You have no active in-progress course. Your cohort may have ended.",
-//       });
-//     }
-
-//     // 4️⃣ Prepare response of only active coaches
-//     const coaches = activeCourses.map((c) => ({
-//       courseName: c.courseId.name,
-//       coachName: c.coachId.fullName,
-//       coachEmail: c.coachId.email,
-//       coachPhone: c.coachId.phoneNumber,
-//       status: c.status,
-//       startDate: c.startDate,
-//       endDate: c.endDate,
-//     }));
-
-//     return res.status(200).json({
-//       message: "Coach fetched successfully",
-//       coaches,
-//     });
-//   } catch (error) {
-//     console.error("getMyCoach Error:", error);
-//     return res.status(500).json({
-//       message: "Internal server error",
-//       error: error.message,
-//     });
-//   }
-// };
 
 export const getActiveCohorts = async (req, res) => {
   try {
@@ -553,98 +479,86 @@ export const getNotActiveCohort = async (req, res) => {
 
 //✅ Get all coaches assigned to students
 
-// export const getCoachesAssignedToStudents = async (req, res) => {
-//   try {
-//     // Load all cohorts with students and courses populated
-//     const cohorts = await Cohort.find()
-//       .populate({
-//         path: "courses.courseId",
-//         select: "name duration coach",
-//       })
-//       .populate({
-//         path: "courses.coachId",
-//         select: "fullName email profilePhoto avgRating",
-//       })
-//       .populate({
-//         path: "studentIds.studentId",
-//         select: "fullName email profilePhoto paymentConfirmed",
-//       });
+export const getCoachesAssignedToStudents = async (req, res) => {
+  try {
+    const cohorts = await Cohort.find()
+      .populate({
+        path: "courses.courseId",
+        select: "name duration category",
+      })
+      .populate({
+        path: "courses.coachId",
+        select: "fullName email profilePhoto avgRating",
+      })
+      .populate({
+        path: "studentIds.studentId",
+        select: "fullName email profilePhoto",
+      });
 
-//     const results = [];
+    const results = [];
 
-//     // Loop through all cohorts
-//     for (const cohort of cohorts) {
-//       // Loop through all students in this cohort
-//       for (const studentEntry of cohort.studentIds) {
-//         const student = studentEntry.studentId;
+    for (const cohort of cohorts) {
+      for (const studentEntry of cohort.studentIds) {
+        const student = studentEntry.studentId;
+        if (!student) continue;
 
-//         if (!student) continue; // skip invalid
+        const studentData = {
+          studentId: student._id,
+          fullName: student.fullName,
+          email: student.email,
+          profilePhoto: student.profilePhoto,
+          assignedCoaches: [],
+        };
 
-//         const studentData = {
-//           studentId: student._id,
-//           fullName: student.fullName,
-//           email: student.email,
-//           profilePhoto: student.profilePhoto,
-//           assignedCoaches: [],
-//         };
+        // Loop through all enrolled courses for the student
+        for (const enroll of studentEntry.enrollments) {
+          // Only show coach AFTER payment is confirmed for that course
+          if (!enroll.paid || !enroll.paymentConfirmed) continue;
 
-//         // Loop through all enrollments of this student
-//         for (const enroll of studentEntry.enrollments) {
-//           // Only return coach if student has paid + payment confirmed
-//           if (
-//             !enroll.paid ||
-//             !enroll.paymentConfirmed ||
-//             !student.paymentConfirmed
-//           ) {
-//             continue;
-//           }
+          // Locate the course in cohort.courses
+          const courseMatch = cohort.courses.find(
+            (c) =>
+              c.courseId &&
+              c.courseId._id.toString() === enroll.courseId.toString()
+          );
+          if (!courseMatch) continue;
 
-//           // Find matching course in cohort.course[]
-//           const courseMatch = cohort.courses.find(
-//             (c) =>
-//               c.courseId &&
-//               c.courseId._id.toString() === enroll.courseId.toString()
-//           );
+          // Only return ACTIVE courses
+          if (courseMatch.status === "completed") continue;
 
-//           if (!courseMatch) continue;
+          // Return only active (in_progress) coaches
+          if (courseMatch.status !== "in_progress") continue;
 
-//           // If course is completed → DO NOT return coach
-//           if (courseMatch.status === "completed") continue;
+          studentData.assignedCoaches.push({
+            courseId: courseMatch.courseId._id,
+            courseName: courseMatch.courseId.name,
+            courseCategory: courseMatch.courseId.category,
+            coachId: courseMatch.coachId?._id,
+            coachName: courseMatch.coachId?.fullName,
+            coachEmail: courseMatch.coachId?.email,
+            coachPhoto: courseMatch.coachId?.profilePhoto,
+            courseStatus: courseMatch.status,
+          });
+        }
 
-//           // Only return if course is in_progress
-//           if (courseMatch.status !== "in_progress") continue;
+        if (studentData.assignedCoaches.length > 0) {
+          results.push(studentData);
+        }
+      }
+    }
 
-//           // Push coach assigned to this student for this course
-//           studentData.assignedCoaches.push({
-//             courseId: courseMatch.courseId._id,
-//             courseName: courseMatch.courseId.name,
-//             coachId: courseMatch.coachId?._id,
-//             coachName: courseMatch.coachId?.fullName,
-//             coachEmail: courseMatch.coachId?.email,
-//             coachPhoto: courseMatch.coachId?.profilePhoto,
-//             courseStatus: courseMatch.status,
-//           });
-//         }
-
-//         // Only add students who have at least 1 coach
-//         if (studentData.assignedCoaches.length > 0) {
-//           results.push(studentData);
-//         }
-//       }
-//     }
-
-//     return res.status(200).json({
-//       message: "Coaches assigned to students fetched successfully",
-//       students: results,
-//     });
-//   } catch (error) {
-//     console.error("❌ Error fetching coaches per student:", error);
-//     return res.status(500).json({
-//       message: "Server error",
-//       error: error.message,
-//     });
-//   }
-// };
+    return res.status(200).json({
+      message: "Coaches assigned to students fetched successfully",
+      students: results,
+    });
+  } catch (error) {
+    console.error("❌ Error fetching coaches assigned to students:", error);
+    return res.status(500).json({
+      message: "Server error",
+      error: error.message,
+    });
+  }
+};
 
 //  get available cohorts with not started courses for students to register
 
