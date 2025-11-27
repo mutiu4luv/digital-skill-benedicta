@@ -481,7 +481,16 @@ export const getNotActiveCohort = async (req, res) => {
 
 export const getCoachesAssignedToStudents = async (req, res) => {
   try {
-    const cohorts = await Cohort.find()
+    const studentId = req.user?.id;
+
+    if (!studentId) {
+      return res.status(401).json({ message: "Unauthorized: No student ID" });
+    }
+
+    // Load only cohorts containing this student
+    const cohorts = await Cohort.find({
+      "studentIds.studentId": studentId,
+    })
       .populate({
         path: "courses.courseId",
         select: "name duration category",
@@ -495,68 +504,48 @@ export const getCoachesAssignedToStudents = async (req, res) => {
         select: "fullName email profilePhoto",
       });
 
-    const results = [];
+    let assignedCoaches = [];
 
     for (const cohort of cohorts) {
-      for (const studentEntry of cohort.studentIds) {
-        const student = studentEntry.studentId;
-        if (!student) continue;
+      const studentEntry = cohort.studentIds.find(
+        (s) => s.studentId && s.studentId._id.toString() === studentId
+      );
 
-        const studentData = {
-          studentId: student._id,
-          fullName: student.fullName,
-          email: student.email,
-          profilePhoto: student.profilePhoto,
-          assignedCoaches: [],
-        };
+      if (!studentEntry) continue;
 
-        // Loop through all enrolled courses for the student
-        for (const enroll of studentEntry.enrollments) {
-          // Only show coach AFTER payment is confirmed for that course
-          if (!enroll.paid || !enroll.paymentConfirmed) continue;
+      for (const enroll of studentEntry.enrollments) {
+        if (!enroll.paid || !enroll.paymentConfirmed) continue;
 
-          // Locate the course in cohort.courses
-          const courseMatch = cohort.courses.find(
-            (c) =>
-              c.courseId &&
-              c.courseId._id.toString() === enroll.courseId.toString()
-          );
-          if (!courseMatch) continue;
+        const courseMatch = cohort.courses.find(
+          (c) =>
+            c.courseId &&
+            c.courseId._id.toString() === enroll.courseId.toString()
+        );
 
-          // Only return ACTIVE courses
-          if (courseMatch.status === "completed") continue;
+        if (!courseMatch) continue;
+        if (courseMatch.status !== "in_progress") continue;
 
-          // Return only active (in_progress) coaches
-          if (courseMatch.status !== "in_progress") continue;
-
-          studentData.assignedCoaches.push({
-            courseId: courseMatch.courseId._id,
-            courseName: courseMatch.courseId.name,
-            courseCategory: courseMatch.courseId.category,
-            coachId: courseMatch.coachId?._id,
-            coachName: courseMatch.coachId?.fullName,
-            coachEmail: courseMatch.coachId?.email,
-            coachPhoto: courseMatch.coachId?.profilePhoto,
-            courseStatus: courseMatch.status,
-          });
-        }
-
-        if (studentData.assignedCoaches.length > 0) {
-          results.push(studentData);
-        }
+        assignedCoaches.push({
+          courseId: courseMatch.courseId._id,
+          courseName: courseMatch.courseId.name,
+          courseCategory: courseMatch.courseId.category,
+          coachId: courseMatch.coachId?._id,
+          coachName: courseMatch.coachId?.fullName,
+          coachEmail: courseMatch.coachId?.email,
+          coachPhoto: courseMatch.coachId?.profilePhoto,
+          courseStatus: courseMatch.status,
+        });
       }
     }
 
     return res.status(200).json({
-      message: "Coaches assigned to students fetched successfully",
-      students: results,
+      message: "Assigned coaches fetched successfully",
+      studentId,
+      coaches: assignedCoaches,
     });
   } catch (error) {
-    console.error("❌ Error fetching coaches assigned to students:", error);
-    return res.status(500).json({
-      message: "Server error",
-      error: error.message,
-    });
+    console.error("❌ Error fetching coaches for student:", error);
+    return res.status(500).json({ message: "Server error" });
   }
 };
 
