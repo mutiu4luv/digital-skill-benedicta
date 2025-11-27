@@ -645,3 +645,54 @@ export const getNotActiveCohort = async (req, res) => {
 //     });
 //   }
 // };
+
+//  get available cohorts with not started courses for students to register
+
+export const getAvailableCohorts = async (req, res) => {
+  try {
+    // 1️⃣ Fetch all cohorts that have at least ONE course not started
+    const cohorts = await Cohort.find({
+      "courses.status": "not_started",
+    })
+      .populate("courses.courseId")
+      .populate("courses.coachId")
+      .select("name startDate endDate courses");
+
+    // If no available cohorts
+    if (!cohorts || cohorts.length === 0) {
+      return res.status(200).json({ cohorts: [] });
+    }
+
+    // 2️⃣ Format clean response
+    const availableCohorts = cohorts.map((cohort) => {
+      const notStartedCourses = cohort.courses
+        .filter((c) => c.status === "not_started")
+        .map((c) => ({
+          courseId: c.courseId._id,
+          name: c.courseId.name,
+          category: c.courseId.category,
+          duration: c.durationInDays + " days",
+          coachId: c.coachId._id,
+          coachName: c.coachId.fullName,
+          coachEmail: c.coachId.email,
+          coachPhone: c.coachId.phoneNumber,
+          status: c.status,
+          startDate: c.startDate,
+          endDate: c.endDate,
+        }));
+
+      return {
+        cohortId: cohort._id,
+        cohortName: cohort.name,
+        startDate: cohort.startDate,
+        endDate: cohort.endDate,
+        courses: notStartedCourses,
+      };
+    });
+
+    return res.status(200).json({ cohorts: availableCohorts });
+  } catch (err) {
+    console.error("getAvailableCohorts Error:", err);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+};
