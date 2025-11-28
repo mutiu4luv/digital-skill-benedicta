@@ -2,19 +2,20 @@ import mongoose from "mongoose";
 
 const announcementSchema = new mongoose.Schema(
   {
-    title: {
+    title: { type: String, required: true },
+    message: { type: String, required: true },
+
+    button: {
       type: String,
-      required: false,
+      enum: ["whatsapp", "telegram", "youtube", null],
+      default: null,
     },
-    message: {
-      type: String,
-      required: true,
-    },
-    createdBy: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "User",
-      required: true,
-    },
+
+    whatsappLink: { type: String },
+    telegramLink: { type: String },
+    youtubeLink: { type: String },
+
+    createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
   },
   { timestamps: true }
 );
