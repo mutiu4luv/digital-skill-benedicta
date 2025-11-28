@@ -4,30 +4,29 @@ import Cohort from "../module/cohort.js";
 export const createCohortAssignment = async (req, res) => {
   try {
     const coachId = req.user.id;
-    const { cohortId, courseId, title, description, dueDate } = req.body;
+    const { cohortId, title, description, dueDate } = req.body;
 
-    if (!cohortId || !courseId || !title) {
+    if (!cohortId || !title) {
       return res.status(400).json({
-        message: "cohortId, courseId and title are required",
+        message: "cohortId and title are required",
       });
     }
 
     const cohort = await Cohort.findById(cohortId);
     if (!cohort) return res.status(404).json({ message: "Cohort not found" });
 
-    // Check if course exists in cohort under this coach
+    // Find the course that belongs to this coach
     const courseInCohort = cohort.courses.find(
-      (c) =>
-        c.courseId.toString() === courseId && c.coachId.toString() === coachId
+      (c) => c.coachId.toString() === coachId
     );
 
     if (!courseInCohort) {
       return res.status(403).json({
-        message: "You are not the coach for this course in this cohort",
+        message: "You do not have any course in this cohort",
       });
     }
 
-    // 🚫 Stop coach from creating assignment if course has ended
+    // Prevent assignment if course is completed
     if (courseInCohort.status === "completed") {
       return res.status(403).json({
         message:
@@ -35,19 +34,20 @@ export const createCohortAssignment = async (req, res) => {
       });
     }
 
-    // Create assignment
+    // Use the courseId automatically
     const assignment = await Assignment.create({
       title,
       description,
       cohortId,
-      courseId,
+      courseId: courseInCohort.courseId, // grabbed automatically
       coachId,
       dueDate,
     });
 
-    return res
-      .status(201)
-      .json({ message: "Assignment created successfully", assignment });
+    return res.status(201).json({
+      message: "Assignment created successfully",
+      assignment,
+    });
   } catch (err) {
     console.error("Create Assignment Error:", err);
     return res.status(500).json({
@@ -56,6 +56,7 @@ export const createCohortAssignment = async (req, res) => {
     });
   }
 };
+
 // student assignments get controller
 export const getStudentAssignments = async (req, res) => {
   try {
