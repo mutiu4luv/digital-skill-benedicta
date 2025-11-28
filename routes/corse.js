@@ -6,6 +6,7 @@ import {
   setClassSchedule,
   getMyCourses,
   deleteCourse,
+  getCoachCourses,
 } from "../controller/corse.js";
 import { authorizeRoles, protect } from "../middleware/authMiddleware.js";
 import upload from "../middleware/multer.js";
@@ -50,6 +51,7 @@ router.get(
   getMyCourses
 );
 router.delete("/:courseId", protect, authorizeRoles("owner"), deleteCourse);
+router.get("/coach-courses", protect, getCoachCourses);
 
 // Owner assigns coach
 router.put("/assign-coach", protect, authorizeRoles("owner"), assignCoach);

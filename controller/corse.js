@@ -183,3 +183,45 @@ export const deleteCourse = async (req, res) => {
       .json({ message: "Failed to delete course", error: error.message });
   }
 };
+
+// GET COACH'S COURSES
+
+export const getCoachCourses = async (req, res) => {
+  try {
+    const coachId = req.user.id;
+
+    // Find all cohorts where this coach teaches at least one course
+    const cohorts = await Cohort.find({
+      "courses.coachId": coachId,
+    })
+      .populate("courses.courseId")
+      .populate("courses.coachId");
+
+    let myCourses = [];
+
+    cohorts.forEach((cohort) => {
+      cohort.courses.forEach((c) => {
+        if (c.coachId?._id.toString() === coachId) {
+          myCourses.push({
+            cohortId: cohort._id,
+            cohortName: cohort.name,
+            courseId: c.courseId._id,
+            courseName: c.courseId.name,
+            status: c.status,
+          });
+        }
+      });
+    });
+
+    return res.status(200).json({
+      message: "Coach courses fetched successfully",
+      courses: myCourses,
+    });
+  } catch (err) {
+    console.error("Get Coach Courses Error:", err);
+    return res.status(500).json({
+      message: "Server error",
+      error: err.message,
+    });
+  }
+};
