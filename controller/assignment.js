@@ -88,7 +88,9 @@ export const getStudentAssignments = async (req, res) => {
       const assignments = await Assignment.find({
         cohortId: cohort._id,
         courseId: { $in: allowedCourseIds },
-      }).populate("courseId coachId", "name fullName");
+      })
+        .populate("courseId", "name category duration") // ✅ FIX HERE
+        .populate("coachId", "fullName"); // coach info
 
       allowedAssignments.push(...assignments);
     }
