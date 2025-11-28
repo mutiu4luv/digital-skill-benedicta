@@ -60,40 +60,40 @@ export const createCohortAssignment = async (req, res) => {
 export const getStudentAssignments = async (req, res) => {
   try {
     const studentId = req.user.id;
-    const { cohortId } = req.params;
 
-    const cohort = await Cohort.findById(cohortId);
-    if (!cohort) return res.status(404).json({ message: "Cohort not found" });
+    // Get all cohorts where the student is enrolled
+    const cohorts = await Cohort.find({
+      "studentIds.studentId": studentId,
+    });
 
-    // Find student record
-    const student = cohort.studentIds.find(
-      (s) => s.studentId.toString() === studentId.toString()
-    );
-
-    if (!student) {
-      return res.status(403).json({
-        message: "You are not enrolled in this cohort",
-      });
+    if (!cohorts.length) {
+      return res
+        .status(404)
+        .json({ message: "You are not enrolled in any cohort" });
     }
 
-    // Filter for ONLY paid + confirmed + access enrollments
-    const allowedCourseIds = student.enrollments
-      .filter((e) => e.paid && e.paymentConfirmed && e.hasAccess)
-      .map((e) => e.courseId.toString());
+    // Collect all allowed course IDs across all cohorts
+    let allowedAssignments = [];
+    for (const cohort of cohorts) {
+      const student = cohort.studentIds.find(
+        (s) => s.studentId.toString() === studentId.toString()
+      );
 
-    if (allowedCourseIds.length === 0) {
-      return res.status(403).json({
-        message: "You do not have access to view assignments",
-      });
+      const allowedCourseIds = student.enrollments
+        .filter((e) => e.paid && e.paymentConfirmed && e.hasAccess)
+        .map((e) => e.courseId.toString());
+
+      if (allowedCourseIds.length === 0) continue;
+
+      const assignments = await Assignment.find({
+        cohortId: cohort._id,
+        courseId: { $in: allowedCourseIds },
+      }).populate("courseId coachId", "name fullName");
+
+      allowedAssignments.push(...assignments);
     }
 
-    // Fetch assignments for these courses
-    const assignments = await Assignment.find({
-      cohortId,
-      courseId: { $in: allowedCourseIds },
-    }).populate("courseId coachId", "name fullName");
-
-    return res.status(200).json({ assignments });
+    return res.status(200).json({ assignments: allowedAssignments });
   } catch (err) {
     console.error("Get Student Assignments Error:", err);
     return res
