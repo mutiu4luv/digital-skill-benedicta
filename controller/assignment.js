@@ -103,3 +103,64 @@ export const getStudentAssignments = async (req, res) => {
       .json({ message: "Server error", error: err.message });
   }
 };
+
+export const submitAssignment = async (req, res) => {
+  try {
+    const studentId = req.user.id;
+    const { assignmentId } = req.params;
+    const file = req.file;
+    if (!assignmentId) {
+      return res.status(400).json({ message: "Assignment ID is required" });
+    }
+
+    if (!file) {
+      return res.status(400).json({ message: "Submission file is required" });
+    }
+
+    const assignment = await Assignment.findById(assignmentId);
+
+    if (!assignment) {
+      return res.status(404).json({ message: "Assignment not found" });
+    }
+
+    const now = new Date();
+
+    // Check if assignment is expired
+    if (assignment.dueDate && assignment.dueDate < now) {
+      assignment.isExpired = true; // optional: store expiry in DB
+      await assignment.save();
+      return res.status(403).json({
+        message:
+          "Assignment has expired! Please submit before the due date elapses.",
+      });
+    }
+
+    // Check if student already submitted
+    const alreadySubmitted = assignment.submissions.some(
+      (s) => s.student.toString() === studentId
+    );
+    if (alreadySubmitted) {
+      return res.status(400).json({
+        message: "You have already submitted this assignment",
+      });
+    }
+
+    // Add submission
+    assignment.submissions.push({
+      student: studentId,
+      fileUrl: file.path, // or your storage URL
+      submittedAt: now,
+    });
+
+    await assignment.save();
+
+    return res.status(200).json({
+      message: "Assignment submitted successfully!",
+    });
+  } catch (err) {
+    console.error("Submit Assignment Error:", err);
+    return res
+      .status(500)
+      .json({ message: "Server error", error: err.message });
+  }
+};
