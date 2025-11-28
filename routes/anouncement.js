@@ -12,6 +12,6 @@ const router = express.Router();
 router.post("/", protect, authorizeRoles("owner"), createAnnouncement);
 
 // All users can view announcements
-router.get("/", protect, getAnnouncements);
+router.get("/", getAnnouncements);
 
 export default router;
