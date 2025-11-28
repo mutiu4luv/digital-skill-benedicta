@@ -599,3 +599,20 @@ export const getAvailableCohorts = async (req, res) => {
     return res.status(500).json({ message: "Internal server error" });
   }
 };
+
+export const getCohortCourses = async (req, res) => {
+  try {
+    const cohort = await Cohort.findById(req.params.id)
+      .populate("courses.courseId")
+      .populate("courses.coachId");
+
+    if (!cohort) {
+      return res.status(404).json({ message: "Cohort not found" });
+    }
+
+    return res.json({ courses: cohort.courses });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ message: "Server error" });
+  }
+};
