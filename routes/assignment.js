@@ -3,13 +3,13 @@ import {
   createCohortAssignment,
   getStudentAssignments,
 } from "../controller/assignment.js";
-import { protect } from "../middleware/authMiddleware.js";
+import { authorizeRoles, protect } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
 
 // POST: /api/cohort/assignment
-router.post("/", protect, createCohortAssignment);
+router.post("/", protect, authorizeRoles("coach"), createCohortAssignment);
 
-router.get("/student/:cohortId", protect, getStudentAssignments);
+router.get("/student", protect, getStudentAssignments);
 
 export default router;
