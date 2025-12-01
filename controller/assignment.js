@@ -110,6 +110,7 @@ export const submitAssignment = async (req, res) => {
     const studentId = req.user.id;
     const { assignmentId } = req.params;
     const file = req.file;
+
     if (!assignmentId) {
       return res.status(400).json({ message: "Assignment ID is required" });
     }
@@ -118,6 +119,7 @@ export const submitAssignment = async (req, res) => {
       return res.status(400).json({ message: "Submission file is required" });
     }
 
+    // 1️⃣ Find assignment
     const assignment = await Assignment.findById(assignmentId);
 
     if (!assignment) {
@@ -126,42 +128,100 @@ export const submitAssignment = async (req, res) => {
 
     const now = new Date();
 
-    // Check if assignment is expired
+    // 2️⃣ Check expiry
     if (assignment.dueDate && assignment.dueDate < now) {
-      assignment.isExpired = true; // optional: store expiry in DB
+      assignment.isExpired = true;
       await assignment.save();
+
       return res.status(403).json({
         message:
           "Assignment has expired! Please submit before the due date elapses.",
       });
     }
 
-    // Check if student already submitted
+    // 3️⃣ Check if student already submitted
     const alreadySubmitted = assignment.submissions.some(
-      (s) => s.student.toString() === studentId
+      (s) => s.student?.toString() === studentId
     );
+
     if (alreadySubmitted) {
       return res.status(400).json({
         message: "You have already submitted this assignment",
       });
     }
 
-    // Add submission
+    // 4️⃣ Push valid submission
     assignment.submissions.push({
       student: studentId,
-      fileUrl: file.path, // or your storage URL
+      fileUrl: file.path, // If you're using Cloudinary/S3, replace with secure_url
       submittedAt: now,
+      grade: null,
     });
 
     await assignment.save();
 
     return res.status(200).json({
       message: "Assignment submitted successfully!",
+      submission: {
+        student: studentId,
+        fileUrl: file.path,
+        submittedAt: now,
+      },
     });
   } catch (err) {
     console.error("Submit Assignment Error:", err);
-    return res
-      .status(500)
-      .json({ message: "Server error", error: err.message });
+    return res.status(500).json({
+      message: "Server error",
+      error: err.message,
+    });
+  }
+};
+
+// GET ASSIGNMENTS SUBMITTED BY STUDENTS FOR A COACH
+export const getCoachAssignments = async (req, res) => {
+  try {
+    const coachId = req.user.id;
+
+    // 1️⃣ Find cohorts coach teaches
+    const cohorts = await Cohort.find({ coachId });
+    const cohortIds = cohorts.map((c) => c._id);
+
+    if (cohortIds.length === 0) {
+      return res.json({ assignments: [] });
+    }
+
+    // 2️⃣ Find assignments inside those cohorts that belong to this coach
+    const assignments = await Assignment.find({
+      coachId,
+      cohortId: { $in: cohortIds },
+      "submissions.0": { $exists: true },
+    })
+      .populate("submissions.student", "fullName email")
+      .populate("cohortId", "cohortName");
+
+    // 3️⃣ Flatten submissions
+    const submissionsList = assignments.flatMap((a) =>
+      a.submissions.map((s) => ({
+        assignmentId: a._id,
+        title: a.title,
+        description: a.description,
+        dueDate: a.dueDate,
+        cohort: a.cohortId?.cohortName,
+        student: s.student
+          ? {
+              _id: s.student._id,
+              fullName: s.student.fullName,
+              email: s.student.email,
+            }
+          : null,
+        grade: s.grade,
+        submittedAt: s.submittedAt,
+      }))
+    );
+
+    res.json({ assignments: submissionsList });
+  } catch (err) {
+    console.error("Error fetching student assignments:", err);
+    res.status(500).json({ message: "Server error" });
   }
 };

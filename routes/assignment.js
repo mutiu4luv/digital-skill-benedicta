@@ -1,6 +1,7 @@
 import express from "express";
 import {
   createCohortAssignment,
+  getCoachAssignments,
   getStudentAssignments,
   submitAssignment,
 } from "../controller/assignment.js";
@@ -19,6 +20,12 @@ router.post(
   protect,
   upload.single("file"),
   submitAssignment
+);
+router.get(
+  "/coach-assignments",
+  protect,
+  // authorizeRoles("coach"),
+  getCoachAssignments
 );
 
 export default router;
