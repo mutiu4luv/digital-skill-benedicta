@@ -58,51 +58,44 @@ export const createCohortAssignment = async (req, res) => {
 };
 
 // student assignments get controller
-
 export const getStudentAssignments = async (req, res) => {
   try {
     const studentId = req.user.id;
 
-    // 1️⃣ Find all cohorts the student is enrolled in
-    const cohorts = await Assignment.find({
+    // Get all cohorts where the student is enrolled
+    const cohorts = await Cohort.find({
       "studentIds.studentId": studentId,
     });
 
     if (!cohorts.length) {
-      return res.status(404).json({
-        message: "You are not enrolled in any cohort",
-        assignments: [],
-      });
+      return res
+        .status(404)
+        .json({ message: "You are not enrolled in any cohort" });
     }
 
+    // Collect all allowed course IDs across all cohorts
     let allowedAssignments = [];
-
     for (const cohort of cohorts) {
-      const studentRecord = cohort.studentIds.find(
+      const student = cohort.studentIds.find(
         (s) => s.studentId.toString() === studentId.toString()
       );
 
-      if (!studentRecord || !Array.isArray(studentRecord.enrollments)) continue;
-
-      // 2️⃣ Filter enrollments the student has access to
-      const allowedCourseIds = studentRecord.enrollments
+      const allowedCourseIds = student.enrollments
         .filter((e) => e.paid && e.paymentConfirmed && e.hasAccess)
-        .map((e) => mongoose.Types.ObjectId(e.courseId));
+        .map((e) => e.courseId.toString());
 
       if (allowedCourseIds.length === 0) continue;
 
-      // 3️⃣ Fetch assignments for allowed courses in this cohort
       const assignments = await Assignment.find({
         cohortId: cohort._id,
         courseId: { $in: allowedCourseIds },
       })
-        .populate("courseId", "name category duration") // populate course info
-        .populate("coachId", "fullName"); // populate coach info
+        .populate("courseId", "name category duration") // ✅ FIX HERE
+        .populate("coachId", "fullName"); // coach info
 
       allowedAssignments.push(...assignments);
     }
 
-    // 4️⃣ Return the assignments (empty array if none)
     return res.status(200).json({ assignments: allowedAssignments });
   } catch (err) {
     console.error("Get Student Assignments Error:", err);
@@ -111,6 +104,7 @@ export const getStudentAssignments = async (req, res) => {
       .json({ message: "Server error", error: err.message });
   }
 };
+
 export const submitAssignment = async (req, res) => {
   try {
     const studentId = req.user.id;
