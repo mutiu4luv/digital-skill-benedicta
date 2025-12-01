@@ -64,7 +64,7 @@ export const getStudentAssignments = async (req, res) => {
     const studentId = req.user.id;
 
     // 1️⃣ Find all cohorts the student is enrolled in
-    const cohorts = await Cohort.find({
+    const cohorts = await Assignment.find({
       "studentIds.studentId": studentId,
     });
 
