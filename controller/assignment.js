@@ -105,6 +105,7 @@ export const getStudentAssignments = async (req, res) => {
   }
 };
 
+// submit assignment by student
 export const submitAssignment = async (req, res) => {
   try {
     const studentId = req.user.id;
@@ -162,11 +163,8 @@ export const submitAssignment = async (req, res) => {
 
     return res.status(200).json({
       message: "Assignment submitted successfully!",
-      submission: {
-        student: studentId,
-        fileUrl: file.path,
-        submittedAt: now,
-      },
+      fileUrl: file.path,
+      submittedAt: now,
     });
   } catch (err) {
     console.error("Submit Assignment Error:", err);
