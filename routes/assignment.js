@@ -11,7 +11,13 @@ import upload from "../middleware/multer.js";
 const router = express.Router();
 
 // POST: /api/cohort/assignment
-router.post("/", protect, authorizeRoles("coach"), createCohortAssignment);
+router.post(
+  "/",
+  protect,
+  authorizeRoles("coach"),
+  upload.single("file"),
+  createCohortAssignment
+);
 
 router.get("/student", protect, getStudentAssignments);
 // submit assigment by student

@@ -1,21 +1,23 @@
 import Assignment from "../module/cohortAssignment.js";
 import Cohort from "../module/cohort.js";
-// import mongoose from "mongoose";
+import cloudinary from "../config/cloudnary.js";
+import fs from "fs";
+
+// Controller to create an assignment with optional file upload
 export const createCohortAssignment = async (req, res) => {
   try {
     const coachId = req.user.id;
     const { cohortId, title, description, dueDate } = req.body;
 
     if (!cohortId || !title) {
-      return res.status(400).json({
-        message: "cohortId and title are required",
-      });
+      return res
+        .status(400)
+        .json({ message: "cohortId and title are required" });
     }
 
     const cohort = await Cohort.findById(cohortId);
     if (!cohort) return res.status(404).json({ message: "Cohort not found" });
 
-    // Find the course that belongs to this coach
     const courseInCohort = cohort.courses.find(
       (c) => c.coachId.toString() === coachId
     );
@@ -26,7 +28,6 @@ export const createCohortAssignment = async (req, res) => {
       });
     }
 
-    // Prevent assignment if course is completed
     if (courseInCohort.status === "completed") {
       return res.status(403).json({
         message:
@@ -34,14 +35,27 @@ export const createCohortAssignment = async (req, res) => {
       });
     }
 
-    // Use the courseId automatically
+    // ✅ Upload file to Cloudinary if exists
+    let fileUrl = null;
+    if (req.file) {
+      const result = await cloudinary.uploader.upload(req.file.path, {
+        folder: "assignments", // optional: organize in a folder
+        resource_type: "auto", // supports all file types
+      });
+      fileUrl = result.secure_url;
+
+      // Optionally delete the local file after uploading
+      fs.unlinkSync(req.file.path);
+    }
+
     const assignment = await Assignment.create({
       title,
       description,
       cohortId,
-      courseId: courseInCohort.courseId, // grabbed automatically
+      courseId: courseInCohort.courseId,
       coachId,
       dueDate,
+      file: fileUrl, // store cloudinary URL in DB
     });
 
     return res.status(201).json({
@@ -50,10 +64,9 @@ export const createCohortAssignment = async (req, res) => {
     });
   } catch (err) {
     console.error("Create Assignment Error:", err);
-    return res.status(500).json({
-      message: "Server error",
-      error: err.message,
-    });
+    return res
+      .status(500)
+      .json({ message: "Server error", error: err.message });
   }
 };
 
@@ -146,10 +159,19 @@ export const submitAssignment = async (req, res) => {
       });
     }
 
-    // 4️⃣ Save submission (MATCH SCHEMA)
+    // 4️⃣ Upload submission to Cloudinary
+    const result = await cloudinary.uploader.upload(file.path, {
+      folder: "assignment_submissions",
+      resource_type: "auto", // supports all file types
+    });
+
+    // Delete local file after upload
+    fs.unlinkSync(file.path);
+
+    // 5️⃣ Save submission in DB
     assignment.submissions.push({
-      studentId: studentId, // ✔ matches schema
-      file: file.path, // ✔ matches schema (Cloudinary secure_url optional)
+      studentId: studentId,
+      file: result.secure_url, // Cloudinary URL
       submittedAt: now,
       grade: null,
     });
@@ -158,7 +180,7 @@ export const submitAssignment = async (req, res) => {
 
     return res.status(200).json({
       message: "Assignment submitted successfully!",
-      file: file.path,
+      file: result.secure_url,
       submittedAt: now,
     });
   } catch (err) {
@@ -169,7 +191,6 @@ export const submitAssignment = async (req, res) => {
     });
   }
 };
-
 // GET ASSIGNMENTS SUBMITTED BY STUDENTS FOR A COACH
 export const getCoachAssignments = async (req, res) => {
   try {
