@@ -175,47 +175,38 @@ export const getCoachAssignments = async (req, res) => {
   try {
     const coachId = req.user.id;
 
-    // 1️⃣ Get cohorts the coach teaches
-    const cohorts = await Cohort.find({ coachId });
-    const cohortIds = cohorts.map((c) => c._id);
-
-    if (cohortIds.length === 0) {
-      return res.json({ assignments: [] });
-    }
-
-    // 2️⃣ Get assignments and populate submissions.studentId
-    const assignments = await Assignment.find({
-      coachId,
-      cohortId: { $in: cohortIds },
-    })
+    const assignments = await Assignment.find({ coachId })
       .populate("submissions.studentId", "fullName email")
       .populate("cohortId", "cohortName");
 
-    // 3️⃣ Format for frontend
-    const assignmentsList = assignments.map((a) => ({
-      assignmentId: a._id,
-      title: a.title,
-      description: a.description,
-      dueDate: a.dueDate,
-      cohort: a.cohortId?.cohortName,
-      submissions: a.submissions.map((s) => ({
-        student: s.studentId
-          ? {
-              _id: s.studentId._id,
-              fullName: s.studentId.fullName,
-              email: s.studentId.email,
-            }
-          : null,
-        file: s.file,
-        grade: s.grade,
-        feedback: s.feedback,
-        submittedAt: s.submittedAt,
-      })),
-    }));
+    const assignmentsList = assignments
+      .filter((a) => a.submissions.length > 0) // only assignments with submissions
+      .map((a) => ({
+        assignmentId: a._id,
+        title: a.title,
+        description: a.description,
+        dueDate: a.dueDate,
+        cohort: a.cohortId?.cohortName || null,
+        submissions: a.submissions.map((s) => ({
+          student: s.studentId
+            ? {
+                _id: s.studentId._id,
+                fullName: s.studentId.fullName,
+                email: s.studentId.email,
+              }
+            : null,
+          file: s.file,
+          grade: s.grade,
+          feedback: s.feedback,
+          submittedAt: s.submittedAt,
+        })),
+      }));
 
-    res.json({ assignments: assignmentsList });
+    return res.json({ assignments: assignmentsList });
   } catch (err) {
     console.error("Error fetching coach assignments:", err);
-    res.status(500).json({ message: "Server error" });
+    return res
+      .status(500)
+      .json({ message: "Server error", error: err.message });
   }
 };
