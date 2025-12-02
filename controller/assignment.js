@@ -298,35 +298,3 @@ export const submitAssignmentGrade = async (req, res) => {
       .json({ message: "Server error", error: err.message });
   }
 };
-
-// ✅ Student fetches their assignments and grades
-// export const getStudentAssignments = async (req, res) => {
-//   try {
-//     const studentId = req.user.id;
-
-//     const assignments = await Assignment.find({
-//       "submissions.studentId": studentId,
-//     }).select("-__v");
-
-//     const formatted = assignments.map((a) => {
-//       const submission = a.submissions.find(
-//         (s) => s.studentId?.toString() === studentId
-//       );
-//       return {
-//         assignmentId: a._id,
-//         title: a.title,
-//         description: a.description,
-//         dueDate: a.dueDate,
-//         grade: submission?.grade || null,
-//         status: submission ? "submitted" : "pending",
-//         file: submission?.file || null,
-//         submittedAt: submission?.submittedAt || null,
-//       };
-//     });
-
-//     res.status(200).json({ assignments: formatted });
-//   } catch (err) {
-//     console.error("Get Student Assignments Error:", err);
-//     res.status(500).json({ message: "Server error", error: err.message });
-//   }
-// };
