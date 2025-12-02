@@ -122,7 +122,6 @@ export const submitAssignment = async (req, res) => {
 
     // 1️⃣ Find assignment
     const assignment = await Assignment.findById(assignmentId);
-
     if (!assignment) {
       return res.status(404).json({ message: "Assignment not found" });
     }
@@ -131,18 +130,14 @@ export const submitAssignment = async (req, res) => {
 
     // 2️⃣ Check expiry
     if (assignment.dueDate && assignment.dueDate < now) {
-      assignment.isExpired = true;
-      await assignment.save();
-
       return res.status(403).json({
-        message:
-          "Assignment has expired! Please submit before the due date elapses.",
+        message: "Assignment has expired! Please submit before the due date.",
       });
     }
 
     // 3️⃣ Check if student already submitted
     const alreadySubmitted = assignment.submissions.some(
-      (s) => s.student?.toString() === studentId
+      (s) => s.studentId?.toString() === studentId
     );
 
     if (alreadySubmitted) {
@@ -151,10 +146,10 @@ export const submitAssignment = async (req, res) => {
       });
     }
 
-    // 4️⃣ Push valid submission
+    // 4️⃣ Save submission (MATCH SCHEMA)
     assignment.submissions.push({
-      student: studentId,
-      fileUrl: file.path, // If you're using Cloudinary/S3, replace with secure_url
+      studentId: studentId, // ✔ matches schema
+      file: file.path, // ✔ matches schema (Cloudinary secure_url optional)
       submittedAt: now,
       grade: null,
     });
@@ -163,7 +158,7 @@ export const submitAssignment = async (req, res) => {
 
     return res.status(200).json({
       message: "Assignment submitted successfully!",
-      fileUrl: file.path,
+      file: file.path,
       submittedAt: now,
     });
   } catch (err) {
@@ -180,7 +175,7 @@ export const getCoachAssignments = async (req, res) => {
   try {
     const coachId = req.user.id;
 
-    // 1️⃣ Find cohorts coach teaches
+    // 1️⃣ Find cohorts the coach teaches
     const cohorts = await Cohort.find({ coachId });
     const cohortIds = cohorts.map((c) => c._id);
 
@@ -188,23 +183,22 @@ export const getCoachAssignments = async (req, res) => {
       return res.json({ assignments: [] });
     }
 
-    // 2️⃣ Find assignments inside those cohorts that belong to this coach
+    // 2️⃣ Find all assignments for these cohorts and this coach
     const assignments = await Assignment.find({
       coachId,
       cohortId: { $in: cohortIds },
-      "submissions.0": { $exists: true },
     })
       .populate("submissions.student", "fullName email")
       .populate("cohortId", "cohortName");
 
-    // 3️⃣ Flatten submissions
-    const submissionsList = assignments.flatMap((a) =>
-      a.submissions.map((s) => ({
-        assignmentId: a._id,
-        title: a.title,
-        description: a.description,
-        dueDate: a.dueDate,
-        cohort: a.cohortId?.cohortName,
+    // 3️⃣ Format data for frontend
+    const assignmentsList = assignments.map((a) => ({
+      assignmentId: a._id,
+      title: a.title,
+      description: a.description,
+      dueDate: a.dueDate,
+      cohort: a.cohortId?.cohortName,
+      submissions: a.submissions.map((s) => ({
         student: s.student
           ? {
               _id: s.student._id,
@@ -214,12 +208,12 @@ export const getCoachAssignments = async (req, res) => {
           : null,
         grade: s.grade,
         submittedAt: s.submittedAt,
-      }))
-    );
+      })),
+    }));
 
-    res.json({ assignments: submissionsList });
+    res.json({ assignments: assignmentsList });
   } catch (err) {
-    console.error("Error fetching student assignments:", err);
+    console.error("Error fetching coach assignments:", err);
     res.status(500).json({ message: "Server error" });
   }
 };
