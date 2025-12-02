@@ -86,8 +86,8 @@ export const getStudentAssignments = async (req, res) => {
         .json({ message: "You are not enrolled in any cohort" });
     }
 
-    // Collect all allowed course IDs across all cohorts
     let allowedAssignments = [];
+
     for (const cohort of cohorts) {
       const student = cohort.studentIds.find(
         (s) => s.studentId.toString() === studentId.toString()
@@ -103,10 +103,29 @@ export const getStudentAssignments = async (req, res) => {
         cohortId: cohort._id,
         courseId: { $in: allowedCourseIds },
       })
-        .populate("courseId", "name category duration") // ✅ FIX HERE
-        .populate("coachId", "fullName"); // coach info
+        .populate("courseId", "name category duration") // populate course details
+        .populate("coachId", "fullName"); // populate coach info
 
-      allowedAssignments.push(...assignments);
+      // Transform assignments to include courseName for frontend
+      const formattedAssignments = assignments.map((a) => {
+        // Find student submission if exists
+        const submission = a.submissions.find(
+          (s) => s.studentId?.toString() === studentId.toString()
+        );
+
+        return {
+          assignmentId: a._id,
+          title: a.title,
+          description: a.description,
+          courseName: a.courseId?.name || "N/A", // populated course name
+          dueDate: a.dueDate,
+          file: submission?.file || null,
+          status: submission ? "Submitted" : "Pending",
+          grade: submission?.grade || "-",
+        };
+      });
+
+      allowedAssignments.push(...formattedAssignments);
     }
 
     return res.status(200).json({ assignments: allowedAssignments });
@@ -196,10 +215,13 @@ export const getCoachAssignments = async (req, res) => {
   try {
     const coachId = req.user.id;
 
+    // Fetch all assignments created by this coach
     const assignments = await Assignment.find({ coachId })
       .populate("submissions.studentId", "fullName email")
-      .populate("cohortId", "cohortName");
+      .populate("cohortId", "cohortName") // cohort info
+      .populate("courseId", "name category duration"); // course info
 
+    // Transform assignments for frontend
     const assignmentsList = assignments
       .filter((a) => a.submissions.length > 0) // only assignments with submissions
       .map((a) => ({
@@ -208,6 +230,7 @@ export const getCoachAssignments = async (req, res) => {
         description: a.description,
         dueDate: a.dueDate,
         cohort: a.cohortId?.cohortName || null,
+        courseName: a.courseId?.name || "N/A", // include course name
         submissions: a.submissions.map((s) => ({
           student: s.studentId
             ? {
@@ -223,7 +246,7 @@ export const getCoachAssignments = async (req, res) => {
         })),
       }));
 
-    return res.json({ assignments: assignmentsList });
+    return res.status(200).json({ assignments: assignmentsList });
   } catch (err) {
     console.error("Error fetching coach assignments:", err);
     return res
