@@ -215,22 +215,22 @@ export const getCoachAssignments = async (req, res) => {
   try {
     const coachId = req.user.id;
 
-    // Fetch all assignments created by this coach
+    // Get all assignments created by the coach
     const assignments = await Assignment.find({ coachId })
       .populate("submissions.studentId", "fullName email")
-      .populate("cohortId", "cohortName") // cohort info
-      .populate("courseId", "name category duration"); // course info
+      .populate("cohortId", "cohortName")
+      .populate("courseId", "name category duration");
 
-    // Transform assignments for frontend
     const assignmentsList = assignments
-      .filter((a) => a.submissions.length > 0) // only assignments with submissions
+      .filter((a) => a.submissions.length > 0) // Only assignments with submissions
       .map((a) => ({
         assignmentId: a._id,
         title: a.title,
         description: a.description,
         dueDate: a.dueDate,
-        cohort: a.cohortId?.cohortName || null,
-        courseName: a.courseId?.name || "N/A", // include course name
+        cohort: a.cohortId?.cohortName || "N/A",
+        courseName: a.courseId?.name || "N/A",
+
         submissions: a.submissions.map((s) => ({
           student: s.studentId
             ? {
@@ -238,10 +238,16 @@ export const getCoachAssignments = async (req, res) => {
                 fullName: s.studentId.fullName,
                 email: s.studentId.email,
               }
-            : null,
-          file: s.file,
-          grade: s.grade,
-          feedback: s.feedback,
+            : {
+                _id: null,
+                fullName: "Unknown Student",
+                email: null,
+              },
+
+          studentId: s.studentId?._id || null, // <-- added for frontend consistency
+          file: s.file || null,
+          grade: s.grade ?? null,
+          feedback: s.feedback ?? null,
           submittedAt: s.submittedAt,
         })),
       }));
@@ -249,9 +255,10 @@ export const getCoachAssignments = async (req, res) => {
     return res.status(200).json({ assignments: assignmentsList });
   } catch (err) {
     console.error("Error fetching coach assignments:", err);
-    return res
-      .status(500)
-      .json({ message: "Server error", error: err.message });
+    return res.status(500).json({
+      message: "Server error",
+      error: err.message,
+    });
   }
 };
 
