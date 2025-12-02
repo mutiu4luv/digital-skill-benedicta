@@ -231,3 +231,79 @@ export const getCoachAssignments = async (req, res) => {
       .json({ message: "Server error", error: err.message });
   }
 };
+
+// ✅ Coach grades a student submission
+export const submitAssignmentGrade = async (req, res) => {
+  try {
+    const coachId = req.user.id;
+    const { assignmentId, studentId } = req.params;
+    const { grade } = req.body;
+
+    if (!grade) {
+      return res.status(400).json({ message: "Grade is required" });
+    }
+
+    const assignment = await Assignment.findById(assignmentId);
+    if (!assignment)
+      return res.status(404).json({ message: "Assignment not found" });
+
+    // Optional: Ensure only the coach who created the assignment can grade
+    if (assignment.coachId.toString() !== coachId) {
+      return res.status(403).json({ message: "Unauthorized" });
+    }
+
+    // Find the student's submission
+    const submission = assignment.submissions.find(
+      (s) => s.studentId?.toString() === studentId
+    );
+
+    if (!submission) {
+      return res.status(404).json({ message: "Student submission not found" });
+    }
+
+    // Update grade
+    submission.grade = grade;
+    await assignment.save();
+
+    return res
+      .status(200)
+      .json({ message: "Grade submitted successfully", submission });
+  } catch (err) {
+    console.error("Submit Grade Error:", err);
+    return res
+      .status(500)
+      .json({ message: "Server error", error: err.message });
+  }
+};
+
+// ✅ Student fetches their assignments and grades
+// export const getStudentAssignments = async (req, res) => {
+//   try {
+//     const studentId = req.user.id;
+
+//     const assignments = await Assignment.find({
+//       "submissions.studentId": studentId,
+//     }).select("-__v");
+
+//     const formatted = assignments.map((a) => {
+//       const submission = a.submissions.find(
+//         (s) => s.studentId?.toString() === studentId
+//       );
+//       return {
+//         assignmentId: a._id,
+//         title: a.title,
+//         description: a.description,
+//         dueDate: a.dueDate,
+//         grade: submission?.grade || null,
+//         status: submission ? "submitted" : "pending",
+//         file: submission?.file || null,
+//         submittedAt: submission?.submittedAt || null,
+//       };
+//     });
+
+//     res.status(200).json({ assignments: formatted });
+//   } catch (err) {
+//     console.error("Get Student Assignments Error:", err);
+//     res.status(500).json({ message: "Server error", error: err.message });
+//   }
+// };

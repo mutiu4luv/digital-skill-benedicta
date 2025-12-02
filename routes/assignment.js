@@ -4,6 +4,7 @@ import {
   getCoachAssignments,
   getStudentAssignments,
   submitAssignment,
+  submitAssignmentGrade,
 } from "../controller/assignment.js";
 import { authorizeRoles, protect } from "../middleware/authMiddleware.js";
 import upload from "../middleware/multer.js";
@@ -32,6 +33,13 @@ router.get(
   protect,
   // authorizeRoles("coach"),
   getCoachAssignments
+);
+
+router.put(
+  "/grade/:assignmentId/:studentId",
+  protect,
+  authorizeRoles("coach"),
+  submitAssignmentGrade
 );
 
 export default router;
