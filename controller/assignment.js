@@ -175,7 +175,7 @@ export const getCoachAssignments = async (req, res) => {
   try {
     const coachId = req.user.id;
 
-    // 1️⃣ Find cohorts the coach teaches
+    // 1️⃣ Get cohorts the coach teaches
     const cohorts = await Cohort.find({ coachId });
     const cohortIds = cohorts.map((c) => c._id);
 
@@ -183,15 +183,15 @@ export const getCoachAssignments = async (req, res) => {
       return res.json({ assignments: [] });
     }
 
-    // 2️⃣ Find all assignments for these cohorts and this coach
+    // 2️⃣ Get assignments and populate submissions.studentId
     const assignments = await Assignment.find({
       coachId,
       cohortId: { $in: cohortIds },
     })
-      .populate("submissions.student", "fullName email")
+      .populate("submissions.studentId", "fullName email")
       .populate("cohortId", "cohortName");
 
-    // 3️⃣ Format data for frontend
+    // 3️⃣ Format for frontend
     const assignmentsList = assignments.map((a) => ({
       assignmentId: a._id,
       title: a.title,
@@ -199,14 +199,16 @@ export const getCoachAssignments = async (req, res) => {
       dueDate: a.dueDate,
       cohort: a.cohortId?.cohortName,
       submissions: a.submissions.map((s) => ({
-        student: s.student
+        student: s.studentId
           ? {
-              _id: s.student._id,
-              fullName: s.student.fullName,
-              email: s.student.email,
+              _id: s.studentId._id,
+              fullName: s.studentId.fullName,
+              email: s.studentId.email,
             }
           : null,
+        file: s.file,
         grade: s.grade,
+        feedback: s.feedback,
         submittedAt: s.submittedAt,
       })),
     }));
