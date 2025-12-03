@@ -88,13 +88,19 @@ export const getStudentAssignments = async (req, res) => {
 
     let allowedAssignments = [];
 
+    const now = new Date();
+
     for (const cohort of cohorts) {
+      // Skip cohorts that have ended
+      if (cohort.endDate && cohort.endDate < now) continue;
+
       const student = cohort.studentIds.find(
         (s) => s.studentId.toString() === studentId.toString()
       );
 
+      // Only allow courses where student hasAccess true
       const allowedCourseIds = student.enrollments
-        .filter((e) => e.paid && e.paymentConfirmed && e.hasAccess)
+        .filter((e) => e.hasAccess)
         .map((e) => e.courseId.toString());
 
       if (allowedCourseIds.length === 0) continue;
@@ -103,12 +109,11 @@ export const getStudentAssignments = async (req, res) => {
         cohortId: cohort._id,
         courseId: { $in: allowedCourseIds },
       })
-        .populate("courseId", "name category duration") // populate course details
-        .populate("coachId", "fullName"); // populate coach info
+        .populate("courseId", "name category duration")
+        .populate("coachId", "fullName")
+        .sort({ updatedAt: -1 });
 
-      // Transform assignments to include courseName for frontend
       const formattedAssignments = assignments.map((a) => {
-        // Find student submission if exists
         const submission = a.submissions.find(
           (s) => s.studentId?.toString() === studentId.toString()
         );
@@ -117,12 +122,20 @@ export const getStudentAssignments = async (req, res) => {
           assignmentId: a._id,
           title: a.title,
           description: a.description,
-          courseName: a.courseId?.name || "N/A", // populated course name
+          courseName: a.courseId?.name || "N/A",
           dueDate: a.dueDate,
           file: submission?.file || null,
           status: submission ? "Submitted" : "Pending",
           grade: submission?.grade || "-",
+          updatedAt: a.updatedAt,
         };
+      });
+
+      // Move submitted assignments to the bottom
+      formattedAssignments.sort((a, b) => {
+        if (a.status === "Submitted" && b.status !== "Submitted") return 1;
+        if (b.status === "Submitted" && a.status !== "Submitted") return -1;
+        return b.updatedAt - a.updatedAt;
       });
 
       allowedAssignments.push(...formattedAssignments);
