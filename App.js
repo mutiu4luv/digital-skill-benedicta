@@ -31,6 +31,7 @@ const app = express();
 // ];
 const allowedOrigins = [
   "https://hgsccdigitalskills.com.ng",
+  "http://hgsccdigitalskills.com.ng",
   "http://localhost:5173",
   "https://hgsccdigitalskills.vercel.app",
 ];
