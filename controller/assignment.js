@@ -276,7 +276,10 @@ export const getCoachAssignments = async (req, res) => {
       (a, b) => new Date(b.submittedAt) - new Date(a.submittedAt)
     );
 
-    return res.status(200).json({ submissions: allSubmissions });
+    return res.status(200).json({
+      assignments: assignments,
+      submissions: allSubmissions,
+    });
   } catch (err) {
     console.error("Error fetching coach assignments:", err);
     return res.status(500).json({
