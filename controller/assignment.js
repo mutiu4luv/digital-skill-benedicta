@@ -232,6 +232,7 @@ export const getCoachAssignments = async (req, res) => {
         courseName: a.courseId?.name || "N/A",
 
         submissions: a.submissions.map((s) => ({
+          // Always return a clean student object
           student: s.studentId
             ? {
                 _id: s.studentId._id,
@@ -244,11 +245,15 @@ export const getCoachAssignments = async (req, res) => {
                 email: null,
               },
 
-          studentId: s.studentId?._id || null, // <-- added for frontend consistency
+          studentId: s.studentId?._id || null,
           file: s.file || null,
-          grade: s.grade ?? null,
+
+          // ⭐ FIX: Ensure grade ALWAYS returns real number
+          grade: s.grade !== undefined ? s.grade : null,
+
           feedback: s.feedback ?? null,
           submittedAt: s.submittedAt,
+          submissionId: s._id, // OPTIONAL but useful
         })),
       }));
 
@@ -269,7 +274,7 @@ export const submitAssignmentGrade = async (req, res) => {
     const { assignmentId, studentId } = req.params;
     const { grade } = req.body;
 
-    if (!grade) {
+    if (grade === undefined || grade === null) {
       return res.status(400).json({ message: "Grade is required" });
     }
 
@@ -293,11 +298,14 @@ export const submitAssignmentGrade = async (req, res) => {
 
     // Update grade
     submission.grade = grade;
+    submission.gradedAt = new Date();
+
     await assignment.save();
 
-    return res
-      .status(200)
-      .json({ message: "Grade submitted successfully", submission });
+    return res.status(200).json({
+      message: "Grade submitted successfully",
+      updatedSubmission: submission,
+    });
   } catch (err) {
     console.error("Submit Grade Error:", err);
     return res
