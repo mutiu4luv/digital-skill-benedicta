@@ -246,23 +246,17 @@ export const getCoachAssignments = async (req, res) => {
             description: a.description,
             dueDate: a.dueDate,
             cohort: a.cohortId?.cohortName || "N/A",
+            cohortId: a.cohortId?._id || null,
             courseName: a.courseId?.name || "N/A",
-
             student: s.studentId
               ? {
                   _id: s.studentId._id,
                   fullName: s.studentId.fullName,
                   email: s.studentId.email,
                 }
-              : {
-                  _id: null,
-                  fullName: "Unknown Student",
-                  email: null,
-                },
-
+              : { _id: null, fullName: "Unknown Student", email: null },
             studentId: s.studentId?._id || null,
             file: s.file || null,
-
             grade: s.grade !== undefined ? s.grade : null,
             feedback: s.feedback ?? null,
             submittedAt: s.submittedAt,
@@ -303,78 +297,6 @@ export const getCoachAssignments = async (req, res) => {
     });
   }
 };
-
-// export const getCoachAssignments = async (req, res) => {
-//   try {
-//     const coachId = req.user.id;
-
-//     // Get all assignments created by this coach
-//     const assignments = await Assignment.find({ coachId })
-//       .populate("submissions.studentId", "fullName email")
-//       .populate("cohortId", "cohortName")
-//       .populate("courseId", "name category duration");
-
-//     // Collect every submission in a flat array
-//     const allSubmissions = [];
-
-//     assignments.forEach((a) => {
-//       // Only process assignments that have submissions
-//       if (a.submissions && a.submissions.length > 0) {
-//         a.submissions.forEach((s) => {
-//           allSubmissions.push({
-//             assignmentId: a._id,
-//             title: a.title,
-//             description: a.description,
-//             dueDate: a.dueDate,
-//             cohort: a.cohortId?.cohortName || "N/A",
-//             courseName: a.courseId?.name || "N/A",
-
-//             student: s.studentId
-//               ? {
-//                   _id: s.studentId._id,
-//                   fullName: s.studentId.fullName,
-//                   email: s.studentId.email,
-//                 }
-//               : {
-//                   _id: null,
-//                   fullName: "Unknown Student",
-//                   email: null,
-//                 },
-
-//             studentId: s.studentId?._id || null,
-//             file: s.file || null,
-
-//             grade: s.grade !== undefined ? s.grade : null,
-//             feedback: s.feedback ?? null,
-//             submittedAt: s.submittedAt,
-//             submissionId: s._id,
-//           });
-//         });
-//       }
-//     });
-
-//     // Sort submissions by most recent first
-//     allSubmissions.sort(
-//       (a, b) => new Date(b.submittedAt) - new Date(a.submittedAt)
-//     );
-
-//     // Return only assignments that have submissions
-//     const submittedAssignments = assignments.filter(
-//       (a) => a.submissions && a.submissions.length > 0
-//     );
-
-//     return res.status(200).json({
-//       assignments: submittedAssignments,
-//       submissions: allSubmissions,
-//     });
-//   } catch (err) {
-//     console.error("Error fetching coach assignments:", err);
-//     return res.status(500).json({
-//       message: "Server error",
-//       error: err.message,
-//     });
-//   }
-// };
 
 // ✅ Coach grades a student submission
 export const submitAssignmentGrade = async (req, res) => {
