@@ -224,17 +224,19 @@ export const submitAssignment = async (req, res) => {
   }
 };
 // GET ASSIGNMENTS SUBMITTED BY STUDENTS FOR A COACH
+import Assignment from "../models/Assignment.js"; // adjust path as needed
+
 export const getCoachAssignments = async (req, res) => {
   try {
     const coachId = req.user.id;
 
-    // Get all assignments created by this coach
+    // Fetch all assignments created by this coach
     const assignments = await Assignment.find({ coachId })
       .populate("submissions.studentId", "fullName email")
-      .populate("cohortId", "cohortName")
+      .populate("cohortId", "name") // <-- use correct cohort field
       .populate("courseId", "name category duration");
 
-    // Collect every submission in a flat array
+    // Flatten all submissions for easy frontend display
     const allSubmissions = [];
 
     assignments.forEach((a) => {
@@ -245,7 +247,7 @@ export const getCoachAssignments = async (req, res) => {
             title: a.title,
             description: a.description,
             dueDate: a.dueDate,
-            cohort: a.cohortId?.cohortName || "N/A",
+            cohort: a.cohortId?.name || "No Cohort",
             cohortId: a.cohortId?._id || null,
             courseName: a.courseId?.name || "N/A",
             student: s.studentId
@@ -271,23 +273,18 @@ export const getCoachAssignments = async (req, res) => {
       (a, b) => new Date(b.submittedAt) - new Date(a.submittedAt)
     );
 
-    // Only keep assignments that have submissions
-    const submittedAssignments = assignments.filter(
-      (a) => a.submissions && a.submissions.length > 0
-    );
-
-    // Group assignments by cohort
+    // Group assignments by cohort name
     const assignmentsByCohort = {};
-    submittedAssignments.forEach((a) => {
-      const cohortName = a.cohortId?.cohortName || "No Cohort";
+    assignments.forEach((a) => {
+      const cohortName = a.cohortId?.name || "No Cohort";
       if (!assignmentsByCohort[cohortName])
         assignmentsByCohort[cohortName] = [];
       assignmentsByCohort[cohortName].push(a);
     });
 
     return res.status(200).json({
-      assignmentsByCohort, // assignments grouped by cohort name
-      submissions: allSubmissions, // all submissions flat array
+      assignmentsByCohort,
+      submissions: allSubmissions,
     });
   } catch (err) {
     console.error("Error fetching coach assignments:", err);
@@ -297,6 +294,80 @@ export const getCoachAssignments = async (req, res) => {
     });
   }
 };
+
+// export const getCoachAssignments = async (req, res) => {
+//   try {
+//     const coachId = req.user.id;
+
+//     // Get all assignments created by this coach
+//     const assignments = await Assignment.find({ coachId })
+//       .populate("submissions.studentId", "fullName email")
+//       .populate("cohortId", "cohortName")
+//       .populate("courseId", "name category duration");
+
+//     // Collect every submission in a flat array
+//     const allSubmissions = [];
+
+//     assignments.forEach((a) => {
+//       if (a.submissions && a.submissions.length > 0) {
+//         a.submissions.forEach((s) => {
+//           allSubmissions.push({
+//             assignmentId: a._id,
+//             title: a.title,
+//             description: a.description,
+//             dueDate: a.dueDate,
+//             cohort: a.cohortId?.cohortName || "N/A",
+//             cohortId: a.cohortId?._id || null,
+//             courseName: a.courseId?.name || "N/A",
+//             student: s.studentId
+//               ? {
+//                   _id: s.studentId._id,
+//                   fullName: s.studentId.fullName,
+//                   email: s.studentId.email,
+//                 }
+//               : { _id: null, fullName: "Unknown Student", email: null },
+//             studentId: s.studentId?._id || null,
+//             file: s.file || null,
+//             grade: s.grade !== undefined ? s.grade : null,
+//             feedback: s.feedback ?? null,
+//             submittedAt: s.submittedAt,
+//             submissionId: s._id,
+//           });
+//         });
+//       }
+//     });
+
+//     // Sort submissions by most recent first
+//     allSubmissions.sort(
+//       (a, b) => new Date(b.submittedAt) - new Date(a.submittedAt)
+//     );
+
+//     // Only keep assignments that have submissions
+//     const submittedAssignments = assignments.filter(
+//       (a) => a.submissions && a.submissions.length > 0
+//     );
+
+//     // Group assignments by cohort
+//     const assignmentsByCohort = {};
+//     submittedAssignments.forEach((a) => {
+//       const cohortName = a.cohortId?.cohortName || "No Cohort";
+//       if (!assignmentsByCohort[cohortName])
+//         assignmentsByCohort[cohortName] = [];
+//       assignmentsByCohort[cohortName].push(a);
+//     });
+
+//     return res.status(200).json({
+//       assignmentsByCohort, // assignments grouped by cohort name
+//       submissions: allSubmissions, // all submissions flat array
+//     });
+//   } catch (err) {
+//     console.error("Error fetching coach assignments:", err);
+//     return res.status(500).json({
+//       message: "Server error",
+//       error: err.message,
+//     });
+//   }
+// };
 
 // ✅ Coach grades a student submission
 export const submitAssignmentGrade = async (req, res) => {
