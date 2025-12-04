@@ -11,6 +11,7 @@ import {
   getAvailableCohorts,
   getCoachesAssignedToStudents,
   getCohortCourses,
+  getCoachAssignedCohorts,
 } from "../controller/cohort.js";
 import { authorizeRoles, protect } from "../middleware/authMiddleware.js"; // auth middleware
 
@@ -40,6 +41,12 @@ router.post(
 );
 router.get("/active-cohorts", protect, getActiveCohorts);
 router.get("/available", protect, getAvailableCohorts);
+router.get(
+  "/coach/assigned",
+  protect,
+  authorizeRoles("coach", "owner"),
+  getCoachAssignedCohorts
+);
 
 router.get("/assigned", protect, getCoachesAssignedToStudents);
 router.get("/:id/courses", protect, getCohortCourses);

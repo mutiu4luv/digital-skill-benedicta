@@ -616,3 +616,44 @@ export const getCohortCourses = async (req, res) => {
     return res.status(500).json({ message: "Server error" });
   }
 };
+export const getCoachAssignedCohorts = async (req, res) => {
+  try {
+    const coachId = req.user.id;
+
+    const cohorts = await Cohort.find({
+      "courses.coachId": coachId,
+    })
+      .populate("courses.courseId")
+      .populate("courses.coachId");
+
+    if (!cohorts || cohorts.length === 0) {
+      return res.status(200).json({ cohorts: [] });
+    }
+
+    const assigned = cohorts.map((cohort) => {
+      const coachCourses = cohort.courses
+        .filter((c) => c.coachId._id.toString() === coachId)
+        .map((c) => ({
+          cohortCourseId: c._id, // needed for start/end
+          courseId: c.courseId._id,
+          name: c.courseId.name,
+          category: c.courseId.category,
+          duration: c.durationInDays + " days",
+          status: c.status,
+          startDate: c.startDate,
+          endDate: c.endDate,
+        }));
+
+      return {
+        cohortId: cohort._id,
+        cohortName: cohort.name,
+        courses: coachCourses,
+      };
+    });
+
+    return res.status(200).json({ cohorts: assigned });
+  } catch (err) {
+    console.error("getCoachAssignedCohorts Error:", err);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};

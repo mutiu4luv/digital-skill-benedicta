@@ -75,7 +75,7 @@ export const getStudentAssignments = async (req, res) => {
   try {
     const studentId = req.user.id;
 
-    // Get all cohorts where the student is enrolled
+    // Find all cohorts the student belongs to
     const cohorts = await Cohort.find({
       "studentIds.studentId": studentId,
     });
@@ -87,24 +87,27 @@ export const getStudentAssignments = async (req, res) => {
     }
 
     let allowedAssignments = [];
-
     const now = new Date();
 
     for (const cohort of cohorts) {
-      // Skip cohorts that have ended
+      // Skip ended cohorts
       if (cohort.endDate && cohort.endDate < now) continue;
 
       const student = cohort.studentIds.find(
         (s) => s.studentId.toString() === studentId.toString()
       );
 
-      // Only allow courses where student hasAccess true
-      const allowedCourseIds = student.enrollments
-        .filter((e) => e.hasAccess)
-        .map((e) => e.courseId.toString());
+      if (!student) continue; // safety
+
+      // Only allow courses where student hasAccess
+      const allowedCourseIds =
+        student.enrollments
+          ?.filter((e) => e.hasAccess)
+          ?.map((e) => e.courseId.toString()) || [];
 
       if (allowedCourseIds.length === 0) continue;
 
+      // Fetch assignments only for eligible courses
       const assignments = await Assignment.find({
         cohortId: cohort._id,
         courseId: { $in: allowedCourseIds },
@@ -114,7 +117,7 @@ export const getStudentAssignments = async (req, res) => {
         .sort({ updatedAt: -1 });
 
       const formattedAssignments = assignments.map((a) => {
-        const submission = a.submissions.find(
+        const submission = a.submissions?.find(
           (s) => s.studentId?.toString() === studentId.toString()
         );
 
@@ -131,11 +134,11 @@ export const getStudentAssignments = async (req, res) => {
         };
       });
 
-      // Move submitted assignments to the bottom
+      // Submitted assignments move to bottom
       formattedAssignments.sort((a, b) => {
         if (a.status === "Submitted" && b.status !== "Submitted") return 1;
         if (b.status === "Submitted" && a.status !== "Submitted") return -1;
-        return b.updatedAt - a.updatedAt;
+        return new Date(b.updatedAt) - new Date(a.updatedAt);
       });
 
       allowedAssignments.push(...formattedAssignments);
@@ -149,6 +152,85 @@ export const getStudentAssignments = async (req, res) => {
       .json({ message: "Server error", error: err.message });
   }
 };
+
+// export const getStudentAssignments = async (req, res) => {
+//   try {
+//     const studentId = req.user.id;
+
+//     // Get all cohorts where the student is enrolled
+//     const cohorts = await Cohort.find({
+//       "studentIds.studentId": studentId,
+//     });
+
+//     if (!cohorts.length) {
+//       return res
+//         .status(404)
+//         .json({ message: "You are not enrolled in any cohort" });
+//     }
+
+//     let allowedAssignments = [];
+
+//     const now = new Date();
+
+//     for (const cohort of cohorts) {
+//       // Skip cohorts that have ended
+//       if (cohort.endDate && cohort.endDate < now) continue;
+
+//       const student = cohort.studentIds.find(
+//         (s) => s.studentId.toString() === studentId.toString()
+//       );
+
+//       // Only allow courses where student hasAccess true
+//       const allowedCourseIds = student.enrollments
+//         .filter((e) => e.hasAccess)
+//         .map((e) => e.courseId.toString());
+
+//       if (allowedCourseIds.length === 0) continue;
+
+//       const assignments = await Assignment.find({
+//         cohortId: cohort._id,
+//         courseId: { $in: allowedCourseIds },
+//       })
+//         .populate("courseId", "name category duration")
+//         .populate("coachId", "fullName")
+//         .sort({ updatedAt: -1 });
+
+//       const formattedAssignments = assignments.map((a) => {
+//         const submission = a.submissions.find(
+//           (s) => s.studentId?.toString() === studentId.toString()
+//         );
+
+//         return {
+//           assignmentId: a._id,
+//           title: a.title,
+//           description: a.description,
+//           courseName: a.courseId?.name || "N/A",
+//           dueDate: a.dueDate,
+//           file: submission?.file || null,
+//           status: submission ? "Submitted" : "Pending",
+//           grade: submission?.grade || "-",
+//           updatedAt: a.updatedAt,
+//         };
+//       });
+
+//       // Move submitted assignments to the bottom
+//       formattedAssignments.sort((a, b) => {
+//         if (a.status === "Submitted" && b.status !== "Submitted") return 1;
+//         if (b.status === "Submitted" && a.status !== "Submitted") return -1;
+//         return b.updatedAt - a.updatedAt;
+//       });
+
+//       allowedAssignments.push(...formattedAssignments);
+//     }
+
+//     return res.status(200).json({ assignments: allowedAssignments });
+//   } catch (err) {
+//     console.error("Get Student Assignments Error:", err);
+//     return res
+//       .status(500)
+//       .json({ message: "Server error", error: err.message });
+//   }
+// };
 
 // submit assignment by student
 export const submitAssignment = async (req, res) => {
