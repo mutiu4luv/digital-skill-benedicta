@@ -690,3 +690,59 @@ export const getCoachAssignedCohorts = async (req, res) => {
     res.status(500).json({ message: "Internal server error" });
   }
 };
+export const getStudentsUnderCoach = async (req, res) => {
+  try {
+    const coachId = req.user.id;
+
+    // Find all cohorts that have courses assigned to this coach
+    const cohorts = await Cohort.find({
+      "courses.coachId": coachId,
+    }).populate("studentIds.studentId", "fullName email");
+
+    // Collect unique students across all cohorts
+    const studentsMap = new Map();
+
+    cohorts.forEach((cohort) => {
+      cohort.studentIds.forEach((s) => {
+        const studentId = s.studentId._id.toString();
+        if (!studentsMap.has(studentId)) {
+          studentsMap.set(studentId, {
+            studentId: s.studentId._id,
+            fullName: s.studentId.fullName,
+            email: s.studentId.email,
+            cohorts: [cohort.name],
+            enrollments: s.enrollments
+              .filter((enr) =>
+                cohort.courses.some(
+                  (c) =>
+                    c.coachId.toString() === coachId &&
+                    c.courseId.equals(enr.courseId)
+                )
+              )
+              .map((enr) => ({
+                courseId: enr.courseId,
+                paid: enr.paid,
+                paymentConfirmed: enr.paymentConfirmed,
+                hasAccess: enr.hasAccess,
+                paidAt: enr.paidAt,
+                registeredAt: enr.registeredAt,
+              })),
+          });
+        } else {
+          // If student already exists, just add the cohort
+          const existing = studentsMap.get(studentId);
+          if (!existing.cohorts.includes(cohort.name)) {
+            existing.cohorts.push(cohort.name);
+          }
+        }
+      });
+    });
+
+    const students = Array.from(studentsMap.values());
+
+    return res.status(200).json({ count: students.length, students });
+  } catch (err) {
+    console.error("Get students under coach error:", err);
+    return res.status(500).json({ message: "Server error" });
+  }
+};
