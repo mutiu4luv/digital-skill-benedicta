@@ -231,31 +231,46 @@ export const getCoachAssignments = async (req, res) => {
     // Fetch all assignments created by this coach
     const assignments = await Assignment.find({ coachId })
       .populate("submissions.studentId", "fullName email")
-      .populate("cohortId", "name")
+      .populate("cohortId", "name studentIds") // include studentIds to check access
       .populate("courseId", "name category duration");
 
-    // Flatten all submissions
     const allSubmissions = [];
 
     assignments.forEach((a) => {
+      const cohort = a.cohortId;
+
+      // Build a Set of student IDs who have access for this course
+      const studentsWithAccess = new Set();
+      if (cohort && Array.isArray(cohort.studentIds)) {
+        cohort.studentIds.forEach((s) => {
+          const enrollment = s.enrollments.find(
+            (e) =>
+              e.courseId.toString() === a.courseId._id.toString() && e.hasAccess
+          );
+          if (enrollment) studentsWithAccess.add(s.studentId.toString());
+        });
+      }
+
       if (Array.isArray(a.submissions) && a.submissions.length > 0) {
         a.submissions.forEach((s) => {
+          // Only include submission if student has access
+          if (!s.studentId || !studentsWithAccess.has(s.studentId.toString()))
+            return;
+
           allSubmissions.push({
             assignmentId: a._id,
             title: a.title,
             description: a.description,
             dueDate: a.dueDate,
-            cohort: a.cohortId?.name || "No Cohort",
-            cohortId: a.cohortId?._id || null,
+            cohort: cohort?.name || "No Cohort",
+            cohortId: cohort?._id || null,
             courseName: a.courseId?.name || "N/A",
-            student: s.studentId
-              ? {
-                  _id: s.studentId._id,
-                  fullName: s.studentId.fullName,
-                  email: s.studentId.email,
-                }
-              : { _id: null, fullName: "Unknown Student", email: null },
-            studentId: s.studentId?._id || null,
+            student: {
+              _id: s.studentId._id,
+              fullName: s.studentId.fullName,
+              email: s.studentId.email,
+            },
+            studentId: s.studentId._id,
             file: s.file || null,
             grade: s.grade ?? null,
             feedback: s.feedback ?? null,
@@ -264,34 +279,36 @@ export const getCoachAssignments = async (req, res) => {
           });
         });
       } else {
-        // No submissions — still include assignment
-        allSubmissions.push({
-          assignmentId: a._id,
-          title: a.title,
-          description: a.description,
-          dueDate: a.dueDate,
-          cohort: a.cohortId?.name || "No Cohort",
-          cohortId: a.cohortId?._id || null,
-          courseName: a.courseId?.name || "N/A",
-          student: null,
-          studentId: null,
-          file: null,
-          grade: null,
-          feedback: null,
-          submittedAt: a.createdAt, // fallback for sorting
-          submissionId: null,
-        });
+        // No submissions — include assignment only if some student has access
+        if (studentsWithAccess.size > 0) {
+          allSubmissions.push({
+            assignmentId: a._id,
+            title: a.title,
+            description: a.description,
+            dueDate: a.dueDate,
+            cohort: cohort?.name || "No Cohort",
+            cohortId: cohort?._id || null,
+            courseName: a.courseId?.name || "N/A",
+            student: null,
+            studentId: null,
+            file: null,
+            grade: null,
+            feedback: null,
+            submittedAt: a.createdAt, // fallback for sorting
+            submissionId: null,
+          });
+        }
       }
     });
 
-    // Sort so that graded submissions come first, then by most recent submission/due date
+    // Sort so that graded submissions come first, then by most recent
     allSubmissions.sort((a, b) => {
       const aGraded = a.grade !== null;
       const bGraded = b.grade !== null;
 
-      if (aGraded && !bGraded) return -1; // graded first
+      if (aGraded && !bGraded) return -1;
       if (!aGraded && bGraded) return 1;
-      // If both same grading status, sort by submission or due date
+
       const aDate = a.submittedAt || a.dueDate || 0;
       const bDate = b.submittedAt || b.dueDate || 0;
       return new Date(bDate) - new Date(aDate);
@@ -318,7 +335,6 @@ export const getCoachAssignments = async (req, res) => {
     });
   }
 };
-
 // export const getCoachAssignments = async (req, res) => {
 //   try {
 //     const coachId = req.user.id;
