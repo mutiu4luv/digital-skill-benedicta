@@ -236,18 +236,26 @@ export const getCohortStudents = async (req, res) => {
 // controllers/cohortController.js
 
 export const startCohortByCourse = async (req, res) => {
-  let { cohortCourseId } = req.params;
-  const ownerId = req.user.id;
+  const { cohortCourseId } = req.params;
+  const userId = req.user.id;
+  const userRole = req.user.role;
 
   if (!mongoose.Types.ObjectId.isValid(cohortCourseId)) {
     return res.status(400).json({ message: "Invalid course ID" });
   }
 
   try {
-    const cohort = await Cohort.findOne({
-      ownerId,
-      "courses._id": cohortCourseId,
-    });
+    // Allow owner to start any course, or coach to start their own course
+    let cohort;
+
+    if (userRole === "owner") {
+      cohort = await Cohort.findOne({ "courses._id": cohortCourseId });
+    } else if (userRole === "coach") {
+      cohort = await Cohort.findOne({
+        "courses._id": cohortCourseId,
+        "courses.coachId": userId,
+      });
+    }
 
     if (!cohort) {
       return res.status(404).json({ message: "Course not found in cohort" });
@@ -263,7 +271,7 @@ export const startCohortByCourse = async (req, res) => {
       return res.status(400).json({ message: "Course already completed" });
     }
 
-    // 🔥 START THE COURSE ONLY
+    // Start the course
     courseItem.status = "in_progress";
     courseItem.startDate = new Date();
 
@@ -277,10 +285,10 @@ export const startCohortByCourse = async (req, res) => {
       message: "Course started successfully",
       course: {
         _id: courseItem._id,
-        courseId: courseItem.courseId, // populated if you want full details
+        courseId: courseItem.courseId,
         coachId: courseItem.coachId,
         durationInDays: courseItem.durationInDays,
-        status: courseItem.status, // explicitly include status
+        status: courseItem.status,
         startDate: courseItem.startDate,
         endDate: courseItem.endDate,
       },
@@ -292,21 +300,34 @@ export const startCohortByCourse = async (req, res) => {
 };
 
 export const endCohortByCourse = async (req, res) => {
-  try {
-    const { cohortCourseId } = req.params;
-    const userId = req.user.id;
-    const userRole = req.user.role;
+  const { cohortCourseId } = req.params;
+  const userId = req.user.id;
+  const userRole = req.user.role;
 
-    // Find cohort that contains this course
-    const cohort = await Cohort.findOne({
-      "courses._id": cohortCourseId,
-    });
+  if (!mongoose.Types.ObjectId.isValid(cohortCourseId)) {
+    return res.status(400).json({ message: "Invalid course ID" });
+  }
+
+  try {
+    // Find cohort: owner can end any course, coach can only end their own
+    let cohort;
+    if (userRole === "owner") {
+      cohort = await Cohort.findOne({ "courses._id": cohortCourseId });
+    } else if (userRole === "coach") {
+      cohort = await Cohort.findOne({
+        "courses._id": cohortCourseId,
+        "courses.coachId": userId,
+      });
+    }
 
     if (!cohort) {
-      return res.status(404).json({ message: "Cohort course not found" });
+      return res
+        .status(404)
+        .json({ message: "Course not found or you don't have permission" });
     }
 
     const courseItem = cohort.courses.id(cohortCourseId);
+
     if (!courseItem) {
       return res.status(404).json({ message: "Course not found in cohort" });
     }
@@ -315,14 +336,7 @@ export const endCohortByCourse = async (req, res) => {
       return res.status(400).json({ message: "Course is not in progress" });
     }
 
-    // Coach can only end their own course
-    if (userRole === "coach" && courseItem.coachId.toString() !== userId) {
-      return res.status(403).json({
-        message: "You cannot end a course you are not coaching",
-      });
-    }
-
-    // End course
+    // End the course
     courseItem.status = "completed";
     courseItem.endDate = new Date();
 
@@ -330,10 +344,19 @@ export const endCohortByCourse = async (req, res) => {
 
     res.json({
       message: "Course completed successfully",
-      course: courseItem,
+      course: {
+        _id: courseItem._id,
+        courseId: courseItem.courseId,
+        coachId: courseItem.coachId,
+        durationInDays: courseItem.durationInDays,
+        status: courseItem.status,
+        startDate: courseItem.startDate,
+        endDate: courseItem.endDate,
+      },
     });
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    console.error("End cohort error:", err);
+    res.status(500).json({ message: "Server error" });
   }
 };
 
