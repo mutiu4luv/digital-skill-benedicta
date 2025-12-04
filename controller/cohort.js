@@ -628,7 +628,7 @@ export const getCoachAssignedCohorts = async (req, res) => {
       .populate("courses.coachId");
 
     if (!cohorts || cohorts.length === 0) {
-      return res.status(200).json({ cohorts: [], coursesByCohort: {} });
+      return res.status(201).json({ cohorts: [], coursesByCohort: {} });
     }
 
     // Map cohorts to include only coach's courses
