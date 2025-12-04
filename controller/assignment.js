@@ -224,7 +224,6 @@ export const submitAssignment = async (req, res) => {
   }
 };
 // GET ASSIGNMENTS SUBMITTED BY STUDENTS FOR A COACH
-import Assignment from "../models/Assignment.js"; // adjust path as needed
 
 export const getCoachAssignments = async (req, res) => {
   try {
