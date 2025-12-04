@@ -620,6 +620,7 @@ export const getCoachAssignedCohorts = async (req, res) => {
   try {
     const coachId = req.user.id;
 
+    // Fetch cohorts where this coach is assigned
     const cohorts = await Cohort.find({
       "courses.coachId": coachId,
     })
@@ -627,9 +628,10 @@ export const getCoachAssignedCohorts = async (req, res) => {
       .populate("courses.coachId");
 
     if (!cohorts || cohorts.length === 0) {
-      return res.status(200).json({ cohorts: [] });
+      return res.status(200).json({ cohorts: [], coursesByCohort: {} });
     }
 
+    // Map cohorts to include only coach's courses
     const assigned = cohorts.map((cohort) => {
       const coachCourses = cohort.courses
         .filter((c) => c.coachId._id.toString() === coachId)
@@ -638,7 +640,9 @@ export const getCoachAssignedCohorts = async (req, res) => {
           courseId: c.courseId._id,
           name: c.courseId.name,
           category: c.courseId.category,
-          duration: c.durationInDays + " days",
+          duration: c.durationInDays
+            ? c.durationInDays + " days"
+            : c.courseId.duration,
           status: c.status,
           startDate: c.startDate,
           endDate: c.endDate,
@@ -651,7 +655,13 @@ export const getCoachAssignedCohorts = async (req, res) => {
       };
     });
 
-    return res.status(200).json({ cohorts: assigned });
+    // Create a grouped object for frontend convenience
+    const coursesByCohort = {};
+    assigned.forEach((cohort) => {
+      coursesByCohort[cohort.cohortName] = cohort.courses;
+    });
+
+    return res.status(200).json({ cohorts: assigned, coursesByCohort });
   } catch (err) {
     console.error("getCoachAssignedCohorts Error:", err);
     res.status(500).json({ message: "Internal server error" });
