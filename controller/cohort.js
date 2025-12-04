@@ -465,31 +465,36 @@ export const getActiveCohorts = async (req, res) => {
     return res.status(500).json({ message: "Internal server error" });
   }
 };
-
+// Get cohorts with not started courses for students to register in cohort
 export const getNotActiveCohort = async (req, res) => {
   try {
-    // Find a cohort that has at least one not-started course
-    const cohort = await Cohort.findOne({
+    // Fetch ALL cohorts that have at least one not-started course
+    const cohorts = await Cohort.find({
       "courses.status": "not_started",
     })
       .populate("courses.courseId")
       .populate("courses.coachId")
       .populate("studentIds");
 
-    if (!cohort) {
+    if (!cohorts || cohorts.length === 0) {
       return res.status(404).json({ message: "❌ No active cohort available" });
     }
 
-    const notStartedCourses = cohort.courses.filter(
-      (course) => course.status === "not_started"
-    );
+    // Format each cohort the same way you already did
+    const formatted = cohorts.map((cohort) => {
+      const notStartedCourses = cohort.courses.filter(
+        (c) => c.status === "not_started"
+      );
 
-    return res.status(200).json({
-      cohort: {
+      return {
         cohortName: cohort.name,
         cohortId: cohort._id,
-        notStartedCourses,
-      },
+        courses: notStartedCourses,
+      };
+    });
+
+    return res.status(200).json({
+      cohorts: formatted,
     });
   } catch (err) {
     console.error(err);
