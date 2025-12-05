@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 import Cohort from "..//module/cohort.js";
 import Course from "../module/course.js";
 import userModule from "../module/userModule.js";
+import coachUpload from "../module/coachUpload.js";
 
 //CREATE COHORT
 function convertDurationStringToDays(duration) {
@@ -754,5 +755,52 @@ export const getStudentsUnderCoach = async (req, res) => {
   } catch (err) {
     console.error("Get students under coach error:", err);
     return res.status(500).json({ message: "Server error" });
+  }
+};
+// get upcoming class for student
+
+export const getUpcomingClass = async (req, res) => {
+  try {
+    const studentId = req.user.id;
+
+    const student = await User.findById(studentId).populate("cohort");
+    if (!student) return res.status(404).json({ message: "Student not found" });
+
+    const cohort = student.cohort;
+
+    if (!cohort.nextClass) {
+      return res.json({
+        hasClass: false,
+        message: "No class fixed by your coach.",
+      });
+    }
+
+    const { date, time } = cohort.nextClass;
+    const classDateTime = new Date(`${date} ${time}`);
+    const now = new Date();
+
+    const hasAccess =
+      student.paid && student.paymentConfirmed && now >= classDateTime;
+
+    // Fetch videos and documents uploaded by the coach for this cohort
+    const videos = await coachUpload.find({
+      cohortId: cohort._id,
+      type: "video",
+    });
+    const documents = await coachUpload.find({
+      cohortId: cohort._id,
+      type: "document",
+    });
+
+    return res.json({
+      hasClass: true,
+      classDateTime,
+      hasAccess,
+      videos,
+      documents,
+    });
+  } catch (err) {
+    console.error("Upcoming Class Error:", err);
+    return res.status(500).json({ message: "Server Error" });
   }
 };
