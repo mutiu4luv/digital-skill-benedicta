@@ -764,32 +764,52 @@ export const getUpcomingClass = async (req, res) => {
   try {
     const studentId = req.user.id;
 
-    const student = await User.findById(studentId).populate("cohort");
+    // Find the student
+    const student = await User.findById(studentId);
     if (!student) return res.status(404).json({ message: "Student not found" });
 
-    const cohort = student.cohort;
+    // Find the cohort (replace with how you store cohortId in User)
+    const cohortId = student.cohortId; // <-- adjust field if different
+    if (!cohortId)
+      return res.status(404).json({ message: "Cohort not assigned" });
 
-    if (!cohort.nextClass) {
+    const cohort = await Cohort.findById(cohortId);
+    if (!cohort) return res.status(404).json({ message: "Cohort not found" });
+
+    // Find the first course with a scheduled nextClass
+    const enrolledCourse = cohort.courses.find((course) => course.nextClass);
+
+    if (!enrolledCourse || !enrolledCourse.nextClass) {
       return res.json({
         hasClass: false,
         message: "No class fixed by your coach.",
       });
     }
 
-    const { date, time } = cohort.nextClass;
+    const { date, time } = enrolledCourse.nextClass;
     const classDateTime = new Date(`${date} ${time}`);
     const now = new Date();
 
-    const hasAccess =
-      student.paid && student.paymentConfirmed && now >= classDateTime;
+    // Check if student has access (paid + confirmed + class started)
+    // Find student's enrollment for this course
+    const enrollmentRecord = cohort.studentIds
+      .find((s) => s.studentId.toString() === studentId)
+      ?.enrollments.find(
+        (e) => e.courseId.toString() === enrolledCourse.courseId.toString()
+      );
 
-    // Fetch videos and documents uploaded by the coach for this cohort
+    const hasAccess =
+      enrollmentRecord?.paid &&
+      enrollmentRecord?.paymentConfirmed &&
+      now >= classDateTime;
+
+    // Fetch videos and documents uploaded by the coach for this course
     const videos = await coachUpload.find({
-      cohortId: cohort._id,
+      courseId: enrolledCourse.courseId,
       type: "video",
     });
     const documents = await coachUpload.find({
-      cohortId: cohort._id,
+      courseId: enrolledCourse.courseId,
       type: "document",
     });
 
