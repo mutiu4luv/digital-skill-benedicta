@@ -34,27 +34,41 @@ export const uploadVideo = async (req, res) => {
       return res.status(400).json({ message: "No video file uploaded" });
     if (!courseId)
       return res.status(400).json({ message: "Course ID is required" });
-    if (!cohortId)
-      return res.status(400).json({ message: "Cohort ID is required" });
     if (!classStartTime)
       return res.status(400).json({ message: "Class start time is required" });
+    if (!cohortId)
+      return res.status(400).json({ message: "Cohort ID is required" });
 
     // Validate course
     const course = await Course.findById(courseId);
     if (!course) return res.status(404).json({ message: "Course not found" });
+
+    // Validate ownership
     if (!course.coach.equals(coachId))
       return res
         .status(403)
         .json({ message: "You are not authorized. This is not your course." });
 
+    // Convert classStartTime to UTC Date
     const startTime = new Date(classStartTime);
+    const utcStartTime = new Date(
+      startTime.getUTCFullYear(),
+      startTime.getUTCMonth(),
+      startTime.getUTCDate(),
+      startTime.getUTCHours(),
+      startTime.getUTCMinutes(),
+      0,
+      0
+    );
 
+    // Upload video to Cloudinary
     const uploadResult = await streamUpload(
       req.file.buffer,
       "HGSC-videos",
       "video"
     );
 
+    // Save material in DB
     const material = await Material.create({
       title,
       fileUrl: uploadResult.secure_url,
@@ -62,12 +76,13 @@ export const uploadVideo = async (req, res) => {
       coach: coachId,
       course: courseId,
       cohortId: cohortId,
-      unlockAt: startTime,
+      unlockAt: utcStartTime, // store in UTC
     });
 
-    return res
-      .status(201)
-      .json({ message: "🎥 Video uploaded successfully", material });
+    return res.status(201).json({
+      message: "🎥 Video uploaded successfully",
+      material,
+    });
   } catch (error) {
     console.error("❌ Upload Video Error:", error);
     return res
@@ -304,7 +319,7 @@ export const deleteVideo = async (req, res) => {
 export const getStudentCourseMaterials = async (req, res) => {
   try {
     const studentId = req.user.id;
-    const now = new Date();
+    const now = Date.now(); // current timestamp in ms
 
     // Convert to ObjectId safely
     let studentObjectId;
@@ -355,15 +370,20 @@ export const getStudentCourseMaterials = async (req, res) => {
           cohortId: cohort._id,
           course: courseInCohort.courseId,
         }).select("title type fileUrl coach unlockAt createdAt updatedAt");
+
         for (const upload of uploads) {
-          if (upload.unlockAt && new Date(upload.unlockAt) > now) {
-            lockedMaterials.push({
+          const unlockTime = upload.unlockAt?.getTime() || 0;
+
+          if (unlockTime <= now) {
+            // unlocked
+            unlockedMaterials.push({
               cohortId: cohort._id,
               courseId: courseInCohort.courseId,
               ...upload.toObject(),
             });
           } else {
-            unlockedMaterials.push({
+            // still locked
+            lockedMaterials.push({
               cohortId: cohort._id,
               courseId: courseInCohort.courseId,
               ...upload.toObject(),
