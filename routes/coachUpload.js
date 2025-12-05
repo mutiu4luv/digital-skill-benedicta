@@ -5,6 +5,7 @@ import {
   uploadDocument,
   getAllMaterials,
   getAssignedCoaches,
+  getMyVideos,
 } from "../controller/coachUpload.js";
 import { protect, authorizeRoles } from "../middleware/authMiddleware.js";
 
@@ -21,6 +22,13 @@ router.get(
   protect,
   authorizeRoles("student", "coach", "owner"),
   getAllMaterials
+);
+// Coach fetches own videos
+router.get(
+  "/my-videos",
+  protect,
+  authorizeRoles("coach", "owner"),
+  getMyVideos
 );
 
 router.get("/coaches", protect, getAssignedCoaches);

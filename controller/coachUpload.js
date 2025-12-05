@@ -130,6 +130,26 @@ export const uploadDocument = async (req, res) => {
   }
 };
 
+export const getMyVideos = async (req, res) => {
+  try {
+    const coachId = req.user.id;
+
+    const videos = await Material.find({
+      coach: coachId,
+      type: "video",
+    })
+      .populate("course", "name")
+      .sort({ createdAt: -1 });
+
+    return res.status(200).json(videos);
+  } catch (error) {
+    return res.status(500).json({
+      message: "Could not fetch videos",
+      error: error.message,
+    });
+  }
+};
+
 // ✅ Fetch all materials (for students)
 
 export const getAllMaterials = async (req, res) => {
