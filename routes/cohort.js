@@ -13,6 +13,7 @@ import {
   getCohortCourses,
   getCoachAssignedCohorts,
   getStudentsUnderCoach,
+  getUpcomingClass,
 } from "../controller/cohort.js";
 import { authorizeRoles, protect } from "../middleware/authMiddleware.js"; // auth middleware
 
@@ -48,7 +49,7 @@ router.get(
   authorizeRoles("coach", "owner"),
   getCoachAssignedCohorts
 );
-
+router.get("/student/upcoming-class", protect, getUpcomingClass);
 router.get("/assigned", protect, getCoachesAssignedToStudents);
 router.get("/:id/courses", protect, getCohortCourses);
 router.get(
