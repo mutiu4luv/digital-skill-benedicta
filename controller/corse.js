@@ -132,7 +132,6 @@ export const getMyCoursesForCoach = async (req, res) => {
 
     let courses;
     if (req.user.role === "coach") {
-      // Correct field name (use your schema's actual field)
       courses = await Course.find({ coach: userId }).populate(
         "coach",
         "fullName email"

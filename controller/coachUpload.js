@@ -44,7 +44,8 @@ export const uploadVideo = async (req, res) => {
     const course = await Course.findById(courseId);
     if (!course) return res.status(404).json({ message: "Course not found" });
 
-    if (!course.coachId.equals(coachId))
+    // Validate course ownership
+    if (!course.coach.equals(coachId))
       return res.status(403).json({
         message: "You are not authorized. This is not your course.",
       });
