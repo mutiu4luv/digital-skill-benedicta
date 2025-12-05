@@ -125,6 +125,36 @@ export const getMyCourses = async (req, res) => {
   }
 };
 
+// get my courses for coach and student
+export const getMyCoursesForCoach = async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    // If user is a coach, fetch courses they coach
+    let courses;
+    if (req.user.role === "coach") {
+      courses = await Course.find({ coachId: userId });
+    } else if (req.user.role === "student") {
+      // If student, fetch courses they are enrolled in
+      courses = await Course.find({ students: userId }).populate(
+        "coach",
+        "fullName email"
+      );
+    } else {
+      // owner/admin: fetch all courses
+      courses = await Course.find().populate("coach", "fullName email");
+    }
+
+    res.status(200).json({ courses });
+  } catch (error) {
+    console.error("Error fetching courses:", error);
+    res.status(500).json({
+      message: "Could not fetch courses",
+      error: error.message,
+    });
+  }
+};
+
 // ---------------------------------------------------------
 // OWNER: Assign coach
 // ---------------------------------------------------------
