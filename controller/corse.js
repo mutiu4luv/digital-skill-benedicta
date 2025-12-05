@@ -130,18 +130,19 @@ export const getMyCoursesForCoach = async (req, res) => {
   try {
     const userId = req.user.id;
 
-    // If user is a coach, fetch courses they coach
     let courses;
     if (req.user.role === "coach") {
-      courses = await Course.find({ coachId: userId });
+      // Correct field name (use your schema's actual field)
+      courses = await Course.find({ coach: userId }).populate(
+        "coach",
+        "fullName email"
+      );
     } else if (req.user.role === "student") {
-      // If student, fetch courses they are enrolled in
       courses = await Course.find({ students: userId }).populate(
         "coach",
         "fullName email"
       );
     } else {
-      // owner/admin: fetch all courses
       courses = await Course.find().populate("coach", "fullName email");
     }
 
