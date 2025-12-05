@@ -699,42 +699,47 @@ export const getStudentsUnderCoach = async (req, res) => {
   try {
     const coachId = req.user.id;
 
-    // Find all cohorts that have courses assigned to this coach
+    // Find all cohorts where this coach teaches at least one course
     const cohorts = await Cohort.find({
       "courses.coachId": coachId,
     }).populate("studentIds.studentId", "fullName email");
 
-    // Collect unique students across all cohorts
     const studentsMap = new Map();
 
     cohorts.forEach((cohort) => {
       cohort.studentIds.forEach((s) => {
+        // Filter only enrollments where the course is taught by this coach
+        const filteredEnrollments = s.enrollments.filter((enr) =>
+          cohort.courses.some(
+            (c) =>
+              c.coachId.toString() === coachId &&
+              c.courseId.equals(enr.courseId)
+          )
+        );
+
+        // ❗ If the student did NOT enroll in any course taught by this coach → skip
+        if (filteredEnrollments.length === 0) return;
+
         const studentId = s.studentId._id.toString();
+
         if (!studentsMap.has(studentId)) {
+          // Add the student with filtered enrollments
           studentsMap.set(studentId, {
             studentId: s.studentId._id,
             fullName: s.studentId.fullName,
             email: s.studentId.email,
             cohorts: [cohort.name],
-            enrollments: s.enrollments
-              .filter((enr) =>
-                cohort.courses.some(
-                  (c) =>
-                    c.coachId.toString() === coachId &&
-                    c.courseId.equals(enr.courseId)
-                )
-              )
-              .map((enr) => ({
-                courseId: enr.courseId,
-                paid: enr.paid,
-                paymentConfirmed: enr.paymentConfirmed,
-                hasAccess: enr.hasAccess,
-                paidAt: enr.paidAt,
-                registeredAt: enr.registeredAt,
-              })),
+            enrollments: filteredEnrollments.map((enr) => ({
+              courseId: enr.courseId,
+              paid: enr.paid,
+              paymentConfirmed: enr.paymentConfirmed,
+              hasAccess: enr.hasAccess,
+              paidAt: enr.paidAt,
+              registeredAt: enr.registeredAt,
+            })),
           });
         } else {
-          // If student already exists, just add the cohort
+          // Student already exists → just add cohort name (avoid duplicates)
           const existing = studentsMap.get(studentId);
           if (!existing.cohorts.includes(cohort.name)) {
             existing.cohorts.push(cohort.name);
