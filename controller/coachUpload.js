@@ -279,3 +279,30 @@ export const getAssignedCoaches = async (req, res) => {
       .json({ message: "Server error", error: error.message });
   }
 };
+
+export const deleteVideo = async (req, res) => {
+  try {
+    const videoId = req.params.id;
+
+    const video = await Material.findById(videoId);
+    if (!video) {
+      return res.status(404).json({ message: "Video not found" });
+    }
+
+    // Extract Cloudinary public_id from URL
+    const urlParts = video.fileUrl.split("/");
+    const publicIdWithExt = urlParts[urlParts.length - 1];
+    const publicId = "HGSC-videos/" + publicIdWithExt.split(".")[0];
+
+    // Delete from Cloudinary
+    await cloudinary.uploader.destroy(publicId, { resource_type: "video" });
+
+    // Delete from MongoDB
+    await Material.findByIdAndDelete(videoId);
+
+    res.json({ message: "Video deleted successfully" });
+  } catch (error) {
+    console.error("Delete video failed:", error);
+    res.status(500).json({ message: "Server error deleting video" });
+  }
+};
