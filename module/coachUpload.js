@@ -23,7 +23,8 @@ const materialSchema = new mongoose.Schema(
     },
     unlockAt: { type: Date, default: Date.now }, // time when material becomes visible
     createdAt: { type: Date, default: Date.now },
-    course: { type: mongoose.Schema.Types.ObjectId, ref: "Course" }, // new
+    course: { type: mongoose.Schema.Types.ObjectId, ref: "Course" },
+    corhortId: { type: mongoose.Schema.Types.ObjectId, ref: "Cohort" },
   },
 
   { timestamps: true }

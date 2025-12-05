@@ -279,7 +279,7 @@ export const getAssignedCoaches = async (req, res) => {
       .json({ message: "Server error", error: error.message });
   }
 };
-
+// ✅ Delete video by coach
 export const deleteVideo = async (req, res) => {
   try {
     const videoId = req.params.id;

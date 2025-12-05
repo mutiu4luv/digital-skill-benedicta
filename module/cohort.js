@@ -29,6 +29,10 @@ const courseSubSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+    nextClass: {
+      date: String,
+      time: String,
+    },
   },
   { _id: true, minimize: false }
 );

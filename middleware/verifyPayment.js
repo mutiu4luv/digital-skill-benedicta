@@ -2,7 +2,8 @@ import User from "../module/userModule.js";
 
 export const verifyPayment = async (req, res, next) => {
   try {
-    const studentId = req.user.id; // Assuming JWT auth
+    const studentId = req.user.id;
+    const { cohortId } = req.params;
 
     const user = await User.findById(studentId);
 
@@ -10,16 +11,20 @@ export const verifyPayment = async (req, res, next) => {
       return res.status(404).json({ message: "User not found" });
     }
 
-    // Only allow if both paid and paymentConfirmed are true
-    if (!user.paid || !user.paymentConfirmed) {
+    // Check payment RECORD for this cohort only
+    const record = user.payments?.find(
+      (p) => String(p.cohortId) === String(cohortId)
+    );
+
+    if (!record || !record.paid || !record.paymentConfirmed) {
       return res.status(403).json({
-        message: "Access denied. Payment required to access the class.",
+        message: "You have not paid for this cohort.",
       });
     }
 
-    next(); // User can access the route
+    next();
   } catch (err) {
-    console.error("Verify Payment Error:", err);
+    console.error("verifyCohortPayment Error:", err);
     return res.status(500).json({ message: "Server error" });
   }
 };
