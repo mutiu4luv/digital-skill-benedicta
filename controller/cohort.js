@@ -3,6 +3,7 @@ import Cohort from "..//module/cohort.js";
 import Course from "../module/course.js";
 import userModule from "../module/userModule.js";
 import coachUpload from "../module/coachUpload.js";
+import User from "../module/userModule.js";
 
 //CREATE COHORT
 function convertDurationStringToDays(duration) {
