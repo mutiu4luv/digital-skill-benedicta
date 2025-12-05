@@ -20,53 +20,69 @@ const streamUpload = (buffer, folder, resourceType) => {
   });
 };
 
-// ✅ Upload Video
-// ✅ Upload Video
+// =============================================
+//  COACH UPLOAD VIDEO (upload anytime)
+//  Coach chooses classStartTime from frontend
+// =============================================
 export const uploadVideo = async (req, res) => {
   try {
-    const { title, courseId } = req.body; // <-- include courseId
+    const { title, courseId, classStartTime } = req.body;
     const coachId = req.user.id;
+
+    if (!title) return res.status(400).json({ message: "Title is required" });
 
     if (!req.file)
       return res.status(400).json({ message: "No video file uploaded" });
+
     if (!courseId)
       return res.status(400).json({ message: "Course ID is required" });
 
-    // Check course ownership
+    if (!classStartTime)
+      return res.status(400).json({ message: "Class start time is required" });
+
+    // Validate course
     const course = await Course.findById(courseId);
     if (!course) return res.status(404).json({ message: "Course not found" });
-    if (!course.coach.equals(coachId))
-      return res
-        .status(403)
-        .json({ message: "You are not the coach of this course" });
 
-    // Restrict upload if class is closed
-    if (!course.isClassOpen)
+    if (!course.coachId.equals(coachId))
       return res.status(403).json({
-        message: "Class is closed. You can only upload during class time.",
+        message: "You are not authorized. This is not your course.",
       });
 
-    // Upload to cloudinary
-    const result = await streamUpload(req.file.buffer, "videos", "video");
+    // Convert classStartTime to Date
+    const startTime = new Date(classStartTime);
+    const endTime = new Date(startTime.getTime() + 3 * 60 * 60 * 1000);
 
-    // Save video in DB
-    const video = await Material.create({
+    // Upload video to Cloudinary
+    const uploadResult = await streamUpload(
+      req.file.buffer,
+      "HGSC-videos",
+      "video"
+    );
+
+    // Save material in DB
+    const material = await Material.create({
       title,
-      fileUrl: result.secure_url,
+      fileUrl: uploadResult.secure_url,
       type: "video",
       coach: coachId,
-      course: courseId, // ✅ link to course
+      course: courseId,
+      availableFrom: startTime,
+      availableUntil: endTime,
     });
 
-    res.status(201).json({ message: "✅ Video uploaded successfully", video });
+    return res.status(201).json({
+      message: "🎥 Video uploaded successfully",
+      material,
+    });
   } catch (error) {
-    console.error("❌ Video upload failed:", error);
-    res
-      .status(500)
-      .json({ message: "Video upload failed", error: error.message });
+    console.error("❌ Upload Video Error:", error);
+    return res.status(500).json({
+      message: "Video upload failed",
+      error: error.message,
+    });
   }
 };
-
 // ✅ Upload Document
 export const uploadDocument = async (req, res) => {
   try {
