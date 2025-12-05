@@ -20,7 +20,7 @@ const router = express.Router();
 router.post("/", protect, authorizeRoles("owner"), createCohort);
 router.get("/", protect, authorizeRoles("owner", "coach"), getAllCohorts);
 router.delete("/:cohortId", protect, authorizeRoles("owner"), deleteCohort);
-router.get("/active", protect, getNotActiveCohort);
+router.get("/active", getNotActiveCohort);
 
 router.put(
   "/start/course/:cohortCourseId",
