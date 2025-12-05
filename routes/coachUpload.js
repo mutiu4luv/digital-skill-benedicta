@@ -7,6 +7,7 @@ import {
   getAssignedCoaches,
   getMyVideos,
   deleteVideo,
+  getStudentCourseMaterials,
 } from "../controller/coachUpload.js";
 import { protect, authorizeRoles } from "../middleware/authMiddleware.js";
 
@@ -34,5 +35,6 @@ router.get(
 
 router.get("/coaches", protect, getAssignedCoaches);
 router.delete("/delete-video/:id", protect, deleteVideo);
+router.get("/video", protect, getStudentCourseMaterials);
 
 export default router;

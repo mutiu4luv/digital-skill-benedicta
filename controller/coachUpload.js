@@ -26,64 +26,56 @@ const streamUpload = (buffer, folder, resourceType) => {
 // =============================================
 export const uploadVideo = async (req, res) => {
   try {
-    const { title, courseId, classStartTime } = req.body;
+    const { title, courseId, classStartTime, cohortId } = req.body;
     const coachId = req.user.id;
 
     if (!title) return res.status(400).json({ message: "Title is required" });
-
     if (!req.file)
       return res.status(400).json({ message: "No video file uploaded" });
-
     if (!courseId)
       return res.status(400).json({ message: "Course ID is required" });
-
+    if (!cohortId)
+      return res.status(400).json({ message: "Cohort ID is required" });
     if (!classStartTime)
       return res.status(400).json({ message: "Class start time is required" });
 
     // Validate course
     const course = await Course.findById(courseId);
     if (!course) return res.status(404).json({ message: "Course not found" });
-
-    // Validate course ownership
     if (!course.coach.equals(coachId))
-      return res.status(403).json({
-        message: "You are not authorized. This is not your course.",
-      });
+      return res
+        .status(403)
+        .json({ message: "You are not authorized. This is not your course." });
 
-    // Convert classStartTime to Date
     const startTime = new Date(classStartTime);
-    const endTime = new Date(startTime.getTime() + 3 * 60 * 60 * 1000);
 
-    // Upload video to Cloudinary
     const uploadResult = await streamUpload(
       req.file.buffer,
       "HGSC-videos",
       "video"
     );
 
-    // Save material in DB
     const material = await Material.create({
       title,
       fileUrl: uploadResult.secure_url,
       type: "video",
       coach: coachId,
       course: courseId,
-      availableFrom: startTime,
-      availableUntil: endTime,
+      cohortId: cohortId,
+      unlockAt: startTime,
     });
 
-    return res.status(201).json({
-      message: "🎥 Video uploaded successfully",
-      material,
-    });
+    return res
+      .status(201)
+      .json({ message: "🎥 Video uploaded successfully", material });
   } catch (error) {
     console.error("❌ Upload Video Error:", error);
-    return res.status(500).json({
-      message: "Video upload failed",
-      error: error.message,
-    });
+    return res
+      .status(500)
+      .json({ message: "Video upload failed", error: error.message });
   }
 };
+
 // ✅ Upload Document
 export const uploadDocument = async (req, res) => {
   try {
@@ -304,5 +296,100 @@ export const deleteVideo = async (req, res) => {
   } catch (error) {
     console.error("Delete video failed:", error);
     res.status(500).json({ message: "Server error deleting video" });
+  }
+};
+
+// Student fetches videos/documents for assigned courses
+
+export const getStudentCourseMaterials = async (req, res) => {
+  try {
+    const studentId = req.user.id;
+    const now = new Date();
+
+    // Convert to ObjectId safely
+    let studentObjectId;
+    try {
+      studentObjectId = new mongoose.Types.ObjectId(studentId);
+    } catch {
+      studentObjectId = null;
+    }
+
+    // Fetch cohorts where student exists
+    const cohorts = await Cohort.find({
+      $or: [
+        { "studentIds.studentId": studentId },
+        ...(studentObjectId
+          ? [{ "studentIds.studentId": studentObjectId }]
+          : []),
+      ],
+    });
+
+    if (!cohorts || cohorts.length === 0) {
+      return res
+        .status(404)
+        .json({ message: "You are not enrolled in any cohort yet." });
+    }
+
+    const unlockedMaterials = [];
+    const lockedMaterials = [];
+
+    for (const cohort of cohorts) {
+      const studentData = cohort.studentIds.find(
+        (s) =>
+          s.studentId.toString() === studentId.toString() ||
+          s.studentId === studentId
+      );
+
+      if (!studentData || !Array.isArray(studentData.enrollments)) continue;
+
+      for (const enrollment of studentData.enrollments) {
+        if (!enrollment.paymentConfirmed) continue;
+
+        const courseInCohort = cohort.courses.find(
+          (c) => c.courseId.toString() === enrollment.courseId.toString()
+        );
+
+        if (!courseInCohort) continue;
+
+        const uploads = await Material.find({
+          cohortId: cohort._id,
+          course: courseInCohort.courseId,
+        }).select("title type fileUrl coach unlockAt createdAt updatedAt");
+        for (const upload of uploads) {
+          if (upload.unlockAt && new Date(upload.unlockAt) > now) {
+            lockedMaterials.push({
+              cohortId: cohort._id,
+              courseId: courseInCohort.courseId,
+              ...upload.toObject(),
+            });
+          } else {
+            unlockedMaterials.push({
+              cohortId: cohort._id,
+              courseId: courseInCohort.courseId,
+              ...upload.toObject(),
+            });
+          }
+        }
+      }
+    }
+
+    if (unlockedMaterials.length === 0 && lockedMaterials.length === 0) {
+      return res.status(404).json({
+        message: "Your coach has not uploaded any course materials yet.",
+      });
+    }
+
+    return res.status(200).json({
+      message: "✅ Course materials fetched successfully",
+      unlockedMaterials,
+      lockedMaterialsMessage: lockedMaterials.length
+        ? `Your coach has uploaded ${lockedMaterials.length} material(s). They will be available after the unlock time.`
+        : null,
+    });
+  } catch (error) {
+    console.error("❌ Fetch course materials failed:", error);
+    return res
+      .status(500)
+      .json({ message: "Server error", error: error.message });
   }
 };

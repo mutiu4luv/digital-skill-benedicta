@@ -764,64 +764,102 @@ export const getUpcomingClass = async (req, res) => {
   try {
     const studentId = req.user.id;
 
-    // Find the student
-    const student = await User.findById(studentId);
-    if (!student) return res.status(404).json({ message: "Student not found" });
+    // Convert studentId to ObjectId safely
+    let studentObjectId;
+    try {
+      studentObjectId = new mongoose.Types.ObjectId(studentId);
+    } catch {
+      studentObjectId = null;
+    }
 
-    // Find the cohort (replace with how you store cohortId in User)
-    const cohortId = student.cohortId; // <-- adjust field if different
-    if (!cohortId)
+    // Fetch cohorts where the student is enrolled
+    const cohorts = await Cohort.find({
+      $or: [
+        { "studentIds.studentId": studentId },
+        ...(studentObjectId
+          ? [{ "studentIds.studentId": studentObjectId }]
+          : []),
+      ],
+    });
+
+    if (!cohorts || cohorts.length === 0) {
       return res.status(404).json({ message: "Cohort not assigned" });
+    }
 
-    const cohort = await Cohort.findById(cohortId);
-    if (!cohort) return res.status(404).json({ message: "Cohort not found" });
+    let nextClassData = null;
 
-    // Find the first course with a scheduled nextClass
-    const enrolledCourse = cohort.courses.find((course) => course.nextClass);
+    for (const cohort of cohorts) {
+      // Find the student object in this cohort
+      const studentData = cohort.studentIds.find(
+        (s) =>
+          s.studentId.toString() === studentId.toString() ||
+          s.studentId === studentId
+      );
 
-    if (!enrolledCourse || !enrolledCourse.nextClass) {
+      if (!studentData || !Array.isArray(studentData.enrollments)) continue;
+
+      // Loop through enrollments to find courses with confirmed payment
+      for (const enrollment of studentData.enrollments) {
+        if (!enrollment.paymentConfirmed) continue;
+
+        // Find the course in the cohort that matches the enrollment
+        const courseInCohort = cohort.courses.find(
+          (c) => c.courseId.toString() === enrollment.courseId.toString()
+        );
+
+        if (!courseInCohort || !courseInCohort.nextClass?.date) continue;
+
+        const { date, time } = courseInCohort.nextClass;
+        const classDateTime = new Date(`${date} ${time}`);
+        const now = new Date();
+
+        const hasAccess = now >= classDateTime;
+
+        // Fetch videos/documents for this course & cohort
+        const videos = await coachUpload.find({
+          cohortId: cohort._id,
+          courseId: courseInCohort.courseId,
+          type: "video",
+        });
+
+        const documents = await coachUpload.find({
+          cohortId: cohort._id,
+          courseId: courseInCohort.courseId,
+          type: "document",
+        });
+
+        // Keep the earliest upcoming class
+        if (
+          !nextClassData ||
+          classDateTime < new Date(nextClassData.classDateTime)
+        ) {
+          nextClassData = {
+            cohortId: cohort._id,
+            courseId: courseInCohort.courseId,
+            classDateTime,
+            hasAccess,
+            videos,
+            documents,
+          };
+        }
+      }
+    }
+
+    if (!nextClassData) {
       return res.json({
         hasClass: false,
-        message: "No class fixed by your coach.",
+        message: "No upcoming classes fixed by your coach.",
       });
     }
 
-    const { date, time } = enrolledCourse.nextClass;
-    const classDateTime = new Date(`${date} ${time}`);
-    const now = new Date();
-
-    // Check if student has access (paid + confirmed + class started)
-    // Find student's enrollment for this course
-    const enrollmentRecord = cohort.studentIds
-      .find((s) => s.studentId.toString() === studentId)
-      ?.enrollments.find(
-        (e) => e.courseId.toString() === enrolledCourse.courseId.toString()
-      );
-
-    const hasAccess =
-      enrollmentRecord?.paid &&
-      enrollmentRecord?.paymentConfirmed &&
-      now >= classDateTime;
-
-    // Fetch videos and documents uploaded by the coach for this course
-    const videos = await coachUpload.find({
-      courseId: enrolledCourse.courseId,
-      type: "video",
-    });
-    const documents = await coachUpload.find({
-      courseId: enrolledCourse.courseId,
-      type: "document",
-    });
-
     return res.json({
       hasClass: true,
-      classDateTime,
-      hasAccess,
-      videos,
-      documents,
+      ...nextClassData,
     });
   } catch (err) {
     console.error("Upcoming Class Error:", err);
-    return res.status(500).json({ message: "Server Error" });
+    return res
+      .status(500)
+      .json({ message: "Server Error", error: err.message });
   }
 };
