@@ -94,13 +94,15 @@ export const uploadVideo = async (req, res) => {
 // ✅ Upload Document
 export const uploadDocument = async (req, res) => {
   try {
-    const { title, courseId } = req.body;
+    const { title, courseId, unlockAt } = req.body; // unlockAt is ISO string
     const coachId = req.user.id;
 
     if (!req.file)
       return res.status(400).json({ message: "No document file uploaded" });
     if (!courseId)
       return res.status(400).json({ message: "Course ID is required" });
+    if (!unlockAt)
+      return res.status(400).json({ message: "Unlock time is required" });
 
     const course = await Course.findById(courseId);
     if (!course) return res.status(404).json({ message: "Course not found" });
@@ -109,11 +111,6 @@ export const uploadDocument = async (req, res) => {
         .status(403)
         .json({ message: "You are not the coach of this course" });
 
-    if (!course.isClassOpen)
-      return res.status(403).json({
-        message: "Class is closed. You can only upload during class time.",
-      });
-
     const result = await streamUpload(req.file.buffer, "documents", "auto");
 
     const document = await Material.create({
@@ -121,12 +118,26 @@ export const uploadDocument = async (req, res) => {
       fileUrl: result.secure_url,
       type: "document",
       coach: coachId,
-      course: courseId, // ✅ link to course
+      course: courseId,
+      unlockAt: new Date(unlockAt), // store unlock time
     });
 
     res.status(201).json({
       message: "✅ Document uploaded successfully",
-      document,
+      unlockedMaterials: [
+        {
+          _id: document._id,
+          title: document.title,
+          fileUrl: document.fileUrl,
+          type: document.type,
+          coach: document.coach,
+          courseId: { _id: course._id, name: course.name },
+          unlockAt: document.unlockAt,
+          createdAt: document.createdAt,
+          updatedAt: document.updatedAt,
+        },
+      ],
+      lockedMaterialsMessage: null,
     });
   } catch (error) {
     console.error("❌ Document upload failed:", error);
@@ -314,7 +325,7 @@ export const deleteVideo = async (req, res) => {
   }
 };
 
-// Student fetches videos/documents for assigned courses
+// ✅ Student fetches course video with 3-hour unlock window
 
 export const getStudentCourseMaterials = async (req, res) => {
   try {
@@ -412,5 +423,63 @@ export const getStudentCourseMaterials = async (req, res) => {
     return res
       .status(500)
       .json({ message: "Server error", error: error.message });
+  }
+};
+
+// ✅ Student fetches documents with 3-hour unlock window
+export const getStudentDocuments = async (req, res) => {
+  try {
+    const studentId = req.user.id;
+
+    // 1️⃣ Get paid courses for the student
+    const paidCourses = await Subscription.find({
+      student: studentId,
+      isActive: true, // only active payments
+    }).select("courseId");
+
+    const allowedCourseIds = paidCourses.map((s) => s.courseId);
+
+    // 2️⃣ Current timestamp
+    const now = new Date();
+
+    // 3️⃣ Fetch documents for allowed courses within the 3-hour window
+    const documents = await Material.find({
+      type: "document",
+      course: { $in: allowedCourseIds },
+      unlockAt: { $lte: now }, // document already unlocked
+    })
+      .populate("course", "name")
+      .sort({ createdAt: -1 });
+
+    // 4️⃣ Filter documents that are **not expired (3 hours after unlockAt)**
+    const unlockedMaterials = documents
+      .filter(
+        (doc) => now <= new Date(doc.unlockAt.getTime() + 3 * 60 * 60 * 1000)
+      )
+      .map((doc) => ({
+        _id: doc._id,
+        title: doc.title,
+        fileUrl: doc.fileUrl,
+        type: doc.type,
+        coach: doc.coach,
+        courseId: doc.course
+          ? { _id: doc.course._id, name: doc.course.name }
+          : null,
+        unlockAt: doc.unlockAt,
+        createdAt: doc.createdAt,
+        updatedAt: doc.updatedAt,
+      }));
+
+    res.status(200).json({
+      message: "✅ Documents fetched successfully",
+      unlockedMaterials,
+      lockedMaterialsMessage: null,
+    });
+  } catch (error) {
+    console.error("❌ Could not fetch documents:", error);
+    res.status(500).json({
+      message: "Could not fetch documents",
+      error: error.message,
+    });
   }
 };
