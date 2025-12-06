@@ -373,16 +373,17 @@ export const getStudentCourseMaterials = async (req, res) => {
 
         for (const upload of uploads) {
           const unlockTime = upload.unlockAt?.getTime() || 0;
+          const expireTime = unlockTime + 3 * 60 * 60 * 1000; // 3 hours in ms
 
-          if (unlockTime <= now) {
-            // unlocked
+          if (unlockTime <= now && now <= expireTime) {
+            // unlocked and within 3-hour window
             unlockedMaterials.push({
               cohortId: cohort._id,
               courseId: courseInCohort.courseId,
               ...upload.toObject(),
             });
           } else {
-            // still locked
+            // locked (either not yet unlocked OR expired)
             lockedMaterials.push({
               cohortId: cohort._id,
               courseId: courseInCohort.courseId,
@@ -403,7 +404,7 @@ export const getStudentCourseMaterials = async (req, res) => {
       message: "✅ Course materials fetched successfully",
       unlockedMaterials,
       lockedMaterialsMessage: lockedMaterials.length
-        ? `Your coach has uploaded ${lockedMaterials.length} material(s). They will be available after the unlock time.`
+        ? `Your coach has uploaded ${lockedMaterials.length} material(s). They will be available after the unlock time or are expired.`
         : null,
     });
   } catch (error) {
