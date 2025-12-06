@@ -8,6 +8,7 @@ import {
   getMyVideos,
   deleteVideo,
   getStudentCourseMaterials,
+  getStudentDocuments,
 } from "../controller/coachUpload.js";
 import { protect, authorizeRoles } from "../middleware/authMiddleware.js";
 
@@ -36,5 +37,6 @@ router.get(
 router.get("/coaches", protect, getAssignedCoaches);
 router.delete("/delete-video/:id", protect, deleteVideo);
 router.get("/video", protect, getStudentCourseMaterials);
+router.get("/doc", protect, getStudentDocuments);
 
 export default router;
