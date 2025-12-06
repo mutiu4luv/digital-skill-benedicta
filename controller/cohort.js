@@ -468,45 +468,65 @@ export const getActiveCohorts = async (req, res) => {
   }
 };
 // Get cohorts with not started courses for students to register in cohort
+
 export const getNotActiveCohort = async (req, res) => {
   try {
-    // Fetch ALL cohorts that have at least one not-started course
+    // Fetch all cohorts that have at least one not-started course
     const cohorts = await Cohort.find({
       "courses.status": "not_started",
     })
-      .populate("courses.courseId")
-      .populate("courses.coachId")
-      .populate("studentIds");
+      .populate({
+        path: "courses.courseId",
+        select: "_id name image category description duration isClassOpen",
+      })
+      .populate({
+        path: "courses.coachId",
+        select: "_id fullName profilePhoto avgRating",
+      });
 
     if (!cohorts || cohorts.length === 0) {
-      return res.status(404).json({ message: "❌ No active cohort available" });
+      return res
+        .status(404)
+        .json({ message: "❌ No not-started cohort available" });
     }
 
-    // Format each cohort the same way you already did
+    // Format cohorts
     const formatted = cohorts.map((cohort) => {
-      const notStartedCourses = cohort.courses.filter(
-        (c) => c.status === "not_started"
-      );
+      const notStartedCourses = cohort.courses
+        .filter((c) => c.status === "not_started")
+        .map((course) => ({
+          _id: course.courseId?._id,
+          name: course.courseId?.name,
+          image: course.courseId?.image,
+          category: course.courseId?.category,
+          description: course.courseId?.description,
+          durationInDays: course.durationInDays,
+          status: course.status,
+          nextClass: course.nextClass || {},
+          coach: {
+            _id: course.coachId?._id,
+            fullName: course.coachId?.fullName,
+            profilePhoto: course.coachId?.profilePhoto,
+            avgRating: course.coachId?.avgRating,
+          },
+        }));
 
       return {
-        cohortName: cohort.name,
+        cohortName: cohort.cohortName || cohort.name,
         cohortId: cohort._id,
         courses: notStartedCourses,
       };
     });
 
-    return res.status(200).json({
-      cohorts: formatted,
-    });
+    return res.status(200).json({ cohorts: formatted });
   } catch (err) {
-    console.error(err);
+    console.error("Error fetching not-started cohorts:", err);
     return res.status(500).json({
       message: "Server error",
       error: err.message,
     });
   }
 };
-
 //✅ Get all coaches assigned to students
 
 export const getCoachesAssignedToStudents = async (req, res) => {
@@ -646,6 +666,7 @@ export const getCohortCourses = async (req, res) => {
     return res.status(500).json({ message: "Server error" });
   }
 };
+// get cohorts assigned to a coach
 export const getCoachAssignedCohorts = async (req, res) => {
   try {
     const coachId = req.user.id;
@@ -697,6 +718,7 @@ export const getCoachAssignedCohorts = async (req, res) => {
     res.status(500).json({ message: "Internal server error" });
   }
 };
+// get students under a coach
 export const getStudentsUnderCoach = async (req, res) => {
   try {
     const coachId = req.user.id;
