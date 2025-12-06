@@ -10,7 +10,7 @@ import {
 const router = express.Router();
 
 // CEO creates announcement
-router.post("/", protect, authorizeRoles("owner"), createAnnouncement);
+router.post("/", protect, createAnnouncement);
 
 // All users can view announcements
 router.get("/", getAnnouncements);

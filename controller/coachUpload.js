@@ -427,31 +427,32 @@ export const getStudentCourseMaterials = async (req, res) => {
 };
 
 // ✅ Student fetches documents with 3-hour unlock window
+
 export const getStudentDocuments = async (req, res) => {
   try {
     const studentId = req.user.id;
-
-    // 1️⃣ Get paid courses for the student
-    const paidCourses = await Subscription.find({
-      student: studentId,
-      isActive: true, // only active payments
-    }).select("courseId");
-
-    const allowedCourseIds = paidCourses.map((s) => s.courseId);
-
-    // 2️⃣ Current timestamp
     const now = new Date();
 
-    // 3️⃣ Fetch documents for allowed courses within the 3-hour window
+    // 1️⃣ Get cohorts where the student belongs
+    const cohorts = await Cohort.find({ students: studentId }).select(
+      "courses"
+    );
+
+    // Flatten all course IDs from cohorts
+    const allowedCourseIds = cohorts.flatMap((c) =>
+      c.courses.map((course) => course._id)
+    );
+
+    // 2️⃣ Fetch documents for allowed courses
     const documents = await Material.find({
       type: "document",
       course: { $in: allowedCourseIds },
-      unlockAt: { $lte: now }, // document already unlocked
+      unlockAt: { $lte: now },
     })
-      .populate("course", "name")
+      .populate("course", "name coach")
       .sort({ createdAt: -1 });
 
-    // 4️⃣ Filter documents that are **not expired (3 hours after unlockAt)**
+    // 3️⃣ Filter documents that are not expired (3 hours after unlockAt)
     const unlockedMaterials = documents
       .filter(
         (doc) => now <= new Date(doc.unlockAt.getTime() + 3 * 60 * 60 * 1000)
