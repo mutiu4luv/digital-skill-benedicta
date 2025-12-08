@@ -23,7 +23,6 @@ function convertDurationStringToDays(duration) {
 
   return null;
 }
-
 export const createCohort = async (req, res) => {
   try {
     const ownerId = req.user.id;
@@ -35,7 +34,7 @@ export const createCohort = async (req, res) => {
         .json({ message: "Name and ownerId are required." });
     }
 
-    if (!courses || !Array.isArray(courses) || courses.length === 0) {
+    if (!Array.isArray(courses) || courses.length === 0) {
       return res
         .status(400)
         .json({ message: "At least one course is required." });
@@ -52,6 +51,7 @@ export const createCohort = async (req, res) => {
         });
       }
 
+      // Confirm the course exists
       const courseDoc = await Course.findById(courseId);
       if (!courseDoc) {
         return res
@@ -59,6 +59,7 @@ export const createCohort = async (req, res) => {
           .json({ message: `Course not found: ${courseId}` });
       }
 
+      // Convert "3-months" → 90 days
       const durationInDays = convertDurationStringToDays(courseDoc.duration);
 
       validatedCourses.push({
@@ -68,10 +69,13 @@ export const createCohort = async (req, res) => {
         status: "not_started",
         startDate: null,
         endDate: null,
+        classDay: null,
+        classTime: null,
+        classStartTime: null,
+        classEndTime: null,
       });
     }
 
-    // ✅ Directly assign the array to the courses field
     const newCohort = new Cohort({
       name,
       ownerId,
@@ -890,4 +894,52 @@ export const getUpcomingClass = async (req, res) => {
       .status(500)
       .json({ message: "Server Error", error: err.message });
   }
+};
+export const setClassSchedule = async (req, res) => {
+  const { courseId } = req.params;
+  const { classDay, classTime } = req.body;
+  const coachId = req.user.id;
+
+  const course = await Course.findById(courseId);
+  if (!course) return res.status(404).json({ message: "Course not found" });
+
+  if (!course.coach || !course.coach.equals(coachId)) {
+    return res.status(403).json({ message: "Not your course" });
+  }
+
+  // Create class start & end time
+  const [hour, minute] = classTime.split(":");
+  const now = new Date();
+  const classStart = new Date(now);
+  classStart.setHours(hour, minute, 0, 0);
+  const classEnd = new Date(classStart.getTime() + 3 * 60 * 60 * 1000);
+
+  // Update the course itself
+  course.classDay = classDay;
+  course.classTime = classTime;
+  course.classStartTime = classStart;
+  course.classEndTime = classEnd;
+  course.isClassOpen = false;
+
+  await course.save();
+
+  // ✅ Update all cohorts that include this course
+  await Cohort.updateMany(
+    { "courses.courseId": courseId },
+    {
+      $set: {
+        "courses.$.status": "in_progress",
+        "courses.$.classDay": classDay,
+        "courses.$.classTime": classTime,
+        "courses.$.classStartTime": classStart,
+        "courses.$.classEndTime": classEnd,
+        "courses.$.startDate": classStart,
+      },
+    }
+  );
+
+  res.json({
+    message: `Class scheduled for ${classDay} at ${classTime}`,
+    course,
+  });
 };
