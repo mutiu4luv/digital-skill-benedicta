@@ -471,13 +471,13 @@ export const getActiveCohorts = async (req, res) => {
 
 export const getNotActiveCohort = async (req, res) => {
   try {
-    // Fetch all cohorts that have at least one not-started course
+    // Fetch all cohorts with at least one not-started course
     const cohorts = await Cohort.find({
       "courses.status": "not_started",
     })
       .populate({
         path: "courses.courseId",
-        select: "_id name image category description duration isClassOpen",
+        select: "_id name image category description durationInDays",
       })
       .populate({
         path: "courses.coachId",
@@ -490,29 +490,34 @@ export const getNotActiveCohort = async (req, res) => {
         .json({ message: "❌ No not-started cohort available" });
     }
 
-    // Format cohorts
     const formatted = cohorts.map((cohort) => {
       const notStartedCourses = cohort.courses
         .filter((c) => c.status === "not_started")
-        .map((course) => ({
-          _id: course.courseId?._id,
-          name: course.courseId?.name,
-          image: course.courseId?.image,
-          category: course.courseId?.category,
-          description: course.courseId?.description,
-          durationInDays: course.durationInDays,
-          status: course.status,
-          nextClass: course.nextClass || {},
-          coach: {
-            _id: course.coachId?._id,
-            fullName: course.coachId?.fullName,
-            profilePhoto: course.coachId?.profilePhoto,
-            avgRating: course.coachId?.avgRating,
-          },
-        }));
+        .map((course) => {
+          const courseData = course.courseId || {}; // prevent undefined
+          const coachData = course.coachId || {};
+
+          return {
+            _id: courseData._id || null,
+            name: courseData.name || "Untitled Course",
+            image: courseData.image || "",
+            category: courseData.category || "",
+            description: courseData.description || "",
+            durationInDays:
+              course.durationInDays || courseData.durationInDays || 0,
+            status: course.status,
+            nextClass: course.nextClass || {},
+            coach: {
+              _id: coachData._id || null,
+              fullName: coachData.fullName || "",
+              profilePhoto: coachData.profilePhoto || "",
+              avgRating: coachData.avgRating || 0,
+            },
+          };
+        });
 
       return {
-        cohortName: cohort.cohortName || cohort.name,
+        cohortName: cohort.cohortName || cohort.name || "Unnamed Cohort",
         cohortId: cohort._id,
         courses: notStartedCourses,
       };
@@ -527,6 +532,7 @@ export const getNotActiveCohort = async (req, res) => {
     });
   }
 };
+
 //✅ Get all coaches assigned to students
 
 export const getCoachesAssignedToStudents = async (req, res) => {
