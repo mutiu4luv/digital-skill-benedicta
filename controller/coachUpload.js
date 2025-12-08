@@ -461,21 +461,23 @@ export const getStudentDocuments = async (req, res) => {
       }
     });
 
-    // 3️⃣ Fetch documents for allowed courses
+    // 3️⃣ Fetch all documents for allowed courses (both unlocked and upcoming)
     const documents = await Material.find({
       type: "document",
       course: { $in: allowedCourseIds },
-      unlockAt: { $lte: now },
     })
       .populate("course", "name coach")
-      .sort({ createdAt: -1 });
+      .sort({ unlockAt: 1 }); // sort by unlock date ascending
 
-    // 4️⃣ Filter documents that are not expired (3 hours after unlockAt)
-    const unlockedMaterials = documents
-      .filter(
-        (doc) => now <= new Date(doc.unlockAt.getTime() + 3 * 60 * 60 * 1000)
-      )
-      .map((doc) => ({
+    // 4️⃣ Separate unlocked and upcoming materials
+    const unlockedMaterials = [];
+    const upcomingMaterials = [];
+
+    documents.forEach((doc) => {
+      const unlockTime = new Date(doc.unlockAt);
+      const expireTime = new Date(unlockTime.getTime() + 3 * 60 * 60 * 1000); // 3 hours later
+
+      const material = {
         _id: doc._id,
         title: doc.title,
         fileUrl: doc.fileUrl,
@@ -487,13 +489,24 @@ export const getStudentDocuments = async (req, res) => {
         unlockAt: doc.unlockAt,
         createdAt: doc.createdAt,
         updatedAt: doc.updatedAt,
-      }));
+      };
+
+      if (now >= unlockTime && now <= expireTime) {
+        unlockedMaterials.push(material); // available to access
+      } else if (now < unlockTime) {
+        upcomingMaterials.push(material); // future class
+      }
+      // expired materials are ignored
+    });
 
     res.status(200).json({
       message: "✅ Documents fetched successfully",
       unlockedMaterials,
+      upcomingMaterials,
       lockedMaterialsMessage:
-        unlockedMaterials.length === 0 ? "No documents available" : null,
+        unlockedMaterials.length === 0 && upcomingMaterials.length === 0
+          ? "No documents available"
+          : null,
     });
   } catch (error) {
     console.error("❌ Could not fetch documents:", error);
