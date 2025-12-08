@@ -125,7 +125,7 @@ export const registerStudentToCohort = async (req, res) => {
     }
 
     const selectedCourse = cohort.courses.find(
-      (c) => c.courseId.toString() === courseId
+      (c) => c._id.toString() === courseId
     );
 
     if (!selectedCourse) {

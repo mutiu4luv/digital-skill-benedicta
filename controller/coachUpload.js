@@ -484,3 +484,46 @@ export const getStudentDocuments = async (req, res) => {
     });
   }
 };
+
+// get all documents uploaded by the coach
+export const getCoachDocuments = async (req, res) => {
+  try {
+    const coachId = req.user.id;
+
+    // Get all documents uploaded by this coach
+    const documents = await Material.find({
+      coach: coachId,
+      type: "document",
+    })
+      .populate("course", "name category duration")
+      .sort({ createdAt: -1 });
+
+    // Format response EXACTLY like your upload response
+    const formatted = documents.map((doc) => ({
+      _id: doc._id,
+      title: doc.title,
+      fileUrl: doc.fileUrl,
+      type: doc.type,
+      coach: doc.coach,
+      courseId: {
+        _id: doc.course?._id || null,
+        name: doc.course?.name || "Unknown Course",
+      },
+      unlockAt: doc.unlockAt,
+      createdAt: doc.createdAt,
+      updatedAt: doc.updatedAt,
+    }));
+
+    res.status(200).json({
+      message: "Documents fetched successfully",
+      unlockedMaterials: formatted,
+      lockedMaterialsMessage: null,
+    });
+  } catch (error) {
+    console.error("❌ Error fetching coach documents:", error);
+    res.status(500).json({
+      message: "Failed to fetch documents",
+      error: error.message,
+    });
+  }
+};
