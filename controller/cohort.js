@@ -120,12 +120,16 @@ export const registerStudentToCohort = async (req, res) => {
     const cohort = await Cohort.findById(cohortId);
     if (!cohort) return res.status(404).json({ message: "Cohort not found" });
 
-    if (!cohort.courses || cohort.courses.length === 0) {
+    if (!Array.isArray(cohort.courses) || cohort.courses.length === 0) {
       return res.status(400).json({ message: "This cohort has no courses" });
     }
 
+    // ✅ FIX: Find course by courseId property, not _id
     const selectedCourse = cohort.courses.find(
-      (c) => c._id.toString() === courseId
+      (c) =>
+        c.courseId &&
+        (c.courseId.toString() === courseId.toString() ||
+          (c.courseId._id && c.courseId._id.toString() === courseId.toString()))
     );
 
     if (!selectedCourse) {
@@ -134,14 +138,12 @@ export const registerStudentToCohort = async (req, res) => {
       });
     }
 
-    // 3️⃣ NORMALIZE old studentIds shape:
-    //    convert raw ObjectId entries into { studentId, enrollments: [] }
+    // 3️⃣ Normalize old studentIds shape
     if (!Array.isArray(cohort.studentIds)) {
       cohort.studentIds = [];
     } else {
       cohort.studentIds = cohort.studentIds
         .map((entry) => {
-          // If entry is a plain ObjectId (old schema)
           if (
             typeof entry === "string" ||
             entry instanceof mongoose.Types.ObjectId
@@ -151,16 +153,12 @@ export const registerStudentToCohort = async (req, res) => {
               enrollments: [],
             };
           }
-
-          // If entry is already in new shape, keep it
           if (entry && entry.studentId) {
             if (!Array.isArray(entry.enrollments)) {
               entry.enrollments = [];
             }
             return entry;
           }
-
-          // Fallback: skip invalid entries
           return null;
         })
         .filter(Boolean);
@@ -168,7 +166,7 @@ export const registerStudentToCohort = async (req, res) => {
 
     // 4️⃣ Find or create this student entry inside cohort.studentIds
     let studentEntry = cohort.studentIds.find(
-      (s) => s.studentId.toString() === studentId.toString()
+      (s) => s.studentId && s.studentId.toString() === studentId.toString()
     );
 
     if (!studentEntry) {
