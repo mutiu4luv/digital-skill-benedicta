@@ -433,17 +433,35 @@ export const getStudentDocuments = async (req, res) => {
     const studentId = req.user.id;
     const now = new Date();
 
-    // 1️⃣ Get cohorts where the student belongs
-    const cohorts = await Cohort.find({ students: studentId }).select(
-      "courses"
-    );
+    // 1️⃣ Get cohorts where the student belongs and populate enrollments
+    const cohorts = await Cohort.find({ "studentIds.studentId": studentId })
+      .populate({
+        path: "courses.courseId",
+        select: "_id name",
+      })
+      .populate({
+        path: "studentIds.enrollments",
+      });
 
-    // Flatten all course IDs from cohorts
-    const allowedCourseIds = cohorts.flatMap((c) =>
-      c.courses.map((course) => course._id)
-    );
+    // 2️⃣ Flatten allowed course IDs where the student has access
+    const allowedCourseIds = [];
 
-    // 2️⃣ Fetch documents for allowed courses
+    cohorts.forEach((cohort) => {
+      // Find the student in this cohort
+      const studentEntry = cohort.studentIds.find(
+        (s) => s.studentId.toString() === studentId
+      );
+
+      if (studentEntry?.enrollments?.length) {
+        studentEntry.enrollments.forEach((enrollment) => {
+          if (enrollment.hasAccess) {
+            allowedCourseIds.push(enrollment.courseId.toString());
+          }
+        });
+      }
+    });
+
+    // 3️⃣ Fetch documents for allowed courses
     const documents = await Material.find({
       type: "document",
       course: { $in: allowedCourseIds },
@@ -452,7 +470,7 @@ export const getStudentDocuments = async (req, res) => {
       .populate("course", "name coach")
       .sort({ createdAt: -1 });
 
-    // 3️⃣ Filter documents that are not expired (3 hours after unlockAt)
+    // 4️⃣ Filter documents that are not expired (3 hours after unlockAt)
     const unlockedMaterials = documents
       .filter(
         (doc) => now <= new Date(doc.unlockAt.getTime() + 3 * 60 * 60 * 1000)
@@ -474,7 +492,8 @@ export const getStudentDocuments = async (req, res) => {
     res.status(200).json({
       message: "✅ Documents fetched successfully",
       unlockedMaterials,
-      lockedMaterialsMessage: null,
+      lockedMaterialsMessage:
+        unlockedMaterials.length === 0 ? "No documents available" : null,
     });
   } catch (error) {
     console.error("❌ Could not fetch documents:", error);
