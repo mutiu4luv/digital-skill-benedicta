@@ -527,3 +527,48 @@ export const getCoachDocuments = async (req, res) => {
     });
   }
 };
+// ✅ Delete document by coach
+export const deleteDocument = async (req, res) => {
+  try {
+    const { documentId } = req.params;
+    const coachId = req.user.id;
+
+    // 1️⃣ Find the document
+    const doc = await Material.findById(documentId);
+    if (!doc) {
+      return res.status(404).json({ message: "Document not found" });
+    }
+
+    // 2️⃣ Ensure the coach owns this document
+    if (!doc.coach.equals(coachId)) {
+      return res.status(403).json({
+        message: "You are not allowed to delete this document",
+      });
+    }
+
+    // 3️⃣ Extract Cloudinary public_id from URL
+    // URL format: .../documents/filename.ext
+    const urlParts = doc.fileUrl.split("/");
+    const fileName = urlParts[urlParts.length - 1]; // filename.ext
+    const publicId = "documents/" + fileName.split(".")[0]; // documents/filename
+
+    // 4️⃣ Delete file from Cloudinary
+    await cloudinary.v2.uploader.destroy(publicId, {
+      resource_type: "raw",
+    });
+
+    // 5️⃣ Delete document from MongoDB
+    await doc.deleteOne();
+
+    return res.status(200).json({
+      message: "Document deleted successfully",
+      deletedDocumentId: documentId,
+    });
+  } catch (error) {
+    console.error("❌ Document deletion failed:", error);
+    res.status(500).json({
+      message: "Document deletion failed",
+      error: error.message,
+    });
+  }
+};
