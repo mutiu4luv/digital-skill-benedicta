@@ -16,10 +16,10 @@ router.get("/", getVideos);
 router.post(
   "/upload",
   protect,
-  authorizeRoles("coach"),
+  authorizeRoles("owner"),
   upload.single("video"),
   uploadVideo
 );
-router.delete("/:id", protect, authorizeRoles("coach"), deleteVideo);
+router.delete("/:id", protect, authorizeRoles("owner"), deleteVideo);
 
 export default router;
