@@ -5,6 +5,7 @@ import streamifier from "streamifier";
 import Course from "../module/course.js";
 import Cohort from "../module/cohort.js";
 import mongoose from "mongoose";
+import moment from "moment";
 
 // ✅ Upload helper
 const streamUpload = (buffer, folder, resourceType) => {
@@ -433,89 +434,121 @@ export const getStudentDocuments = async (req, res) => {
     const studentId = req.user.id;
     const now = new Date();
 
-    // 1️⃣ Get cohorts where the student belongs and populate enrollments
+    const page = parseInt(req.query.page) || 1; // current page
+    const limit = parseInt(req.query.limit) || 10; // items per page
+    const skip = (page - 1) * limit;
+
+    // 1️⃣ Get all student cohorts and enrollments with access
     const cohorts = await Cohort.find({ "studentIds.studentId": studentId })
+      .select("studentIds courses")
       .populate({
-        path: "courses.courseId",
+        path: "studentIds.enrollments.courseId",
         select: "_id name",
       })
       .populate({
-        path: "studentIds.enrollments",
+        path: "courses.courseId",
+        select: "_id name coach",
+        populate: { path: "coach", select: "_id fullName profilePhoto email" },
       });
 
-    // 2️⃣ Flatten allowed course IDs where the student has access
+    // 2️⃣ Build list of allowed courses (hasAccess)
     const allowedCourseIds = [];
-
     cohorts.forEach((cohort) => {
-      const studentEntry = cohort.studentIds.find(
+      const student = cohort.studentIds.find(
         (s) => s.studentId.toString() === studentId
       );
-
-      if (studentEntry?.enrollments?.length) {
-        studentEntry.enrollments.forEach((enrollment) => {
-          if (enrollment.hasAccess) {
-            allowedCourseIds.push(enrollment.courseId.toString());
-          }
-        });
-      }
+      if (!student?.enrollments?.length) return;
+      student.enrollments.forEach((e) => {
+        if (e.hasAccess) allowedCourseIds.push(e.courseId._id.toString());
+      });
     });
 
-    // If no allowed courses → return early
-    if (allowedCourseIds.length === 0) {
+    if (!allowedCourseIds.length) {
       return res.status(200).json({
         message: "No accessible course materials",
-        unlockedMaterials: [],
-        upcomingMaterials: [],
+        materialsByCourse: {},
+        nextClassCountdown: null,
+        pagination: { page, limit, total: 0 },
       });
     }
 
-    // 3️⃣ Fetch ALL materials (video + document + others) for allowed courses
-    const materials = await Material.find({
+    // 3️⃣ Fetch all materials for allowed courses
+    const allMaterials = await Material.find({
       course: { $in: allowedCourseIds },
     })
       .populate("course", "name coach")
       .sort({ unlockAt: 1 });
 
-    // 4️⃣ Separate unlocked and upcoming materials
-    const unlockedMaterials = [];
-    const upcomingMaterials = [];
+    // 4️⃣ Separate unlocked / upcoming and group by course
+    const materialsByCourse = {};
+    let nextClass = null;
 
-    materials.forEach((doc) => {
-      const unlockTime = new Date(doc.unlockAt);
-      const expireTime = new Date(unlockTime.getTime() + 3 * 60 * 60 * 1000); // 3 hours later
+    allMaterials.forEach((m) => {
+      const unlockTime = new Date(m.unlockAt);
+      const expireTime = new Date(unlockTime.getTime() + 3 * 60 * 60 * 1000);
+      const status =
+        now >= unlockTime && now <= expireTime
+          ? "unlocked"
+          : now < unlockTime
+          ? "upcoming"
+          : "expired";
 
-      const material = {
-        _id: doc._id,
-        title: doc.title,
-        fileUrl: doc.fileUrl,
-        type: doc.type,
-        coach: doc.coach,
-        courseId: doc.course
-          ? { _id: doc.course._id, name: doc.course.name }
-          : null,
-        unlockAt: doc.unlockAt,
-        createdAt: doc.createdAt,
-        updatedAt: doc.updatedAt,
+      if (status === "expired") return;
+
+      const courseId = m.course._id.toString();
+      if (!materialsByCourse[courseId]) {
+        materialsByCourse[courseId] = {
+          courseId: m.course._id,
+          courseName: m.course.name,
+          coach: m.course.coach,
+          unlocked: [],
+          upcoming: [],
+        };
+      }
+
+      const materialItem = {
+        _id: m._id,
+        title: m.title,
+        type: m.type,
+        fileUrl: m.fileUrl,
+        unlockAt: m.unlockAt,
+        createdAt: m.createdAt,
       };
 
-      if (now >= unlockTime && now <= expireTime) {
-        unlockedMaterials.push(material);
-      } else if (now < unlockTime) {
-        upcomingMaterials.push(material);
+      if (status === "unlocked") {
+        materialsByCourse[courseId].unlocked.push(materialItem);
+      } else if (status === "upcoming") {
+        materialsByCourse[courseId].upcoming.push(materialItem);
+
+        // set nextClass if not set yet
+        if (!nextClass || unlockTime < new Date(nextClass.unlockAt)) {
+          nextClass = { ...materialItem, unlockAt: m.unlockAt };
+        }
       }
-      // expired materials (after 3 hours) are ignored
+    });
+
+    // 5️⃣ Build next class countdown string
+    let nextClassCountdown = null;
+    if (nextClass) {
+      const duration = moment.duration(moment(nextClass.unlockAt).diff(now));
+      const hours = Math.floor(duration.asHours());
+      const minutes = duration.minutes();
+      nextClassCountdown = `Next class unlocks in: ${hours}h ${minutes}m`;
+    }
+
+    // 6️⃣ Pagination (for courses)
+    const courseIds = Object.keys(materialsByCourse);
+    const paginatedCourseIds = courseIds.slice(skip, skip + limit);
+    const paginatedMaterials = {};
+    paginatedCourseIds.forEach((id) => {
+      paginatedMaterials[id] = materialsByCourse[id];
     });
 
     res.status(200).json({
       message: "✅ Materials fetched successfully",
-      unlockedMaterials,
-      upcomingMaterials,
-      nextClass:
-        upcomingMaterials.length > 0 ? upcomingMaterials[0].unlockAt : null,
-      lockedMaterialsMessage:
-        unlockedMaterials.length === 0 && upcomingMaterials.length === 0
-          ? "No materials available"
-          : null,
+      materialsByCourse: paginatedMaterials,
+      nextClassCountdown,
+      pagination: { page, limit, total: courseIds.length },
     });
   } catch (error) {
     console.error("❌ Could not fetch materials:", error);
