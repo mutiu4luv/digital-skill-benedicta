@@ -214,7 +214,7 @@ export const getAssignedCoaches = async (req, res) => {
     try {
       studentObjectId = new mongoose.Types.ObjectId(studentId);
     } catch {
-      // Keep null if conversion fails (string ID is fine)
+      // keep null if conversion fails (string is fine)
     }
 
     // Fetch cohorts where the student is enrolled
@@ -250,27 +250,32 @@ export const getAssignedCoaches = async (req, res) => {
           s.studentId === studentId
       );
 
-      if (!studentData?.enrollments?.length) return;
+      if (!studentData) return;
 
-      studentData.enrollments.forEach((enrollment) => {
-        if (!enrollment.paymentConfirmed) return;
+      // Iterate through all enrollments (even if payment not confirmed)
+      const enrollments = Array.isArray(studentData.enrollments)
+        ? studentData.enrollments
+        : [];
 
-        const courseInProgress = cohort.courses.find(
+      enrollments.forEach((enrollment) => {
+        // Find the course in this cohort (any status)
+        const course = cohort.courses.find(
           (c) =>
             c.courseId &&
-            c.courseId._id.toString() === enrollment.courseId.toString() &&
-            (c.status === "in_progress" || c.status === "not_started") &&
-            c.courseId.coach
+            c.courseId._id.toString() === enrollment.courseId.toString()
         );
 
-        if (courseInProgress) {
-          const coach = courseInProgress.courseId.coach;
+        if (course?.courseId?.coach) {
+          const coach = course.courseId.coach;
+          // Add to map to avoid duplicates
           coachMap.set(coach._id.toString(), {
             _id: coach._id,
             fullName: coach.fullName,
             email: coach.email,
             profilePhoto: coach.profilePhoto,
             avgRating: coach.avgRating,
+            courseName: course.courseId.name,
+            courseStatus: course.status,
           });
         }
       });
@@ -280,8 +285,7 @@ export const getAssignedCoaches = async (req, res) => {
 
     if (!uniqueCoaches.length) {
       return res.status(404).json({
-        message:
-          "You have no assigned coaches for in-progress courses at the moment.",
+        message: "You have no assigned coaches at the moment.",
       });
     }
 
