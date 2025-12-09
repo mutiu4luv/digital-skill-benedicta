@@ -434,11 +434,11 @@ export const getStudentDocuments = async (req, res) => {
     const studentId = req.user.id;
     const now = new Date();
 
-    const page = parseInt(req.query.page) || 1; // current page
-    const limit = parseInt(req.query.limit) || 10; // items per page
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
     const skip = (page - 1) * limit;
 
-    // 1️⃣ Get all student cohorts and enrollments with access
+    // 1️⃣ Get cohorts where student belongs and populate enrollments
     const cohorts = await Cohort.find({ "studentIds.studentId": studentId })
       .select("studentIds courses")
       .populate({
@@ -451,7 +451,7 @@ export const getStudentDocuments = async (req, res) => {
         populate: { path: "coach", select: "_id fullName profilePhoto email" },
       });
 
-    // 2️⃣ Build list of allowed courses (hasAccess)
+    // 2️⃣ Build list of courses the student has access to
     const allowedCourseIds = [];
     cohorts.forEach((cohort) => {
       const student = cohort.studentIds.find(
@@ -466,13 +466,15 @@ export const getStudentDocuments = async (req, res) => {
     if (!allowedCourseIds.length) {
       return res.status(200).json({
         message: "No accessible course materials",
-        materialsByCourse: {},
-        nextClassCountdown: null,
+        unlockedMaterials: [],
+        upcomingMaterials: [],
+        nextClass: null,
+        lockedMaterialsMessage: "No materials available",
         pagination: { page, limit, total: 0 },
       });
     }
 
-    // 3️⃣ Fetch all materials for allowed courses
+    // 3️⃣ Fetch materials for allowed courses
     const allMaterials = await Material.find({
       course: { $in: allowedCourseIds },
     })
@@ -481,6 +483,8 @@ export const getStudentDocuments = async (req, res) => {
 
     // 4️⃣ Separate unlocked / upcoming and group by course
     const materialsByCourse = {};
+    const unlockedMaterials = [];
+    const upcomingMaterials = [];
     let nextClass = null;
 
     allMaterials.forEach((m) => {
@@ -517,17 +521,18 @@ export const getStudentDocuments = async (req, res) => {
 
       if (status === "unlocked") {
         materialsByCourse[courseId].unlocked.push(materialItem);
+        unlockedMaterials.push(materialItem);
       } else if (status === "upcoming") {
         materialsByCourse[courseId].upcoming.push(materialItem);
+        upcomingMaterials.push(materialItem);
 
-        // set nextClass if not set yet
         if (!nextClass || unlockTime < new Date(nextClass.unlockAt)) {
           nextClass = { ...materialItem, unlockAt: m.unlockAt };
         }
       }
     });
 
-    // 5️⃣ Build next class countdown string
+    // 5️⃣ Build next class countdown
     let nextClassCountdown = null;
     if (nextClass) {
       const duration = moment.duration(moment(nextClass.unlockAt).diff(now));
@@ -536,18 +541,25 @@ export const getStudentDocuments = async (req, res) => {
       nextClassCountdown = `Next class unlocks in: ${hours}h ${minutes}m`;
     }
 
-    // 6️⃣ Pagination (for courses)
+    // 6️⃣ Pagination (by course)
     const courseIds = Object.keys(materialsByCourse);
     const paginatedCourseIds = courseIds.slice(skip, skip + limit);
-    const paginatedMaterials = {};
+    const paginatedMaterialsByCourse = {};
     paginatedCourseIds.forEach((id) => {
-      paginatedMaterials[id] = materialsByCourse[id];
+      paginatedMaterialsByCourse[id] = materialsByCourse[id];
     });
 
     res.status(200).json({
       message: "✅ Materials fetched successfully",
-      materialsByCourse: paginatedMaterials,
+      unlockedMaterials,
+      upcomingMaterials,
+      nextClass: nextClass || null,
       nextClassCountdown,
+      lockedMaterialsMessage:
+        unlockedMaterials.length + upcomingMaterials.length === 0
+          ? "No materials available"
+          : null,
+      materialsByCourse: paginatedMaterialsByCourse,
       pagination: { page, limit, total: courseIds.length },
     });
   } catch (error) {
