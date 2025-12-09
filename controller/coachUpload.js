@@ -447,7 +447,6 @@ export const getStudentDocuments = async (req, res) => {
     const allowedCourseIds = [];
 
     cohorts.forEach((cohort) => {
-      // Find the student in this cohort
       const studentEntry = cohort.studentIds.find(
         (s) => s.studentId.toString() === studentId
       );
@@ -461,19 +460,27 @@ export const getStudentDocuments = async (req, res) => {
       }
     });
 
-    // 3️⃣ Fetch all documents for allowed courses (both unlocked and upcoming)
-    const documents = await Material.find({
-      type: "document",
+    // If no allowed courses → return early
+    if (allowedCourseIds.length === 0) {
+      return res.status(200).json({
+        message: "No accessible course materials",
+        unlockedMaterials: [],
+        upcomingMaterials: [],
+      });
+    }
+
+    // 3️⃣ Fetch ALL materials (video + document + others) for allowed courses
+    const materials = await Material.find({
       course: { $in: allowedCourseIds },
     })
       .populate("course", "name coach")
-      .sort({ unlockAt: 1 }); // sort by unlock date ascending
+      .sort({ unlockAt: 1 });
 
     // 4️⃣ Separate unlocked and upcoming materials
     const unlockedMaterials = [];
     const upcomingMaterials = [];
 
-    documents.forEach((doc) => {
+    materials.forEach((doc) => {
       const unlockTime = new Date(doc.unlockAt);
       const expireTime = new Date(unlockTime.getTime() + 3 * 60 * 60 * 1000); // 3 hours later
 
@@ -492,26 +499,28 @@ export const getStudentDocuments = async (req, res) => {
       };
 
       if (now >= unlockTime && now <= expireTime) {
-        unlockedMaterials.push(material); // available to access
+        unlockedMaterials.push(material);
       } else if (now < unlockTime) {
-        upcomingMaterials.push(material); // future class
+        upcomingMaterials.push(material);
       }
-      // expired materials are ignored
+      // expired materials (after 3 hours) are ignored
     });
 
     res.status(200).json({
-      message: "✅ Documents fetched successfully",
+      message: "✅ Materials fetched successfully",
       unlockedMaterials,
       upcomingMaterials,
+      nextClass:
+        upcomingMaterials.length > 0 ? upcomingMaterials[0].unlockAt : null,
       lockedMaterialsMessage:
         unlockedMaterials.length === 0 && upcomingMaterials.length === 0
-          ? "No documents available"
+          ? "No materials available"
           : null,
     });
   } catch (error) {
-    console.error("❌ Could not fetch documents:", error);
+    console.error("❌ Could not fetch materials:", error);
     res.status(500).json({
-      message: "Could not fetch documents",
+      message: "Could not fetch materials",
       error: error.message,
     });
   }
