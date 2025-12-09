@@ -209,25 +209,25 @@ export const getAssignedCoaches = async (req, res) => {
   try {
     const studentId = req.user.id;
 
-    // Convert to ObjectId for comparison
-    let studentObjectId;
+    // Convert studentId to ObjectId if possible
+    let studentObjectId = null;
     try {
       studentObjectId = new mongoose.Types.ObjectId(studentId);
     } catch {
-      studentObjectId = null; // in case the id is already string
+      // Keep null if conversion fails (string ID is fine)
     }
 
-    // Fetch cohorts where student exists (string or ObjectId)
+    // Fetch cohorts where the student is enrolled
     const cohorts = await Cohort.find({
       $or: [
-        { "studentIds.studentId": studentId }, // string match
+        { "studentIds.studentId": studentId },
         ...(studentObjectId
           ? [{ "studentIds.studentId": studentObjectId }]
-          : []), // ObjectId match
+          : []),
       ],
     }).populate({
       path: "courses.courseId",
-      select: "name coach",
+      select: "name coach status",
       populate: {
         path: "coach",
         select: "fullName email profilePhoto avgRating",
@@ -242,7 +242,7 @@ export const getAssignedCoaches = async (req, res) => {
 
     const coachMap = new Map();
 
-    for (const cohort of cohorts) {
+    cohorts.forEach((cohort) => {
       // Find the student object in this cohort
       const studentData = cohort.studentIds.find(
         (s) =>
@@ -250,23 +250,21 @@ export const getAssignedCoaches = async (req, res) => {
           s.studentId === studentId
       );
 
-      if (!studentData || !Array.isArray(studentData.enrollments)) continue;
+      if (!studentData?.enrollments?.length) return;
 
-      for (const enrollment of studentData.enrollments) {
-        // Only consider enrollments that are confirmed
-        if (!enrollment.paymentConfirmed) continue;
+      studentData.enrollments.forEach((enrollment) => {
+        if (!enrollment.paymentConfirmed) return;
 
-        // Find the course in this cohort that is in progress
-        const courseInCohort = cohort.courses.find(
+        const courseInProgress = cohort.courses.find(
           (c) =>
             c.courseId &&
             c.courseId._id.toString() === enrollment.courseId.toString() &&
-            c.status === "in_progress" &&
+            (c.status === "in_progress" || c.status === "not_started") &&
             c.courseId.coach
         );
 
-        if (courseInCohort) {
-          const coach = courseInCohort.courseId.coach;
+        if (courseInProgress) {
+          const coach = courseInProgress.courseId.coach;
           coachMap.set(coach._id.toString(), {
             _id: coach._id,
             fullName: coach.fullName,
@@ -275,12 +273,12 @@ export const getAssignedCoaches = async (req, res) => {
             avgRating: coach.avgRating,
           });
         }
-      }
-    }
+      });
+    });
 
     const uniqueCoaches = Array.from(coachMap.values());
 
-    if (uniqueCoaches.length === 0) {
+    if (!uniqueCoaches.length) {
       return res.status(404).json({
         message:
           "You have no assigned coaches for in-progress courses at the moment.",
@@ -298,6 +296,7 @@ export const getAssignedCoaches = async (req, res) => {
       .json({ message: "Server error", error: error.message });
   }
 };
+
 // ✅ Delete video by coach
 export const deleteVideo = async (req, res) => {
   try {
