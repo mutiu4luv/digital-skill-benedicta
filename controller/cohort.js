@@ -619,28 +619,32 @@ export const getAvailableCohorts = async (req, res) => {
       .populate("courses.coachId")
       .select("name startDate endDate courses");
 
-    // If no available cohorts
     if (!cohorts || cohorts.length === 0) {
       return res.status(200).json({ cohorts: [] });
     }
 
-    // 2️⃣ Format clean response
+    // 2️⃣ Format clean response (NULL-SAFE)
     const availableCohorts = cohorts.map((cohort) => {
       const notStartedCourses = cohort.courses
         .filter((c) => c.status === "not_started")
-        .map((c) => ({
-          courseId: c.courseId._id,
-          name: c.courseId.name,
-          category: c.courseId.category,
-          duration: c.durationInDays + " days",
-          coachId: c.coachId._id,
-          coachName: c.coachId.fullName,
-          coachEmail: c.coachId.email,
-          coachPhone: c.coachId.phoneNumber,
-          status: c.status,
-          startDate: c.startDate,
-          endDate: c.endDate,
-        }));
+        .map((c) => {
+          const courseData = c.courseId || {};
+          const coachData = c.coachId || {};
+
+          return {
+            courseId: courseData._id || null,
+            name: courseData.name || "",
+            category: courseData.category || "",
+            duration: (c.durationInDays || 0) + " days",
+            coachId: coachData._id || null,
+            coachName: coachData.fullName || "",
+            coachEmail: coachData.email || "",
+            coachPhone: coachData.phoneNumber || "",
+            status: c.status,
+            startDate: c.startDate,
+            endDate: c.endDate,
+          };
+        });
 
       return {
         cohortId: cohort._id,
