@@ -695,11 +695,33 @@ export const getCoachAssignedCohorts = async (req, res) => {
     }
 
     // Map cohorts to include only coach's courses
+    // const assigned = cohorts.map((cohort) => {
+    //   const coachCourses = cohort.courses
+    //     .filter((c) => c.coachId._id.toString() === coachId)
+    //     .map((c) => ({
+    //       cohortCourseId: c._id,
+    //       courseId: c.courseId._id,
+    //       name: c.courseId.name,
+    //       category: c.courseId.category,
+    //       duration: c.durationInDays
+    //         ? c.durationInDays + " days"
+    //         : c.courseId.duration,
+    //       status: c.status,
+    //       startDate: c.startDate,
+    //       endDate: c.endDate,
+    //     }));
+
     const assigned = cohorts.map((cohort) => {
       const coachCourses = cohort.courses
-        .filter((c) => c.coachId._id.toString() === coachId)
+        .filter(
+          (c) =>
+            (c.coachId &&
+              c.coachId._id &&
+              c.coachId._id.toString() === coachId) ||
+            (c.coachId && c.coachId.toString() === coachId)
+        )
         .map((c) => ({
-          cohortCourseId: c._id, // needed for start/end
+          cohortCourseId: c._id,
           courseId: c.courseId._id,
           name: c.courseId.name,
           category: c.courseId.category,
@@ -717,6 +739,12 @@ export const getCoachAssignedCohorts = async (req, res) => {
         courses: coachCourses,
       };
     });
+    // return {
+    //   cohortId: cohort._id,
+    //   cohortName: cohort.name,
+    //   courses: coachCourses,
+    // };
+    // });
 
     // Create a grouped object for frontend convenience
     const coursesByCohort = {};
