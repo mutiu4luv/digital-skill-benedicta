@@ -470,18 +470,18 @@ export const getStudentDocuments = async (req, res) => {
         upcomingMaterials: [],
         nextClass: null,
         lockedMaterialsMessage: "No materials available",
+        materialsByCourse: {},
         pagination: { page, limit, total: 0 },
       });
     }
 
-    // 3️⃣ Fetch materials for allowed courses
+    // 3️⃣ Fetch all materials for allowed courses
     const allMaterials = await Material.find({
       course: { $in: allowedCourseIds },
     })
-      .populate("course", "name coach")
+      .populate("course", "_id name coach") // ensure course is populated
       .sort({ unlockAt: 1 });
 
-    // 4️⃣ Separate unlocked / upcoming and group by course
     const materialsByCourse = {};
     const unlockedMaterials = [];
     const upcomingMaterials = [];
@@ -489,7 +489,7 @@ export const getStudentDocuments = async (req, res) => {
 
     allMaterials.forEach((m) => {
       const unlockTime = new Date(m.unlockAt);
-      const expireTime = new Date(unlockTime.getTime() + 3 * 60 * 60 * 1000);
+      const expireTime = new Date(unlockTime.getTime() + 3 * 60 * 60 * 1000); // 3 hours
       const status =
         now >= unlockTime && now <= expireTime
           ? "unlocked"
@@ -499,9 +499,9 @@ export const getStudentDocuments = async (req, res) => {
 
       if (status === "expired") return;
 
-      const courseId = m.course._id.toString();
-      if (!materialsByCourse[courseId]) {
-        materialsByCourse[courseId] = {
+      const courseIdStr = m.course._id.toString();
+      if (!materialsByCourse[courseIdStr]) {
+        materialsByCourse[courseIdStr] = {
           courseId: m.course._id,
           courseName: m.course.name,
           coach: m.course.coach,
@@ -516,14 +516,15 @@ export const getStudentDocuments = async (req, res) => {
         type: m.type,
         fileUrl: m.fileUrl,
         unlockAt: m.unlockAt,
+        courseId: { _id: m.course._id, name: m.course.name }, // always include courseId
         createdAt: m.createdAt,
       };
 
       if (status === "unlocked") {
-        materialsByCourse[courseId].unlocked.push(materialItem);
+        materialsByCourse[courseIdStr].unlocked.push(materialItem);
         unlockedMaterials.push(materialItem);
       } else if (status === "upcoming") {
-        materialsByCourse[courseId].upcoming.push(materialItem);
+        materialsByCourse[courseIdStr].upcoming.push(materialItem);
         upcomingMaterials.push(materialItem);
 
         if (!nextClass || unlockTime < new Date(nextClass.unlockAt)) {
@@ -532,7 +533,7 @@ export const getStudentDocuments = async (req, res) => {
       }
     });
 
-    // 5️⃣ Build next class countdown
+    // 4️⃣ Build next class countdown
     let nextClassCountdown = null;
     if (nextClass) {
       const duration = moment.duration(moment(nextClass.unlockAt).diff(now));
@@ -541,7 +542,7 @@ export const getStudentDocuments = async (req, res) => {
       nextClassCountdown = `Next class unlocks in: ${hours}h ${minutes}m`;
     }
 
-    // 6️⃣ Pagination (by course)
+    // 5️⃣ Pagination (by course)
     const courseIds = Object.keys(materialsByCourse);
     const paginatedCourseIds = courseIds.slice(skip, skip + limit);
     const paginatedMaterialsByCourse = {};
