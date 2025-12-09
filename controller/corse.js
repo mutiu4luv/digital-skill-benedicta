@@ -3,6 +3,7 @@ import cloudinary from "../config/cloudnary.js";
 import Course from "../module/course.js";
 import User from "../module/userModule.js";
 import mongoose from "mongoose";
+import cohort from "../module/cohort.js";
 
 // ---------------------------------------------------------
 // ✅ Coach sets class schedule
@@ -221,9 +222,10 @@ export const getCoachCourses = async (req, res) => {
     const coachId = req.user.id;
 
     // Find all cohorts where this coach teaches at least one course
-    const cohorts = await Cohort.find({
-      "courses.coachId": coachId,
-    })
+    const cohorts = await cohort
+      .find({
+        "courses.coachId": coachId,
+      })
       .populate("courses.courseId")
       .populate("courses.coachId");
 
