@@ -391,11 +391,12 @@ export const getStudentCourseMaterials = async (req, res) => {
           const expireTime = unlockTime + 3 * 60 * 60 * 1000; // 3 hours in ms
 
           if (unlockTime <= now && now <= expireTime) {
-            // unlocked and within 3-hour window
+            // unlocked but within 3-hour window → hide fileUrl
             unlockedMaterials.push({
               cohortId: cohort._id,
               courseId: courseInCohort.courseId,
               ...upload.toObject(),
+              fileUrl: null, // hide download
             });
           } else {
             // locked (either not yet unlocked OR expired)
@@ -403,6 +404,7 @@ export const getStudentCourseMaterials = async (req, res) => {
               cohortId: cohort._id,
               courseId: courseInCohort.courseId,
               ...upload.toObject(),
+              fileUrl: null, // also hide download
             });
           }
         }
@@ -519,11 +521,14 @@ export const getStudentDocuments = async (req, res) => {
         };
       }
 
+      // Hide fileUrl if within 3-hour class window
+      const fileUrl = isUnlocked ? null : material.fileUrl;
+
       const item = {
         _id: material._id,
         title: material.title,
         type: material.type,
-        fileUrl: material.fileUrl,
+        fileUrl, // hide download if unlocked
         unlockAt: material.unlockAt,
         courseId: { _id: material.course._id, name: material.course.name },
         createdAt: material.createdAt,
