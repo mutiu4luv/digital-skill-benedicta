@@ -127,16 +127,10 @@ export const getStudentAssignments = async (req, res) => {
           description: a.description,
           courseName: a.courseId?.name || "N/A",
           dueDate: a.dueDate,
+          file: submission?.file || null,
           status: submission ? "Submitted" : "Pending",
+          grade: submission?.grade || "-",
           updatedAt: a.updatedAt,
-
-          submission: submission
-            ? {
-                file: submission.file || null,
-                grade: submission.grade ?? null,
-                studentId: submission.studentId,
-              }
-            : null,
         };
       });
 
