@@ -95,7 +95,7 @@ export const uploadVideo = async (req, res) => {
 // ✅ Upload Document
 export const uploadDocument = async (req, res) => {
   try {
-    const { title, courseId, unlockAt } = req.body; // unlockAt is ISO string
+    const { title, courseId, unlockAt } = req.body; // ISO string
     const coachId = req.user.id;
 
     if (!req.file)
@@ -120,7 +120,7 @@ export const uploadDocument = async (req, res) => {
       type: "document",
       coach: coachId,
       course: courseId,
-      unlockAt: new Date(unlockAt), // store unlock time
+      unlockAt: moment.utc(unlockAt).toDate(), // <-- store as UTC
     });
 
     res.status(201).json({
