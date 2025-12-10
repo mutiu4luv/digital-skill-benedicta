@@ -120,7 +120,7 @@ export const uploadDocument = async (req, res) => {
       type: "document",
       coach: coachId,
       course: courseId,
-      unlockAt: moment.utc(unlockAt).toDate(), // <-- store as UTC
+      unlockAt: new Date(unlockAt),
     });
 
     res.status(201).json({
