@@ -521,14 +521,14 @@ export const getStudentDocuments = async (req, res) => {
         };
       }
 
-      // Hide fileUrl if within 3-hour class window
-      const fileUrl = isUnlocked ? null : material.fileUrl;
+      // ✅ Show fileUrl only if unlocked
+      const fileUrl = isUnlocked ? material.fileUrl : null;
 
       const item = {
         _id: material._id,
         title: material.title,
         type: material.type,
-        fileUrl, // hide download if unlocked
+        fileUrl,
         unlockAt: material.unlockAt,
         courseId: { _id: material.course._id, name: material.course.name },
         createdAt: material.createdAt,
