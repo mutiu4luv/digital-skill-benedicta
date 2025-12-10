@@ -391,13 +391,12 @@ export const getStudentCourseMaterials = async (req, res) => {
           const expireTime = unlockTime + 3 * 60 * 60 * 1000; // 3 hours in ms
 
           if (unlockTime <= now && now <= expireTime) {
-            // unlocked → video can be played
+            // unlocked → include fileUrl
             unlockedMaterials.push({
               cohortId: cohort._id,
               courseId: courseInCohort.courseId,
               ...upload.toObject(),
-              // fileUrl is included only for playable videos
-              // on frontend, use <video controls controlsList="nodownload">
+              fileUrl: upload.fileUrl, // ✅ important
             });
           } else {
             // locked or expired → hide URL
