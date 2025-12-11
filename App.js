@@ -19,10 +19,14 @@ import "./cron/autoOpenClass.js";
 import "./cron/autoCloseClass.js";
 import assignmentStudent from "./routes/assignment.js";
 import announcementRoutes from "./routes/anouncement.js";
+import http from "http";
+import { Server } from "socket.io";
 
 dotenv.config();
 
 const app = express();
+// Create HTTP server from Express app
+const server = http.createServer(app);
 
 // ✅ 1. Enable CORS before everything else
 // const allowedOrigins = [
@@ -53,6 +57,33 @@ app.use(
     allowedHeaders: ["Content-Type", "Authorization"],
   })
 );
+// Attach Socket.IO
+const io = new Server(server, {
+  cors: {
+    origin: "*", // You can restrict this to your allowedOrigins if needed
+    methods: ["GET", "POST"],
+  },
+});
+io.on("connection", (socket) => {
+  console.log("User connected:", socket.id);
+
+  socket.on("joinRoom", ({ coachId, studentId }) => {
+    socket.join(`coach_${coachId}`);
+    console.log(`Student ${studentId} joined room coach_${coachId}`);
+  });
+
+  socket.on("sendMessage", ({ coachId, studentId, text }) => {
+    io.to(`coach_${coachId}`).emit("receiveMessage", {
+      sender: studentId,
+      text,
+      timestamp: new Date(),
+    });
+  });
+
+  socket.on("disconnect", () => {
+    console.log("User disconnected:", socket.id);
+  });
+});
 
 // ✅ 2. JSON parser
 app.use(express.json());
