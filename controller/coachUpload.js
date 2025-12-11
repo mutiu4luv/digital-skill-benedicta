@@ -531,6 +531,7 @@ export const getStudentDocuments = async (req, res) => {
         fileUrl,
         unlockAt: material.unlockAt,
         courseId: { _id: material.course._id, name: material.course.name },
+        coachId: material.course.coach?._id,
         createdAt: material.createdAt,
       };
 
