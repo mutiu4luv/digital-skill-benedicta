@@ -60,7 +60,7 @@ app.use(
 // Attach Socket.IO
 const io = new Server(server, {
   cors: {
-    origin: "*", // You can restrict this to your allowedOrigins if needed
+    origin: allowedOrigins,
     methods: ["GET", "POST"],
   },
 });
