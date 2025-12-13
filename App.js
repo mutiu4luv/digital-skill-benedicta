@@ -21,6 +21,7 @@ import assignmentStudent from "./routes/assignment.js";
 import announcementRoutes from "./routes/anouncement.js";
 import http from "http";
 import { Server } from "socket.io";
+import chatRoute from "./routes/chat.js";
 
 dotenv.config();
 
@@ -110,6 +111,7 @@ app.use("/api/cohort", cohort);
 app.use("/api/payment", payment);
 app.use("/api/assignment", assignmentStudent);
 app.use("/api/announcement", announcementRoutes);
+app.use("/api/cohort-chat", chatRoute);
 
 // ✅ 5. MongoDB Connection
 mongoose
