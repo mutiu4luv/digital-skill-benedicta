@@ -1,17 +1,13 @@
 import mongoose from "mongoose";
-
-const messageSchema = new mongoose.Schema(
-  {
-    senderId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "User",
-      required: true,
-    },
-    text: { type: String, required: true },
-    timestamp: { type: Date, default: Date.now },
+const messageSchema = new mongoose.Schema({
+  senderId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "User",
+    required: true,
   },
-  { _id: false }
-);
+  text: { type: String, required: true },
+  timestamp: { type: Date, default: Date.now },
+});
 
 const cohortChatSchema = new mongoose.Schema(
   {

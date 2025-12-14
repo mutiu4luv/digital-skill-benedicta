@@ -7,25 +7,14 @@ export const sendCohortMessage = async (req, res) => {
   const { text } = req.body;
   const senderId = req.user.id;
 
-  if (!text)
+  if (!text) {
     return res.status(400).json({ message: "Message text is required" });
+  }
 
   try {
     const cohort = await Cohort.findById(cohortId);
-    if (!cohort) return res.status(404).json({ message: "Cohort not found" });
-
-    // Ensure sender is part of the cohort (coach or student)
-    const isCoach = cohort.courses.some(
-      (c) => c.coachId.toString() === senderId
-    );
-    const isStudent = cohort.studentIds.some(
-      (s) => s.studentId.toString() === senderId
-    );
-
-    if (!isCoach && !isStudent) {
-      return res
-        .status(403)
-        .json({ message: "You are not part of this cohort" });
+    if (!cohort) {
+      return res.status(404).json({ message: "Cohort not found" });
     }
 
     let chat = await CohortChat.findOne({ cohortId });
@@ -37,20 +26,35 @@ export const sendCohortMessage = async (req, res) => {
       });
     }
 
-    const message = { senderId, text, timestamp: new Date() };
-    chat.messages.push(message);
+    const message = {
+      senderId,
+      text,
+      timestamp: new Date(),
+    };
 
+    chat.messages.push(message);
     await chat.save();
 
-    // Emit message via socket.io
-    req.io.to(cohortId).emit("newMessage", message);
+    // ✅ SOCKET EMIT (THIS IS THE FIX)
+    const payload = {
+      _id: message._id,
+      senderId: senderId.toString(),
+      text: message.text,
+      timestamp: message.timestamp,
+    };
 
-    return res.status(200).json({ message: "Message sent", data: message });
+    req.io.to(cohortId).emit("cohortMessage", payload);
+    req.io.to(cohortId).emit("newMessage", payload); // backward compatibility
+
+    return res.status(200).json({
+      _id: message._id,
+      senderId: senderId.toString(),
+      text: message.text,
+      timestamp: message.timestamp,
+    });
   } catch (err) {
     console.error(err);
-    return res
-      .status(500)
-      .json({ message: "Server error", error: err.message });
+    return res.status(500).json({ message: "Server error" });
   }
 };
 
