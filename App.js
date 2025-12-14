@@ -65,20 +65,17 @@ const io = new Server(server, {
     methods: ["GET", "POST"],
   },
 });
+
+app.use((req, res, next) => {
+  req.io = io;
+  next();
+});
 io.on("connection", (socket) => {
   console.log("User connected:", socket.id);
 
-  socket.on("joinRoom", ({ coachId, studentId }) => {
-    socket.join(`coach_${coachId}`);
-    console.log(`Student ${studentId} joined room coach_${coachId}`);
-  });
-
-  socket.on("sendMessage", ({ coachId, studentId, text }) => {
-    io.to(`coach_${coachId}`).emit("receiveMessage", {
-      sender: studentId,
-      text,
-      timestamp: new Date(),
-    });
+  socket.on("joinCohort", ({ cohortId }) => {
+    socket.join(cohortId);
+    console.log(`Socket ${socket.id} joined cohort ${cohortId}`);
   });
 
   socket.on("disconnect", () => {
