@@ -57,7 +57,7 @@ export const sendCohortMessage = async (req, res) => {
 // Get messages for a cohort chat for a specific course
 export const getCohortMessages = async (req, res) => {
   const { cohortId } = req.params;
-  const { courseId } = req.query;
+  const { courseId } = req.params;
   const userId = req.user.id;
 
   try {
