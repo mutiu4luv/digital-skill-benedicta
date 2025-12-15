@@ -1,13 +1,13 @@
 import CohortChat from "../module/chat.js";
 import Cohort from "../module/cohort.js";
 
-// Send a message in cohort chat
+// Send a message to a cohort chat for a specific course
 export const sendCohortMessage = async (req, res) => {
-  const { cohortId } = req.params;
+  const { cohortId, courseId } = req.params;
   const { text } = req.body;
   const senderId = req.user.id;
 
-  if (!text) {
+  if (!text?.trim()) {
     return res.status(400).json({ message: "Message text is required" });
   }
 
@@ -17,11 +17,21 @@ export const sendCohortMessage = async (req, res) => {
       return res.status(404).json({ message: "Cohort not found" });
     }
 
-    let chat = await CohortChat.findOne({ cohortId });
+    const course = cohort.courses.find(
+      (c) => c.courseId.toString() === courseId
+    );
+
+    if (!course) {
+      return res.status(404).json({ message: "Course not found in cohort" });
+    }
+
+    let chat = await CohortChat.findOne({ cohortId, courseId });
+
     if (!chat) {
       chat = new CohortChat({
         cohortId,
-        coachId: cohort.courses[0].coachId,
+        courseId,
+        coachId: course.coachId,
         messages: [],
       });
     }
@@ -35,59 +45,74 @@ export const sendCohortMessage = async (req, res) => {
     chat.messages.push(message);
     await chat.save();
 
-    // ✅ SOCKET EMIT (THIS IS THE FIX)
-    const payload = {
-      _id: message._id,
-      senderId: senderId.toString(),
-      text: message.text,
-      timestamp: message.timestamp,
-    };
+    req.io.to(`${cohortId}-${courseId}`).emit("cohortMessage", message);
 
-    req.io.to(cohortId).emit("cohortMessage", payload);
-    req.io.to(cohortId).emit("newMessage", payload); // backward compatibility
-
-    return res.status(200).json({
-      _id: message._id,
-      senderId: senderId.toString(),
-      text: message.text,
-      timestamp: message.timestamp,
-    });
+    return res.status(200).json(message);
   } catch (err) {
     console.error(err);
     return res.status(500).json({ message: "Server error" });
   }
 };
 
-// Get all messages in cohort chat
+// Get messages for a cohort chat for a specific course
 export const getCohortMessages = async (req, res) => {
-  const { cohortId } = req.params;
+  const { cohortId, courseId } = req.params;
   const userId = req.user.id;
 
   try {
     const cohort = await Cohort.findById(cohortId);
-    if (!cohort) return res.status(404).json({ message: "Cohort not found" });
+    if (!cohort) {
+      return res.status(404).json({ message: "Cohort not found" });
+    }
 
-    const isCoach = cohort.courses.some((c) => c.coachId.toString() === userId);
-    const isStudent = cohort.studentIds.some(
+    /** =========================
+     *  COACH ACCESS (COURSE-SPECIFIC)
+     *  ========================= */
+    const course = cohort.courses.find(
+      (c) =>
+        c.courseId.toString() === courseId && c.coachId.toString() === userId
+    );
+
+    const isCoachForCourse = Boolean(course);
+
+    /** =========================
+     *  STUDENT ACCESS (COURSE-SPECIFIC)
+     *  ========================= */
+    const studentRecord = cohort.studentIds.find(
       (s) => s.studentId.toString() === userId
     );
 
-    if (!isCoach && !isStudent) {
-      return res
-        .status(403)
-        .json({ message: "You are not part of this cohort" });
+    const hasStudentAccess =
+      studentRecord &&
+      studentRecord.enrollments.some(
+        (e) => e.courseId.toString() === courseId && e.hasAccess === true
+      );
+
+    /** =========================
+     *  FINAL ACCESS CHECK
+     *  ========================= */
+    if (!isCoachForCourse && !hasStudentAccess) {
+      return res.status(403).json({
+        message: "You do not have access to this course chat",
+      });
     }
 
-    const chat = await CohortChat.findOne({ cohortId }).populate(
-      "messages.senderId",
-      "fullName email"
-    );
+    /** =========================
+     *  FETCH COURSE CHAT
+     *  ========================= */
+    const chat = await CohortChat.findOne({
+      cohortId,
+      courseId,
+    }).populate("messages.senderId", "fullName email role");
 
-    return res.status(200).json({ messages: chat?.messages || [] });
+    return res.status(200).json({
+      messages: chat?.messages || [],
+    });
   } catch (err) {
-    console.error(err);
-    return res
-      .status(500)
-      .json({ message: "Server error", error: err.message });
+    console.error("Get cohort messages error:", err);
+    return res.status(500).json({
+      message: "Server error",
+      error: err.message,
+    });
   }
 };

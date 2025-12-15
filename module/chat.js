@@ -16,6 +16,11 @@ const cohortChatSchema = new mongoose.Schema(
       ref: "Cohort",
       required: true,
     },
+    courseId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Course",
+      required: true,
+    },
     coachId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
@@ -23,6 +28,7 @@ const cohortChatSchema = new mongoose.Schema(
     },
     messages: [messageSchema],
   },
+
   { timestamps: true }
 );
 
