@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import CohortChat from "../module/chat.js";
 import Cohort from "../module/cohort.js";
 
@@ -5,7 +6,7 @@ import Cohort from "../module/cohort.js";
 export const sendCohortMessage = async (req, res) => {
   const { cohortId, courseId } = req.params;
   const { text } = req.body;
-  const senderId = req.user.id;
+  const senderId = req.user._id;
 
   if (!text?.trim()) {
     return res.status(400).json({ message: "Message text is required" });
@@ -37,6 +38,7 @@ export const sendCohortMessage = async (req, res) => {
     }
 
     const message = {
+      _id: new mongoose.Types.ObjectId(),
       senderId,
       text,
       timestamp: new Date(),
@@ -45,7 +47,7 @@ export const sendCohortMessage = async (req, res) => {
     chat.messages.push(message);
     await chat.save();
 
-    req.io.to(`${cohortId}-${courseId}`).emit("cohortMessage", message);
+    req.io.to(`${cohortId}:${courseId}`).emit("cohortMessage", message);
 
     return res.status(200).json(message);
   } catch (err) {
@@ -56,55 +58,49 @@ export const sendCohortMessage = async (req, res) => {
 
 // Get messages for a cohort chat for a specific course
 export const getCohortMessages = async (req, res) => {
-  const { cohortId } = req.params;
-  const { courseId } = req.params;
-  const userId = req.user.id;
-
   try {
+    if (!req.user) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+
+    const { cohortId, courseId } = req.params;
+    const userId = req.user._id.toString();
+
     const cohort = await Cohort.findById(cohortId);
     if (!cohort) {
       return res.status(404).json({ message: "Cohort not found" });
     }
 
-    /** =========================
-     *  COACH ACCESS (COURSE-SPECIFIC)
-     *  ========================= */
-    const course = cohort.courses.find(
+    const courses = cohort.courses || [];
+    const students = cohort.studentIds || [];
+
+    const course = courses.find(
       (c) =>
-        c.courseId.toString() === courseId && c.coachId.toString() === userId
+        c.courseId?.toString() === courseId && c.coachId?.toString() === userId
     );
 
     const isCoachForCourse = Boolean(course);
 
-    /** =========================
-     *  STUDENT ACCESS (COURSE-SPECIFIC)
-     *  ========================= */
-    const studentRecord = cohort.studentIds.find(
-      (s) => s.studentId.toString() === userId
+    const studentRecord = students.find(
+      (s) => s.studentId?.toString() === userId
     );
 
     const hasStudentAccess =
       studentRecord &&
-      studentRecord.enrollments.some(
+      studentRecord.enrollments?.some(
         (e) => e.courseId.toString() === courseId && e.hasAccess === true
       );
 
-    /** =========================
-     *  FINAL ACCESS CHECK
-     *  ========================= */
     if (!isCoachForCourse && !hasStudentAccess) {
       return res.status(403).json({
         message: "You do not have access to this course chat",
       });
     }
 
-    /** =========================
-     *  FETCH COURSE CHAT
-     *  ========================= */
-    const chat = await CohortChat.findOne({
-      cohortId,
-      courseId,
-    }).populate("messages.senderId", "fullName email role");
+    const chat = await CohortChat.findOne({ cohortId, courseId }).populate(
+      "messages.senderId",
+      "fullName email role"
+    );
 
     return res.status(200).json({
       messages: chat?.messages || [],
