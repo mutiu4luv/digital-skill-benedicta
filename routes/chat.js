@@ -5,9 +5,7 @@ import { protect } from "../middleware/authMiddleware.js";
 const router = express.Router();
 
 // Send a message
-router.post("/:cohortId/message", protect, sendCohortMessage);
-
-// Get all messages
-router.get("/:cohortId/messages", protect, getCohortMessages);
+router.post("/:cohortId/:courseId/message", protect, sendCohortMessage);
+router.get("/:cohortId/:courseId/messages", protect, getCohortMessages);
 
 export default router;

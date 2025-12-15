@@ -70,19 +70,21 @@ app.use((req, res, next) => {
   req.io = io;
   next();
 });
+
+// Socket.IO connection
 io.on("connection", (socket) => {
   console.log("User connected:", socket.id);
 
-  socket.on("joinCohort", ({ cohortId }) => {
-    socket.join(cohortId);
-    console.log(`Socket ${socket.id} joined cohort ${cohortId}`);
+  socket.on("joinCohort", ({ cohortId, courseId }) => {
+    const room = `${cohortId}:${courseId}`;
+    socket.join(room);
+    console.log(`Socket ${socket.id} joined ${room}`);
   });
 
   socket.on("disconnect", () => {
     console.log("User disconnected:", socket.id);
   });
 });
-
 // ✅ 2. JSON parser
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
