@@ -22,6 +22,7 @@ import announcementRoutes from "./routes/anouncement.js";
 import http from "http";
 import { Server } from "socket.io";
 import chatRoute from "./routes/chat.js";
+import liveVideoRoutes from "./routes/liveVideo.js";
 
 dotenv.config();
 
@@ -111,6 +112,7 @@ app.use("/api/payment", payment);
 app.use("/api/assignment", assignmentStudent);
 app.use("/api/announcement", announcementRoutes);
 app.use("/api/cohort-chat", chatRoute);
+app.use("/api/live", liveVideoRoutes);
 
 // ✅ 5. MongoDB Connection
 mongoose

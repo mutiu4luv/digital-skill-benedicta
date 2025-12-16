@@ -33,6 +33,11 @@ const courseSubSchema = new mongoose.Schema(
       date: String,
       time: String,
     },
+    liveSession: {
+      meetLink: { type: String, default: "" },
+      startedAt: { type: Date, default: null },
+      isLive: { type: Boolean, default: false },
+    },
   },
   { _id: true, minimize: false }
 );
