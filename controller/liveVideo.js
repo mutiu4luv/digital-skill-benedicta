@@ -46,8 +46,7 @@ export const getLiveSession = async (req, res) => {
   const cohort = await Cohort.findById(cohortId);
   if (!cohort) return res.status(404).json({});
 
-  const course = cohort.courses.find((c) => c._id.toString() === courseId);
-
+  const course = cohort.courses.find((c) => c.courseId.toString() === courseId);
   if (!course?.liveSession?.isLive) {
     return res.json({ isLive: false });
   }
