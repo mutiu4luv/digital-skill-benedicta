@@ -199,10 +199,6 @@ export const registerStudentToCohort = async (req, res) => {
       paidAt: null,
     });
 
-    // Optionally reset per-student global flags if you still use them
-    student.paid = false;
-    student.paymentConfirmed = false;
-
     await student.save();
     await cohort.save();
 
@@ -433,7 +429,11 @@ export const getActiveCohorts = async (req, res) => {
         .filter((c) => c.status === "in_progress")
         .map((c) => {
           // Check if student is enrolled in this course
-          const enrollment = cohort.enrollments.find(
+          const studentEntry = cohort.studentIds.find(
+            (s) => s.studentId.toString() === userId.toString()
+          );
+
+          const enrollment = studentEntry?.enrollments.find(
             (e) => e.courseId.toString() === c.courseId._id.toString()
           );
 
@@ -875,7 +875,8 @@ export const getUpcomingClass = async (req, res) => {
         const classDateTime = new Date(`${date} ${time}`);
         const now = new Date();
 
-        const hasAccess = now >= classDateTime;
+        const hasAccess =
+          enrollment.paymentConfirmed === true && now >= classDateTime;
 
         // Fetch videos/documents for this course & cohort
         const videos = await coachUpload.find({
