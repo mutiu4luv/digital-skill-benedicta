@@ -13,7 +13,10 @@ export const startLiveSession = async (req, res) => {
   if (!cohort) return res.status(404).json({ message: "Cohort not found" });
 
   const course = cohort.courses.find(
-    (c) => c._id.toString() === courseId && c.coachId.toString() === coachId
+    (c) =>
+      c._id.toString() === courseId &&
+      c.coachId &&
+      c.coachId.toString() === coachId
   );
 
   if (!course) {
