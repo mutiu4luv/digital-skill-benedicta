@@ -23,6 +23,7 @@ import http from "http";
 import { Server } from "socket.io";
 import chatRoute from "./routes/chat.js";
 import liveVideoRoutes from "./routes/liveVideo.js";
+import selfLearningRoutes from "./routes/selfLearning.js";
 
 dotenv.config();
 
@@ -113,6 +114,7 @@ app.use("/api/assignment", assignmentStudent);
 app.use("/api/announcement", announcementRoutes);
 app.use("/api/cohort-chat", chatRoute);
 app.use("/api/live", liveVideoRoutes);
+app.use("/api/self-learning", selfLearningRoutes);
 
 // ✅ 5. MongoDB Connection
 mongoose
