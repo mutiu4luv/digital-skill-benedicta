@@ -167,7 +167,7 @@ export const registerSelfLearning = async (req, res) => {
     }
 
     // 🧠 Prevent duplicate enrollment
-    const exists = await SelfLearningEnrollment.findOne({
+    const exists = await selfLearningEnrollment.findOne({
       studentId,
       courseId,
     });
