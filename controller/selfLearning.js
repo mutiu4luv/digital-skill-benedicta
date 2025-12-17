@@ -1,6 +1,7 @@
+import mongoose from "mongoose";
 import selfLearningContent from "../module/selfLearningContent.js";
 import selfLearningCourse from "../module/selfLearningCourse.js";
-import mongoose from "mongoose";
+import selfLearningEnrollment from "../module/selfLearningEnrollment.js";
 
 // 📚 Create Self-Learning Course
 
@@ -158,7 +159,7 @@ export const registerSelfLearning = async (req, res) => {
     }
 
     // 🔎 Ensure course exists
-    const course = await SelfLearningCourse.findById(courseId);
+    const course = await selfLearningCourse.findById(courseId);
     if (!course) {
       return res.status(404).json({
         message: "Self-learning course not found",
@@ -178,7 +179,7 @@ export const registerSelfLearning = async (req, res) => {
     }
 
     // 🚀 Create enrollment
-    const enrollment = await SelfLearningEnrollment.create({
+    const enrollment = await selfLearningEnrollment.create({
       studentId,
       courseId,
       paid: false,
@@ -253,7 +254,7 @@ export const confirmPayment = async (req, res) => {
     }
 
     // 🔎 Find enrollment
-    const enrollment = await SelfLearningEnrollment.findOne({
+    const enrollment = await selfLearningEnrollment.findOne({
       studentId,
       courseId,
     });
@@ -321,7 +322,7 @@ export const getCourseContent = async (req, res) => {
     }
 
     // 🔎 Check enrollment & payment
-    const enrollment = await SelfLearningEnrollment.findOne({
+    const enrollment = await selfLearningEnrollment.findOne({
       studentId,
       courseId,
       paymentConfirmed: true,
@@ -334,7 +335,7 @@ export const getCourseContent = async (req, res) => {
     }
 
     // 📚 Fetch course content
-    const contents = await SelfLearningContent.find({ courseId }).sort({
+    const contents = await selfLearningContent.find({ courseId }).sort({
       createdAt: 1,
     }); // optional: keep content ordered
 
@@ -391,7 +392,7 @@ export const getPaidStudents = async (req, res) => {
 
     // 🔎 Ensure course exists & belongs to coach (if coach role)
     if (userRole === "coach") {
-      const course = await SelfLearningCourse.findById(courseId);
+      const course = await selfLearningCourse.findById(courseId);
       if (!course) {
         return res.status(404).json({ message: "Course not found" });
       }
@@ -404,10 +405,12 @@ export const getPaidStudents = async (req, res) => {
     }
 
     // 📋 Fetch paid students
-    const students = await SelfLearningEnrollment.find({
-      courseId,
-      paymentConfirmed: true,
-    }).populate("studentId", "fullName email profilePhoto");
+    const students = await selfLearningEnrollment
+      .find({
+        courseId,
+        paymentConfirmed: true,
+      })
+      .populate("studentId", "fullName email profilePhoto");
 
     return res.status(200).json({
       message: "Paid students fetched successfully",
