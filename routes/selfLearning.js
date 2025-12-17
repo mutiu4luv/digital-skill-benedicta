@@ -6,6 +6,7 @@ import {
   createSelfLearningCourse,
   getCourseContent,
   getPaidStudents,
+  getSelfLearningCourses,
   registerSelfLearning,
 } from "../controller/selfLearning.js";
 
@@ -16,6 +17,8 @@ router.post(
   authorizeRoles("owner"),
   createSelfLearningCourse
 );
+
+router.get("/courses", protect, getSelfLearningCourses);
 router.post(
   "/course/:courseId/content",
   protect,
@@ -28,7 +31,7 @@ router.post(
   authorizeRoles("student"),
   registerSelfLearning
 );
-router.use(
+router.post(
   "/payment/confirm",
   protect,
   authorizeRoles("owner"),
