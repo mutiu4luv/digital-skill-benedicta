@@ -96,7 +96,8 @@ export const addContent = async (req, res) => {
 
     if (course.coachId.toString() !== coachId.toString()) {
       return res.status(403).json({
-        message: "You are not allowed to add content to this course",
+        message:
+          "You are not allowed to add content to this course,kindly select your course",
       });
     }
 
