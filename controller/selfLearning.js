@@ -136,6 +136,20 @@ export const addContent = async (req, res) => {
     });
   }
 };
+// 📚 Get Course Content for Coach
+export const getCoachCourseContent = async (req, res) => {
+  const coachId = req.user?.id;
+  const { courseId } = req.params;
+
+  const course = await selfLearningCourse.findById(courseId);
+
+  if (!course || course.coachId.toString() !== coachId.toString()) {
+    return res.status(403).json({ message: "Access denied" });
+  }
+
+  const contents = await selfLearningContent.find({ courseId });
+  res.json({ contents });
+};
 
 // 📚 Register Student for Self-Learning Course
 export const registerSelfLearning = async (req, res) => {
@@ -200,26 +214,21 @@ export const registerSelfLearning = async (req, res) => {
 };
 
 // 📚 Get Course Content for Enrolled Student
-export const getCourseContent = async (req, res) => {
+
+export const getCourseContentForStudent = async (req, res) => {
   try {
     const studentId = req.user?.id;
     const { courseId } = req.params;
 
-    // 🔐 Auth check
     if (!studentId) {
-      return res.status(401).json({
-        message: "Unauthorized. Please login.",
-      });
+      return res.status(401).json({ message: "Unauthorized" });
     }
 
-    // ✅ Validate courseId
-    if (!courseId || !mongoose.Types.ObjectId.isValid(courseId)) {
-      return res.status(400).json({
-        message: "Invalid course ID",
-      });
+    if (!mongoose.Types.ObjectId.isValid(courseId)) {
+      return res.status(400).json({ message: "Invalid course ID" });
     }
 
-    // 🔎 Check enrollment & payment
+    // ✅ CHECK: student must be enrolled AND paid
     const enrollment = await selfLearningEnrollment.findOne({
       studentId,
       courseId,
@@ -228,34 +237,22 @@ export const getCourseContent = async (req, res) => {
 
     if (!enrollment) {
       return res.status(403).json({
-        message: "Access denied. Payment required for this course.",
+        message: "You are not enrolled in this course",
       });
     }
 
-    // 📚 Fetch course content
-    const contents = await selfLearningContent.find({ courseId }).sort({
-      createdAt: 1,
-    }); // optional: keep content ordered
+    // ✅ Fetch ONLY this course content
+    const contents = await selfLearningContent
+      .find({ courseId })
+      .sort({ createdAt: 1 });
 
     return res.status(200).json({
-      message: "Course content fetched successfully",
-      courseId,
       contents,
     });
   } catch (error) {
-    console.error("❌ Get Course Content Error:", error);
-
-    // 🧠 Handle mongoose validation errors
-    if (error.name === "ValidationError") {
-      return res.status(400).json({
-        message: "Validation failed",
-        errors: error.errors,
-      });
-    }
-
-    return res.status(500).json({
-      message: "Server error while fetching course content",
-      error: error.message,
+    console.error("❌ Fetch Course Content Error:", error);
+    res.status(500).json({
+      message: "Failed to load course content",
     });
   }
 };
