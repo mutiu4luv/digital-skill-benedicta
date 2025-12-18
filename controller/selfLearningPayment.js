@@ -175,17 +175,16 @@ export const getPaidStudents = async (req, res) => {
 };
 
 // 📚 Confirm Payment for Self-Learning Course
+
 export const confirmPayment = async (req, res) => {
   try {
-    const { studentId, courseId } = req.body;
+    const { studentId, courseId, action } = req.body;
     const adminId = req.user?.id;
     const userRole = req.user?.role;
 
-    // 🔐 Auth & role check (admin / owner / system only)
+    // 🔐 Auth & role check
     if (!adminId) {
-      return res.status(401).json({
-        message: "Unauthorized. Please login.",
-      });
+      return res.status(401).json({ message: "Unauthorized" });
     }
 
     if (!["admin", "owner"].includes(userRole)) {
@@ -195,19 +194,37 @@ export const confirmPayment = async (req, res) => {
     }
 
     // ✅ Validate input
-    if (!studentId || !courseId) {
+    if (!studentId || !courseId || !action) {
       return res.status(400).json({
-        message: "studentId and courseId are required",
+        message: "studentId, courseId and action are required",
       });
     }
 
-    // ✅ Validate ObjectIds
+    if (!["approve", "reject"].includes(action)) {
+      return res.status(400).json({
+        message: "Invalid action. Use approve or reject",
+      });
+    }
+
     if (
       !mongoose.Types.ObjectId.isValid(studentId) ||
       !mongoose.Types.ObjectId.isValid(courseId)
     ) {
       return res.status(400).json({
         message: "Invalid studentId or courseId",
+      });
+    }
+
+    // 🔎 Find payment proof
+    const payment = await selfLearningPayment.findOne({
+      studentId,
+      courseId,
+      status: "pending",
+    });
+
+    if (!payment) {
+      return res.status(404).json({
+        message: "Pending payment proof not found",
       });
     }
 
@@ -223,34 +240,41 @@ export const confirmPayment = async (req, res) => {
       });
     }
 
-    // 🧠 Prevent double confirmation
-    if (enrollment.paymentConfirmed) {
-      return res.status(400).json({
-        message: "Payment already confirmed",
+    // ✅ APPROVE
+    if (action === "approve") {
+      payment.status = "approved";
+      payment.reviewedAt = new Date();
+      payment.reviewedBy = adminId;
+
+      enrollment.paid = true;
+      enrollment.paymentConfirmed = true;
+      enrollment.paidAt = new Date();
+
+      await payment.save();
+      await enrollment.save();
+
+      return res.status(200).json({
+        message: "Payment approved successfully",
+        status: "approved",
+        enrollment,
+        payment,
       });
     }
 
-    // 💳 Confirm payment
-    enrollment.paid = true;
-    enrollment.paymentConfirmed = true;
-    enrollment.paidAt = new Date();
+    // ❌ REJECT
+    payment.status = "rejected";
+    payment.reviewedAt = new Date();
+    payment.reviewedBy = adminId;
 
-    await enrollment.save();
+    await payment.save();
 
     return res.status(200).json({
-      message: "Payment confirmed successfully",
-      enrollment,
+      message: "Payment rejected",
+      status: "rejected",
+      payment,
     });
   } catch (error) {
     console.error("❌ Confirm Payment Error:", error);
-
-    // 🧠 Handle mongoose validation errors
-    if (error.name === "ValidationError") {
-      return res.status(400).json({
-        message: "Validation failed",
-        errors: error.errors,
-      });
-    }
 
     return res.status(500).json({
       message: "Server error while confirming payment",
