@@ -3,6 +3,7 @@ import { authorizeRoles, protect } from "../middleware/authMiddleware.js";
 import {
   addContent,
   createSelfLearningCourse,
+  deleteSelfLearningContent,
   deleteSelfLearningCourse,
   getCoachCourseContent,
   getCourseContentForStudent,
@@ -78,5 +79,10 @@ router.get(
   getCoachCourseContent
 );
 router.get("/course/:courseId/students", protect, getPaidStudents);
-
+router.delete(
+  "/content/:contentId",
+  protect,
+  authorizeRoles("coach"),
+  deleteSelfLearningContent
+);
 export default router;
