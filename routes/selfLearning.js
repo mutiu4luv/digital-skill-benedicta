@@ -21,7 +21,7 @@ import multer from "multer";
 const router = express.Router();
 const storage = multer.memoryStorage();
 const upload = multer({ storage });
-
+// create self learning course by owner
 router.post(
   "/course",
   protect,
