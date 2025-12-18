@@ -2,15 +2,22 @@ import express from "express";
 import { authorizeRoles, protect } from "../middleware/authMiddleware.js";
 import {
   addContent,
-  confirmPayment,
   createSelfLearningCourse,
   getCourseContent,
-  getPaidStudents,
   getSelfLearningCourses,
   registerSelfLearning,
 } from "../controller/selfLearning.js";
+import {
+  confirmPayment,
+  getPaidStudents,
+  uploadPaymentProof,
+} from "../controller/selfLearningPayment.js";
+import multer from "multer";
 
 const router = express.Router();
+const storage = multer.memoryStorage();
+const upload = multer({ storage });
+
 router.post(
   "/course",
   protect,
@@ -36,6 +43,14 @@ router.post(
   protect,
   authorizeRoles("owner"),
   confirmPayment
+);
+
+router.post(
+  "/payment/proof",
+  protect,
+  authorizeRoles("student"),
+  upload.single("proof"),
+  uploadPaymentProof
 );
 
 router.get("/course/:courseId/content", protect, getCourseContent);
