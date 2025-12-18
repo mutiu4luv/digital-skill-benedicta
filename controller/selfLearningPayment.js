@@ -10,28 +10,22 @@ export const uploadPaymentProof = async (req, res) => {
     const studentId = req.user?.id;
     const { courseId } = req.body;
 
-    // 🔐 Auth check
     if (!studentId) {
-      return res.status(401).json({
-        message: "Unauthorized. Please login.",
-      });
+      return res.status(401).json({ message: "Unauthorized" });
     }
 
-    // ✅ Validate courseId
     if (!courseId || !mongoose.Types.ObjectId.isValid(courseId)) {
-      return res.status(400).json({
-        message: "Invalid or missing course ID",
-      });
+      return res.status(400).json({ message: "Invalid or missing course ID" });
     }
 
-    // 📎 Validate file
-    if (!req.file || !req.file.path) {
+    // ✅ FIX: validate file correctly
+    if (!req.file || !req.file.buffer) {
       return res.status(400).json({
         message: "Payment proof file is required",
       });
     }
 
-    // 🔎 Ensure enrollment exists
+    // Ensure enrollment exists
     const enrollment = await selfLearningEnrollment.findOne({
       studentId,
       courseId,
@@ -43,7 +37,7 @@ export const uploadPaymentProof = async (req, res) => {
       });
     }
 
-    // 🧠 Prevent duplicate submission
+    // Prevent duplicate submission
     const existingProof = await selfLearningPayment.findOne({
       studentId,
       courseId,
@@ -56,16 +50,23 @@ export const uploadPaymentProof = async (req, res) => {
       });
     }
 
-    // ☁️ Upload to Cloudinary
-    const uploadResult = await cloudinary.uploader.upload(req.file.path, {
-      folder: "self-learning/payments",
-      resource_type: "auto", // allows images, pdf, etc.
+    // ☁️ Upload buffer to Cloudinary
+    const uploadResult = await new Promise((resolve, reject) => {
+      cloudinary.uploader
+        .upload_stream(
+          {
+            folder: "self-learning/payments",
+            resource_type: "auto",
+          },
+          (error, result) => {
+            if (error) reject(error);
+            resolve(result);
+          }
+        )
+        .end(req.file.buffer);
     });
 
-    // 🧹 Remove local file after upload
-    fs.unlinkSync(req.file.path);
-
-    // 💳 Save payment proof
+    // Save payment proof
     const payment = await selfLearningPayment.create({
       studentId,
       courseId,
@@ -81,18 +82,6 @@ export const uploadPaymentProof = async (req, res) => {
     });
   } catch (error) {
     console.error("❌ Upload Payment Proof Error:", error);
-
-    // Cleanup file if error happens after upload
-    if (req.file?.path && fs.existsSync(req.file.path)) {
-      fs.unlinkSync(req.file.path);
-    }
-
-    if (error.name === "ValidationError") {
-      return res.status(400).json({
-        message: "Validation failed",
-        errors: error.errors,
-      });
-    }
 
     return res.status(500).json({
       message: "Server error while uploading payment proof",
