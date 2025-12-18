@@ -60,7 +60,7 @@ export const createSelfLearningCourse = async (req, res) => {
   }
 };
 
-// 📚 upload document Content to Self-Learning Course for students to see
+// 📚coach upload document Content to Self-Learning Course for students to see
 
 export const addContent = async (req, res) => {
   try {
@@ -294,21 +294,30 @@ export const getSelfLearningCourses = async (req, res) => {
 // 📚 Delete Self-Learning Course
 export const deleteSelfLearningCourse = async (req, res) => {
   try {
-    const { courseId } = req.params;
+    const coachId = req.user?.id;
+    const { contentId } = req.params;
 
-    const course = await selfLearningCourse.findById(courseId);
-    if (!course) {
-      return res.status(404).json({ message: "Course not found" });
+    const content = await selfLearningContent.findById(contentId);
+    if (!content) {
+      return res.status(404).json({ message: "Content not found" });
     }
 
-    await course.deleteOne();
+    const course = await selfLearningCourse.findById(content.courseId);
+    if (!course || course.coachId.toString() !== coachId.toString()) {
+      return res.status(403).json({ message: "Access denied" });
+    }
 
-    res.status(200).json({
-      message: "Self-learning course deleted successfully",
-    });
+    // delete from Cloudinary
+    if (content.cloudinaryId) {
+      await cloudinary.uploader.destroy(content.cloudinaryId, {
+        resource_type: "auto",
+      });
+    }
+
+    await content.deleteOne();
+
+    res.json({ message: "Content deleted successfully" });
   } catch (err) {
-    res.status(500).json({
-      message: "Failed to delete course",
-    });
+    res.status(500).json({ message: err.message });
   }
 };
