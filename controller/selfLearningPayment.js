@@ -6,6 +6,10 @@ import fs from "fs";
 import cloudinary from "../config/cloudnary.js";
 
 export const uploadPaymentProof = async (req, res) => {
+  console.log("📥 uploadPaymentProof hit");
+  console.log("User:", req.user);
+  console.log("Body:", req.body);
+  console.log("File:", req.file);
   try {
     const studentId = req.user?.id;
     const { courseId } = req.body;

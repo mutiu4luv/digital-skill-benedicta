@@ -3,6 +3,7 @@ import { authorizeRoles, protect } from "../middleware/authMiddleware.js";
 import {
   addContent,
   createSelfLearningCourse,
+  deleteSelfLearningCourse,
   getCourseContent,
   getSelfLearningCourses,
   registerSelfLearning,
@@ -51,6 +52,12 @@ router.post(
   authorizeRoles("student"),
   upload.single("proof"),
   uploadPaymentProof
+);
+router.delete(
+  "/course/:courseId",
+  protect,
+  authorizeRoles("owner"),
+  deleteSelfLearningCourse
 );
 
 router.get("/course/:courseId/content", protect, getCourseContent);
