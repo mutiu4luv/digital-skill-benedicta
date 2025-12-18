@@ -156,17 +156,32 @@ export const addContent = async (req, res) => {
 
 // 📚 Get Course Content for Coach
 export const getCoachCourseContent = async (req, res) => {
-  const coachId = req.user?.id;
+  const userId = req.user.id;
+  const userRole = req.user.role;
   const { courseId } = req.params;
 
   const course = await selfLearningCourse.findById(courseId);
-
-  if (!course || course.coachId.toString() !== coachId.toString()) {
-    return res.status(403).json({ message: "Access denied" });
+  if (!course) {
+    return res.status(404).json({ message: "Course not found" });
   }
 
-  const contents = await selfLearningContent.find({ courseId });
-  res.json({ contents });
+  // owner can always access
+  if (userRole === "owner") {
+    const contents = await selfLearningContent.find({ courseId });
+    return res.json({ contents });
+  }
+
+  // coach can access ONLY if assigned
+  if (
+    userRole === "coach" &&
+    course.coachId &&
+    course.coachId.toString() === userId.toString()
+  ) {
+    const contents = await selfLearningContent.find({ courseId });
+    return res.json({ contents });
+  }
+
+  return res.status(403).json({ message: "Access denied" });
 };
 
 // 📚 Register Student for Self-Learning Course
