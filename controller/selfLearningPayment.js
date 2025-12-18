@@ -239,6 +239,7 @@ export const confirmPayment = async (req, res) => {
       payment.reviewedAt = new Date();
       payment.reviewedBy = adminId;
 
+      enrollment.status = "active";
       enrollment.paid = true;
       enrollment.paymentConfirmed = true;
       enrollment.paidAt = new Date();
@@ -249,8 +250,6 @@ export const confirmPayment = async (req, res) => {
       return res.status(200).json({
         message: "Payment approved successfully",
         status: "approved",
-        enrollment,
-        payment,
       });
     }
 
@@ -261,10 +260,14 @@ export const confirmPayment = async (req, res) => {
 
     await payment.save();
 
+    // 🚨 REMOVE TEMP ENROLLMENT
+    if (enrollment.status === "pending") {
+      await enrollment.deleteOne();
+    }
+
     return res.status(200).json({
-      message: "Payment rejected",
+      message: "Payment rejected. Student can register again.",
       status: "rejected",
-      payment,
     });
   } catch (error) {
     console.error("❌ Confirm Payment Error:", error);

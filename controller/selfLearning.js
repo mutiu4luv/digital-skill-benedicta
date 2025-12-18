@@ -144,21 +144,14 @@ export const registerSelfLearning = async (req, res) => {
     const studentId = req.user?.id;
     const { courseId } = req.params;
 
-    // 🔐 Auth check
     if (!studentId) {
-      return res.status(401).json({
-        message: "Unauthorized. Please login.",
-      });
+      return res.status(401).json({ message: "Unauthorized" });
     }
 
-    // ✅ Validate input
     if (!courseId) {
-      return res.status(400).json({
-        message: "Course ID is required",
-      });
+      return res.status(400).json({ message: "Course ID is required" });
     }
 
-    // 🔎 Ensure course exists
     const course = await selfLearningCourse.findById(courseId);
     if (!course) {
       return res.status(404).json({
@@ -166,22 +159,29 @@ export const registerSelfLearning = async (req, res) => {
       });
     }
 
-    // 🧠 Prevent duplicate enrollment
-    const exists = await selfLearningEnrollment.findOne({
+    // 🔎 Check existing enrollment
+    const existingEnrollment = await selfLearningEnrollment.findOne({
       studentId,
       courseId,
     });
 
-    if (exists) {
+    // ❌ Block only if ACTIVE
+    if (existingEnrollment && existingEnrollment.status === "active") {
       return res.status(400).json({
-        message: "Already registered for this course",
+        message: "You are already enrolled in this course",
       });
     }
 
-    // 🚀 Create enrollment
+    // 🔁 Allow retry if pending (cleanup)
+    if (existingEnrollment && existingEnrollment.status === "pending") {
+      await existingEnrollment.deleteOne();
+    }
+
+    // 🚀 Create TEMP enrollment
     const enrollment = await selfLearningEnrollment.create({
       studentId,
       courseId,
+      status: "pending",
       paid: false,
       paymentConfirmed: false,
       registeredAt: new Date(),
@@ -194,24 +194,8 @@ export const registerSelfLearning = async (req, res) => {
   } catch (error) {
     console.error("❌ Register Self Learning Error:", error);
 
-    // 🧠 Handle mongoose validation errors
-    if (error.name === "ValidationError") {
-      return res.status(400).json({
-        message: "Validation failed",
-        errors: error.errors,
-      });
-    }
-
-    // 🧠 Handle duplicate key error (race condition)
-    if (error.code === 11000) {
-      return res.status(400).json({
-        message: "Already registered for this course",
-      });
-    }
-
     return res.status(500).json({
-      message: "Server error while registering for course",
-      error: error.message,
+      message: "Server error while registering",
     });
   }
 };
