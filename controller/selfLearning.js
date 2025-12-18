@@ -33,13 +33,18 @@ export const createSelfLearningCourse = async (req, res) => {
       });
     }
 
-    // 🚀 Create course with assigned coach
-    const course = await selfLearningCourse.create({
+    // 🚀 Create course
+    const createdCourse = await selfLearningCourse.create({
       title: title.trim(),
       description: description.trim(),
       price: Number(price),
       coachId,
     });
+
+    // 🔁 Re-fetch with coach populated
+    const course = await selfLearningCourse
+      .findById(createdCourse._id)
+      .populate("coachId", "fullName email profilePhoto");
 
     return res.status(201).json({
       message: "Self-learning course created successfully",
