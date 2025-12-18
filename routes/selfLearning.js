@@ -5,7 +5,7 @@ import {
   createSelfLearningCourse,
   deleteSelfLearningContent,
   deleteSelfLearningCourse,
-  getCoachCourseContent,
+  getCourseContent,
   getCourseContentForStudent,
   getSelfLearningCourses,
   registerSelfLearning,
@@ -72,12 +72,8 @@ router.get(
   getCourseContentForStudent
 );
 
-router.get(
-  "/course/:courseId/content",
-  protect,
-  authorizeRoles("coach"),
-  getCoachCourseContent
-);
+// get course content uploadesd by coach
+router.get("/course/:courseId/content", protect, getCourseContent);
 router.get("/course/:courseId/students", protect, getPaidStudents);
 router.delete(
   "/content/:contentId",

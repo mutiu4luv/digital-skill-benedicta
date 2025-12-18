@@ -155,33 +155,52 @@ export const addContent = async (req, res) => {
 };
 
 // 📚 Get Course Content for Coach
-export const getCoachCourseContent = async (req, res) => {
-  const userId = req.user.id;
-  const userRole = req.user.role;
-  const { courseId } = req.params;
+export const getCourseContent = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const role = req.user.role;
+    const { courseId } = req.params;
 
-  const course = await selfLearningCourse.findById(courseId);
-  if (!course) {
-    return res.status(404).json({ message: "Course not found" });
+    const course = await selfLearningCourse.findById(courseId);
+    if (!course) {
+      return res.status(404).json({ message: "Course not found" });
+    }
+
+    // ✅ OWNER → full access
+    if (role === "owner") {
+      const contents = await selfLearningContent.find({ courseId });
+      return res.json({ contents });
+    }
+
+    // ✅ COACH → only if assigned
+    if (role === "coach" && course.coachId?.toString() === userId.toString()) {
+      const contents = await selfLearningContent.find({ courseId });
+      return res.json({ contents });
+    }
+
+    // ✅ STUDENT → only if enrolled + paid
+    if (role === "student") {
+      const enrollment = await selfLearningEnrollment.findOne({
+        studentId: userId,
+        courseId,
+        paymentConfirmed: true,
+      });
+
+      if (!enrollment) {
+        return res.status(403).json({
+          message: "You are not enrolled in this course",
+        });
+      }
+
+      const contents = await selfLearningContent.find({ courseId });
+      return res.json({ contents });
+    }
+
+    return res.status(403).json({ message: "Access denied" });
+  } catch (err) {
+    console.error("❌ Fetch content error:", err);
+    res.status(500).json({ message: "Server error" });
   }
-
-  // owner can always access
-  if (userRole === "owner") {
-    const contents = await selfLearningContent.find({ courseId });
-    return res.json({ contents });
-  }
-
-  // coach can access ONLY if assigned
-  if (
-    userRole === "coach" &&
-    course.coachId &&
-    course.coachId.toString() === userId.toString()
-  ) {
-    const contents = await selfLearningContent.find({ courseId });
-    return res.json({ contents });
-  }
-
-  return res.status(403).json({ message: "Access denied" });
 };
 
 // 📚 Register Student for Self-Learning Course
