@@ -11,6 +11,7 @@ import {
 import {
   confirmPayment,
   getPaidStudents,
+  getPendingPayments,
   uploadPaymentProof,
 } from "../controller/selfLearningPayment.js";
 import multer from "multer";
@@ -59,6 +60,7 @@ router.delete(
   authorizeRoles("owner"),
   deleteSelfLearningCourse
 );
+router.get("/payments", protect, authorizeRoles("owner"), getPendingPayments);
 
 router.get("/course/:courseId/content", protect, getCourseContent);
 router.get("/course/:courseId/students", protect, getPaidStudents);

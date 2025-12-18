@@ -275,3 +275,28 @@ export const confirmPayment = async (req, res) => {
     });
   }
 };
+// 📚 Get Pending Payments for Self-Learning Courses
+export const getPendingPayments = async (req, res) => {
+  try {
+    if (!["admin", "owner"].includes(req.user.role)) {
+      return res.status(403).json({ message: "Forbidden" });
+    }
+
+    const payments = await selfLearningPayment
+      .find({ status: "pending" })
+      .populate("studentId", "fullName email")
+      .populate("courseId", "title");
+
+    res.status(200).json({
+      payments: payments.map((p) => ({
+        _id: p._id,
+        proofUrl: p.proofUrl,
+        status: p.status,
+        student: p.studentId,
+        course: p.courseId,
+      })),
+    });
+  } catch (error) {
+    res.status(500).json({ message: "Failed to load payments" });
+  }
+};
