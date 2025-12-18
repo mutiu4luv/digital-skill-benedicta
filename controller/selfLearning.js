@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 import selfLearningContent from "../module/selfLearningContent.js";
 import selfLearningCourse from "../module/selfLearningCourse.js";
 import selfLearningEnrollment from "../module/selfLearningEnrollment.js";
+import cloudinary from "../config/cloudnary.js";
 
 // 📚 Create Self-Learning Course
 
