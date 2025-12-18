@@ -7,34 +7,37 @@ import selfLearningEnrollment from "../module/selfLearningEnrollment.js";
 
 export const createSelfLearningCourse = async (req, res) => {
   try {
-    const { title, description, price } = req.body;
-    const coachId = req.user?.id;
+    const { title, description, price, coachId: selectedCoachId } = req.body;
+    const userId = req.user?.id;
+    const role = req.user?.role;
 
-    // 🔐 Auth check
-    if (!coachId) {
-      return res.status(401).json({
-        message: "Unauthorized. Please login as a coach.",
-      });
+    if (!userId) {
+      return res.status(401).json({ message: "Unauthorized" });
     }
 
-    // ✅ Validation
+    // 🔐 Determine coach
+    let coachId = userId;
+
+    if (["admin", "owner"].includes(role)) {
+      if (!selectedCoachId) {
+        return res.status(400).json({
+          message: "Coach is required",
+        });
+      }
+      coachId = selectedCoachId;
+    }
+
     if (!title || !description || price === undefined) {
       return res.status(400).json({
         message: "Title, description and price are required",
       });
     }
 
-    if (typeof price !== "number" || price < 0) {
-      return res.status(400).json({
-        message: "Price must be a valid non-negative number",
-      });
-    }
-
-    // 🚀 Create course
+    // 🚀 Create course with assigned coach
     const course = await selfLearningCourse.create({
       title: title.trim(),
       description: description.trim(),
-      price,
+      price: Number(price),
       coachId,
     });
 
@@ -43,24 +46,15 @@ export const createSelfLearningCourse = async (req, res) => {
       course,
     });
   } catch (error) {
-    console.error("❌ Create Self Learning Course Error:", error);
-
-    // 🧠 Handle mongoose validation errors
-    if (error.name === "ValidationError") {
-      return res.status(400).json({
-        message: "Validation failed",
-        errors: error.errors,
-      });
-    }
+    console.error("❌ Create Course Error:", error);
 
     return res.status(500).json({
-      message: "Server error while creating self-learning course",
-      error: error.message,
+      message: "Server error while creating course",
     });
   }
 };
 
-// 📚 Add Content to Self-Learning Course
+// 📚 upload document Content to Self-Learning Course for students to see
 
 export const addContent = async (req, res) => {
   try {

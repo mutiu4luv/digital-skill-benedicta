@@ -32,6 +32,7 @@ router.post(
   "/course/:courseId/content",
   protect,
   authorizeRoles("coach"),
+  upload.single("file"),
   addContent
 );
 router.post(
