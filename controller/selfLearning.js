@@ -67,35 +67,27 @@ export const addContent = async (req, res) => {
     const { courseId } = req.params;
     const coachId = req.user?.id;
 
-    // 🔐 Auth check
     if (!coachId) {
-      return res.status(401).json({
-        message: "Unauthorized. Please login.",
-      });
+      return res.status(401).json({ message: "Unauthorized" });
     }
 
-    // ✅ Validate courseId
-    if (!courseId) {
-      return res.status(400).json({
-        message: "Course ID is required",
-      });
+    if (!courseId || !mongoose.Types.ObjectId.isValid(courseId)) {
+      return res.status(400).json({ message: "Invalid course ID" });
     }
 
-    // ✅ Validate content fields
-    if (!type || !title || !url) {
+    if (!type || !title) {
       return res.status(400).json({
-        message: "Type, title and url are required",
+        message: "Type and title are required",
       });
     }
 
     const allowedTypes = ["video", "document", "link"];
     if (!allowedTypes.includes(type)) {
       return res.status(400).json({
-        message: `Invalid content type. Allowed: ${allowedTypes.join(", ")}`,
+        message: `Invalid type. Allowed: ${allowedTypes.join(", ")}`,
       });
     }
 
-    // 🔎 Confirm course exists & belongs to coach
     const course = await selfLearningCourse.findById(courseId);
     if (!course) {
       return res.status(404).json({ message: "Course not found" });
@@ -107,12 +99,45 @@ export const addContent = async (req, res) => {
       });
     }
 
-    // 🚀 Create content
+    let finalUrl = "";
+
+    // 📌 CASE 1: FILE upload (document or video)
+    if (req.file) {
+      const uploadResult = await new Promise((resolve, reject) => {
+        cloudinary.uploader
+          .upload_stream(
+            {
+              folder: "self-learning/content",
+              resource_type: "auto", // video / pdf / doc
+            },
+            (error, result) => {
+              if (error) reject(error);
+              resolve(result);
+            }
+          )
+          .end(req.file.buffer);
+      });
+
+      finalUrl = uploadResult.secure_url;
+    }
+
+    // 📌 CASE 2: URL (for link type)
+    if (!finalUrl && url) {
+      finalUrl = url.trim();
+    }
+
+    // ❌ MUST have either file OR url
+    if (!finalUrl) {
+      return res.status(400).json({
+        message: "Provide either a file upload or a URL",
+      });
+    }
+
     const content = await selfLearningContent.create({
       courseId,
       type,
       title: title.trim(),
-      url: url.trim(),
+      url: finalUrl,
     });
 
     return res.status(201).json({
@@ -120,22 +145,13 @@ export const addContent = async (req, res) => {
       content,
     });
   } catch (error) {
-    console.error("❌ Add Self Learning Content Error:", error);
-
-    // 🧠 Handle mongoose validation errors
-    if (error.name === "ValidationError") {
-      return res.status(400).json({
-        message: "Validation failed",
-        errors: error.errors,
-      });
-    }
-
+    console.error("❌ Add Content Error:", error);
     return res.status(500).json({
       message: "Server error while adding content",
-      error: error.message,
     });
   }
 };
+
 // 📚 Get Course Content for Coach
 export const getCoachCourseContent = async (req, res) => {
   const coachId = req.user?.id;
