@@ -339,29 +339,27 @@ export const deleteSelfLearningCourse = async (req, res) => {
 
 // delete self learning  course created by coach
 export const deleteSelfLearningContent = async (req, res) => {
-  try {
-    const coachId = req.user.id;
-    const { contentId } = req.params;
+  const userId = req.user.id;
+  const userRole = req.user.role;
+  const { contentId } = req.params;
 
-    const content = await selfLearningContent.findById(contentId);
-    if (!content) {
-      return res.status(404).json({ message: "Content not found" });
-    }
-
-    const course = await selfLearningCourse.findById(content.courseId);
-    if (!course || course.coachId.toString() !== coachId) {
-      return res.status(403).json({ message: "Access denied" });
-    }
-
-    if (content.cloudinaryId) {
-      await cloudinary.uploader.destroy(content.cloudinaryId, {
-        resource_type: "auto",
-      });
-    }
-
-    await content.deleteOne();
-    res.json({ message: "Content deleted successfully" });
-  } catch (err) {
-    res.status(500).json({ message: err.message });
+  const content = await selfLearningContent.findById(contentId);
+  if (!content) {
+    return res.status(404).json({ message: "Content not found" });
   }
+
+  const course = await selfLearningCourse.findById(content.courseId);
+  if (!course) {
+    return res.status(404).json({ message: "Course not found" });
+  }
+
+  if (
+    userRole !== "owner" &&
+    (!course.coachId || course.coachId.toString() !== userId.toString())
+  ) {
+    return res.status(403).json({ message: "Access denied" });
+  }
+
+  await content.deleteOne();
+  res.json({ message: "Content deleted successfully" });
 };

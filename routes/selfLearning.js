@@ -82,7 +82,7 @@ router.get("/course/:courseId/students", protect, getPaidStudents);
 router.delete(
   "/content/:contentId",
   protect,
-  authorizeRoles("coach"),
+  authorizeRoles("owner", "coach"),
   deleteSelfLearningContent
 );
 export default router;
