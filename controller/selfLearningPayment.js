@@ -303,3 +303,45 @@ export const getPendingPayments = async (req, res) => {
     res.status(500).json({ message: "Failed to load payments" });
   }
 };
+// my paid courses
+export const getMyPaidSelfLearningCourses = async (req, res) => {
+  try {
+    const studentId = req.user.id;
+
+    const enrollments = await selfLearningEnrollment
+      .find({
+        studentId,
+        paymentConfirmed: true,
+      })
+      .populate({
+        path: "courseId",
+        populate: {
+          path: "coachId",
+          select: "fullName profilePhoto",
+        },
+      });
+
+    const courses = enrollments
+      .filter((e) => e.courseId) // guard deleted courses
+      .map((e) => ({
+        enrollmentId: e._id.toString(),
+        courseId: e.courseId._id.toString(), // 🔥 normalize
+        title: e.courseId.title,
+        description: e.courseId.description,
+        price: e.courseId.price,
+        paidAt: e.paidAt,
+        coach: e.courseId.coachId
+          ? {
+              id: e.courseId.coachId._id.toString(),
+              fullName: e.courseId.coachId.fullName,
+              profilePhoto: e.courseId.coachId.profilePhoto,
+            }
+          : null,
+      }));
+
+    return res.status(200).json({ courses });
+  } catch (error) {
+    console.error("❌ Get My Paid Courses Error:", error);
+    res.status(500).json({ message: "Failed to load paid courses" });
+  }
+};

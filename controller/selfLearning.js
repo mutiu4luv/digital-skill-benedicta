@@ -196,7 +196,9 @@ export const getCourseContent = async (req, res) => {
       return res.json({ contents });
     }
 
-    return res.status(403).json({ message: "Access denied" });
+    return res.status(403).json({
+      message: "Access denied, kindly select a course assigned to you",
+    });
     return res
       .status(403)
       .json({ message: "Access Denied Select Your Course" });
@@ -319,42 +321,6 @@ export const getSelfLearningCourses = async (req, res) => {
     res.status(500).json({
       message: "Failed to load self-learning courses",
     });
-  }
-};
-// my paid courses
-export const getMyPaidSelfLearningCourses = async (req, res) => {
-  try {
-    const studentId = req.user.id;
-
-    const enrollments = await selfLearningEnrollment
-      .find({
-        studentId,
-        paymentConfirmed: true,
-      })
-      .populate({
-        path: "courseId",
-        populate: {
-          path: "coachId",
-          select: "fullName profilePhoto",
-        },
-      });
-
-    const courses = enrollments
-      .filter((e) => e.courseId) // guard deleted courses
-      .map((e) => ({
-        enrollmentId: e._id,
-        courseId: e.courseId._id,
-        title: e.courseId.title,
-        description: e.courseId.description,
-        price: e.courseId.price,
-        coach: e.courseId.coachId,
-        paidAt: e.paidAt,
-      }));
-
-    return res.json({ courses });
-  } catch (error) {
-    console.error("❌ Get My Paid Courses Error:", error);
-    res.status(500).json({ message: "Failed to load paid courses" });
   }
 };
 

@@ -7,12 +7,12 @@ import {
   deleteSelfLearningCourse,
   getCourseContent,
   getCourseContentForStudent,
-  getMyPaidSelfLearningCourses,
   getSelfLearningCourses,
   registerSelfLearning,
 } from "../controller/selfLearning.js";
 import {
   confirmPayment,
+  getMyPaidSelfLearningCourses,
   getPaidStudents,
   getPendingPayments,
   uploadPaymentProof,
