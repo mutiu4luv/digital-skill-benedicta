@@ -5,12 +5,13 @@ import FreeCourseEnrollment from "../module/freeCourseEnrollment.js";
 
 export const createFreeCourse = async (req, res) => {
   try {
-    const { title, description } = req.body;
-    const coachId = req.user.id;
+    const { title, description, assignedCoachId } = req.body;
 
     if (!title) {
       return res.status(400).json({ message: "Title is required" });
     }
+
+    const coachId = assignedCoachId;
 
     const course = await FreeCourse.create({
       title: title.trim(),
@@ -27,6 +28,7 @@ export const createFreeCourse = async (req, res) => {
     res.status(500).json({ message: "Server error" });
   }
 };
+
 // get all free courses
 export const getFreeCourses = async (req, res) => {
   try {

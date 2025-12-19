@@ -1,5 +1,5 @@
 import express from "express";
-import { protect } from "../middleware/authMiddleware.js";
+import { authorizeRoles, protect } from "../middleware/authMiddleware.js";
 import {
   addFreeCourseContent,
   createFreeCourse,
@@ -12,7 +12,12 @@ import {
 
 const router = express.Router();
 
-router.post("/free-courses", protect, createFreeCourse);
+router.post(
+  "/free-courses",
+  protect,
+  authorizeRoles("owner"),
+  createFreeCourse
+);
 router.get("/free-courses", protect, getFreeCourses);
 
 router.post("/free-courses/:courseId/register", protect, registerFreeCourse);
