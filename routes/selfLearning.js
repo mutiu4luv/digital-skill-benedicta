@@ -6,7 +6,7 @@ import {
   deleteSelfLearningContent,
   deleteSelfLearningCourse,
   getCourseContent,
-  getCourseContentForStudent,
+  // getCourseContentForStudent,
   getSelfLearningCourses,
   registerSelfLearning,
 } from "../controller/selfLearning.js";
@@ -65,12 +65,12 @@ router.delete(
 );
 router.get("/payments", protect, authorizeRoles("owner"), getPendingPayments);
 
-router.get(
-  "/course/:courseId/content",
-  protect,
-  authorizeRoles("student"),
-  getCourseContentForStudent
-);
+// router.get(
+//   "/course/:courseId/content",
+//   protect,
+//   authorizeRoles("student"),
+//   getCourseContentForStudent
+// );
 
 // get course content uploadesd by coach
 router.get("/course/:courseId/content", protect, getCourseContent);
