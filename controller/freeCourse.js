@@ -162,7 +162,7 @@ export const deleteFreeCourse = async (req, res) => {
     }
 
     // Find course
-    const course = await FreeLearningCourse.findById(courseId);
+    const course = await FreeCourse.findById(courseId);
 
     if (!course) {
       return res.status(404).json({ message: "Course not found" });
