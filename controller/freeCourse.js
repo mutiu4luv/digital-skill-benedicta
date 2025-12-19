@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 import FreeCourse from "../module/freeCoure.js";
 import FreeCourseContent from "../module/freeCourseContent.js";
 import FreeCourseEnrollment from "../module/freeCourseEnrollment.js";
+import cloudinary from "../config/cloudnary.js";
 
 export const createFreeCourse = async (req, res) => {
   try {
@@ -103,29 +104,74 @@ export const getMyFreeCourses = async (req, res) => {
   }
 };
 // coach add content
+
 export const addFreeCourseContent = async (req, res) => {
   try {
-    const { type, title, url } = req.body;
     const { courseId } = req.params;
+    const { type, title, url } = req.body;
     const coachId = req.user.id;
 
-    const course = await FreeCourse.findById(courseId);
-    if (!course) return res.status(404).json({ message: "Course not found" });
-
-    if (String(course.coachId) !== String(coachId)) {
-      return res.status(403).json({ message: "Not allowed" });
+    if (!type || !title) {
+      return res.status(400).json({ message: "Type and title are required" });
     }
 
-    const content = await FreeCourseContent.create({
+    const course = await FreeCourse.findById(courseId);
+    if (!course) {
+      return res.status(404).json({ message: "Free course not found" });
+    }
+
+    // 🔐 ensure coach owns the course
+    if (course.coachId.toString() !== coachId.toString()) {
+      return res.status(403).json({ message: "Not authorized" });
+    }
+
+    let finalUrl = "";
+
+    // FILE upload
+    if (req.file) {
+      const uploadResult = await new Promise((resolve, reject) => {
+        cloudinary.uploader
+          .upload_stream(
+            {
+              folder: "free-learning/content",
+              resource_type: "auto",
+            },
+            (err, result) => {
+              if (err) reject(err);
+              resolve(result);
+            }
+          )
+          .end(req.file.buffer);
+      });
+
+      finalUrl = uploadResult.secure_url;
+    }
+
+    // URL fallback
+    if (!finalUrl && url) {
+      finalUrl = url.trim();
+    }
+
+    if (!finalUrl) {
+      return res.status(400).json({
+        message: "Provide a file or a URL",
+      });
+    }
+
+    const content = await freeCourseContent.create({
       courseId,
       type,
-      title,
-      url,
+      title: title.trim(),
+      url: finalUrl,
     });
 
-    res.status(201).json({ content });
+    res.status(201).json({
+      message: "Content added successfully",
+      content,
+    });
   } catch (err) {
-    res.status(500).json({ message: "Failed to add content" });
+    console.error("Add free content error:", err);
+    res.status(500).json({ message: "Server error" });
   }
 };
 // get selected course content by student
