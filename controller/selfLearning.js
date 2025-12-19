@@ -157,29 +157,37 @@ export const addContent = async (req, res) => {
 // 📚 Get Course Content for Coach
 export const getCourseContent = async (req, res) => {
   try {
-    const studentId = req.user.id;
+    const userId = req.user.id;
+    const userRole = req.user.role;
     const { courseId } = req.params;
 
-    const enrollment = await selfLearningEnrollment.findOne({
-      studentId,
-      courseId,
-      paymentConfirmed: true,
-    });
-
-    if (!enrollment) {
+    // 🚫 Only coaches allowed
+    if (userRole !== "coach") {
       return res.status(403).json({
-        message: "Payment required to access this course",
+        message: "Access denied. Coaches only.",
       });
     }
 
+    // ✅ Fetch only content uploaded by THIS coach
     const contents = await selfLearningContent
-      .find({ courseId })
+      .find({
+        courseId,
+        coachId: userId,
+      })
       .sort({ createdAt: 1 });
 
-    return res.json({ contents });
+    // 🚫 Coach selected a course they don't own
+    if (!contents || contents.length === 0) {
+      return res.status(403).json({
+        message:
+          "You do not have access to this course. Please select a course you created.",
+      });
+    }
+
+    return res.status(200).json({ contents });
   } catch (error) {
     console.error("❌ Get Course Content Error:", error);
-    res.status(500).json({
+    return res.status(500).json({
       message: "Failed to load course content",
     });
   }
@@ -271,7 +279,7 @@ export const getCourseContentForStudent = async (req, res) => {
       });
     }
 
-    // ✅ Fetch course content uploaded by coach
+    // ✅ Fetch course content uploaded by coaches
     const contents = await selfLearningContent
       .find({ courseId })
       .select("title type url createdAt")
