@@ -196,7 +196,9 @@ export const getCourseContent = async (req, res) => {
       return res.json({ contents });
     }
 
-    return res.status(403).json({ message: "Access denied" });
+    return res
+      .status(403)
+      .json({ message: "Access Denied Select Your Course" });
   } catch (err) {
     console.error("❌ Fetch content error:", err);
     res.status(500).json({ message: "Server error" });
