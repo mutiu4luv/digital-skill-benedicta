@@ -7,6 +7,7 @@ import {
   deleteSelfLearningCourse,
   getCourseContent,
   getCourseContentForStudent,
+  getMyPaidSelfLearningCourses,
   getSelfLearningCourses,
   registerSelfLearning,
 } from "../controller/selfLearning.js";
@@ -71,6 +72,8 @@ router.get(
   authorizeRoles("student"),
   getCourseContentForStudent
 );
+
+router.get("/self-learning/my-courses", protect, getMyPaidSelfLearningCourses);
 
 // get course content uploadesd by coach
 router.get("/course/:courseId/content", protect, getCourseContent);

@@ -157,51 +157,31 @@ export const addContent = async (req, res) => {
 // 📚 Get Course Content for Coach
 export const getCourseContent = async (req, res) => {
   try {
-    const userId = req.user.id;
-    const role = req.user.role;
+    const studentId = req.user.id;
     const { courseId } = req.params;
 
-    const course = await selfLearningCourse.findById(courseId);
-    if (!course) {
-      return res.status(404).json({ message: "Course not found" });
-    }
+    const enrollment = await selfLearningEnrollment.findOne({
+      studentId,
+      courseId,
+      paymentConfirmed: true,
+    });
 
-    // ✅ OWNER → full access
-    if (role === "owner") {
-      const contents = await selfLearningContent.find({ courseId });
-      return res.json({ contents });
-    }
-
-    // ✅ COACH → only if assigned
-    if (role === "coach" && course.coachId?.toString() === userId.toString()) {
-      const contents = await selfLearningContent.find({ courseId });
-      return res.json({ contents });
-    }
-
-    // ✅ STUDENT → only if enrolled + paid
-    if (role === "student") {
-      const enrollment = await selfLearningEnrollment.findOne({
-        studentId: userId,
-        courseId,
-        paymentConfirmed: true,
+    if (!enrollment) {
+      return res.status(403).json({
+        message: "Payment required to access this course",
       });
-
-      if (!enrollment) {
-        return res.status(403).json({
-          message: "You are not enrolled in this course",
-        });
-      }
-
-      const contents = await selfLearningContent.find({ courseId });
-      return res.json({ contents });
     }
 
-    return res
-      .status(403)
-      .json({ message: "Access Denied Select Your Course" });
-  } catch (err) {
-    console.error("❌ Fetch content error:", err);
-    res.status(500).json({ message: "Server error" });
+    const contents = await selfLearningContent
+      .find({ courseId })
+      .sort({ createdAt: 1 });
+
+    return res.json({ contents });
+  } catch (error) {
+    console.error("❌ Get Course Content Error:", error);
+    res.status(500).json({
+      message: "Failed to load course content",
+    });
   }
 };
 
@@ -320,6 +300,43 @@ export const getSelfLearningCourses = async (req, res) => {
     });
   }
 };
+// my paid courses
+export const getMyPaidSelfLearningCourses = async (req, res) => {
+  try {
+    const studentId = req.user.id;
+
+    const enrollments = await selfLearningEnrollment
+      .find({
+        studentId,
+        paymentConfirmed: true,
+      })
+      .populate({
+        path: "courseId",
+        populate: {
+          path: "coachId",
+          select: "fullName profilePhoto",
+        },
+      });
+
+    const courses = enrollments
+      .filter((e) => e.courseId) // guard deleted courses
+      .map((e) => ({
+        enrollmentId: e._id,
+        courseId: e.courseId._id,
+        title: e.courseId.title,
+        description: e.courseId.description,
+        price: e.courseId.price,
+        coach: e.courseId.coachId,
+        paidAt: e.paidAt,
+      }));
+
+    return res.json({ courses });
+  } catch (error) {
+    console.error("❌ Get My Paid Courses Error:", error);
+    res.status(500).json({ message: "Failed to load paid courses" });
+  }
+};
+
 // 📚 Delete Self-Learning Course by owner
 export const deleteSelfLearningCourse = async (req, res) => {
   try {
