@@ -9,8 +9,11 @@ import {
   getMyFreeCourses,
   registerFreeCourse,
 } from "../controller/freeCourse.js";
+import multer from "multer";
 
 const router = express.Router();
+const storage = multer.memoryStorage();
+const upload = multer({ storage });
 
 router.post(
   "/free-courses",
@@ -24,7 +27,12 @@ router.post("/free-courses/:courseId/register", protect, registerFreeCourse);
 
 router.get("/free-courses/my", protect, getMyFreeCourses);
 
-router.post("/free-courses/:courseId/content", protect, addFreeCourseContent);
+router.post(
+  "/free-courses/:courseId/content",
+  upload.single("file"),
+  protect,
+  addFreeCourseContent
+);
 
 router.get(
   "/free-courses/:courseId/contents",
