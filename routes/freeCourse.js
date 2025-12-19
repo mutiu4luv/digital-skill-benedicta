@@ -1,5 +1,5 @@
 import express from "express";
-import { protect } from "../middleware/authMiddleware";
+import { protect } from "../middleware/authMiddleware.js";
 import {
   addFreeCourseContent,
   createFreeCourse,
@@ -8,7 +8,7 @@ import {
   getFreeCourses,
   getMyFreeCourses,
   registerFreeCourse,
-} from "../controller/freeCourse";
+} from "../controller/freeCourse.js";
 
 const router = express.Router();
 

@@ -1,7 +1,7 @@
 import mongoose from "mongoose";
 import FreeCourse from "../module/freeCoure.js";
-import FreeCourseContent from "../module/freeCourseContent";
-import FreeCourseEnrollment from "../module/freeCourseEnrollment";
+import FreeCourseContent from "../module/freeCourseContent.js";
+import FreeCourseEnrollment from "../module/freeCourseEnrollment.js";
 
 export const createFreeCourse = async (req, res) => {
   try {

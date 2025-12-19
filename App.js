@@ -24,7 +24,7 @@ import { Server } from "socket.io";
 import chatRoute from "./routes/chat.js";
 import liveVideoRoutes from "./routes/liveVideo.js";
 import selfLearningRoutes from "./routes/selfLearning.js";
-import freeCourseRoute from "./routes/userRoutes.js";
+import freeCourseRoute from "./routes/freeCourse.js";
 
 dotenv.config();
 
