@@ -158,38 +158,51 @@ export const addContent = async (req, res) => {
 export const getCourseContent = async (req, res) => {
   try {
     const userId = req.user.id;
-    const userRole = req.user.role;
+    const role = req.user.role;
     const { courseId } = req.params;
 
-    // 🚫 Only coaches allowed
-    if (userRole !== "coach") {
-      return res.status(403).json({
-        message: "Access denied. Coaches only.",
-      });
+    const course = await selfLearningCourse.findById(courseId);
+    if (!course) {
+      return res.status(404).json({ message: "Course not found" });
     }
 
-    // ✅ Fetch only content uploaded by THIS coach
-    const contents = await selfLearningContent
-      .find({
+    // ✅ OWNER → full access
+    if (role === "owner") {
+      const contents = await selfLearningContent.find({ courseId });
+      return res.json({ contents });
+    }
+
+    // ✅ COACH → only if assigned
+    if (role === "coach" && course.coachId?.toString() === userId.toString()) {
+      const contents = await selfLearningContent.find({ courseId });
+      return res.json({ contents });
+    }
+
+    // ✅ STUDENT → only if enrolled + paid
+    if (role === "student") {
+      const enrollment = await selfLearningEnrollment.findOne({
+        studentId: userId,
         courseId,
-        coachId: userId,
-      })
-      .sort({ createdAt: 1 });
-
-    // 🚫 Coach did NOT upload content for this course
-    if (contents.length === 0) {
-      return res.status(403).json({
-        message:
-          "You have not uploaded any content for this course. Please select the exact course you uploaded content for.",
+        paymentConfirmed: true,
       });
+
+      if (!enrollment) {
+        return res.status(403).json({
+          message: "You are not enrolled in this course",
+        });
+      }
+
+      const contents = await selfLearningContent.find({ courseId });
+      return res.json({ contents });
     }
 
-    return res.status(200).json({ contents });
-  } catch (error) {
-    console.error("❌ Get Course Content Error:", error);
-    return res.status(500).json({
-      message: "Failed to load course content",
-    });
+    return res.status(403).json({ message: "Access denied" });
+    return res
+      .status(403)
+      .json({ message: "Access Denied Select Your Course" });
+  } catch (err) {
+    console.error("❌ Fetch content error:", err);
+    res.status(500).json({ message: "Server error" });
   }
 };
 
