@@ -73,7 +73,7 @@ router.get(
   getCourseContentForStudent
 );
 
-router.get("/self-learning/my-courses", protect, getMyPaidSelfLearningCourses);
+router.get("/my-courses", protect, getMyPaidSelfLearningCourses);
 
 // get course content uploadesd by coach
 router.get("/course/:courseId/content", protect, getCourseContent);

@@ -180,7 +180,7 @@ export const getCourseContent = async (req, res) => {
     if (!contents || contents.length === 0) {
       return res.status(403).json({
         message:
-          "You do not have access to this course. Please select a course you created.",
+          "You do not have access to this course. Please select a course assigned to you.",
       });
     }
 
