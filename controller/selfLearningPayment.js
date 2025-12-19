@@ -308,6 +308,7 @@ export const getMyPaidSelfLearningCourses = async (req, res) => {
   try {
     const studentId = req.user.id;
 
+    // 1️⃣ Get paid enrollments
     const enrollments = await selfLearningEnrollment
       .find({
         studentId,
@@ -321,27 +322,65 @@ export const getMyPaidSelfLearningCourses = async (req, res) => {
         },
       });
 
+    if (!enrollments.length) {
+      return res.status(200).json({ courses: [] });
+    }
+
+    // 2️⃣ Get payment records for these courses
+    const courseIds = enrollments.map((e) => e.courseId?._id);
+
+    const payments = await selfLearningPayment.find({
+      studentId,
+      courseId: { $in: courseIds },
+      status: "approved",
+    });
+
+    // 3️⃣ Map payment by courseId for quick lookup
+    const paymentMap = {};
+    payments.forEach((p) => {
+      paymentMap[p.courseId.toString()] = p;
+    });
+
     const courses = enrollments
-      .filter((e) => e.courseId) // guard deleted courses
-      .map((e) => ({
-        enrollmentId: e._id.toString(),
-        courseId: e.courseId._id.toString(), // 🔥 normalize
-        title: e.courseId.title,
-        description: e.courseId.description,
-        price: e.courseId.price,
-        paidAt: e.paidAt,
-        coach: e.courseId.coachId
-          ? {
-              id: e.courseId.coachId._id.toString(),
-              fullName: e.courseId.coachId.fullName,
-              profilePhoto: e.courseId.coachId.profilePhoto,
-            }
-          : null,
-      }));
+      .filter((e) => e.courseId)
+      .map((e) => {
+        const courseId = e.courseId._id.toString();
+        const payment = paymentMap[courseId];
+
+        return {
+          enrollmentId: e._id.toString(),
+          courseId,
+          title: e.courseId.title,
+          description: e.courseId.description,
+          price: e.courseId.price,
+          paidAt: e.paidAt,
+
+          // 👇 Coach info
+          coach: e.courseId.coachId
+            ? {
+                id: e.courseId.coachId._id.toString(),
+                fullName: e.courseId.coachId.fullName,
+                profilePhoto: e.courseId.coachId.profilePhoto,
+              }
+            : null,
+
+          // 👇 Payment info
+          payment: payment
+            ? {
+                id: payment._id.toString(),
+                status: payment.status,
+                proofUrl: payment.proofUrl,
+                submittedAt: payment.submittedAt,
+              }
+            : null,
+        };
+      });
 
     return res.status(200).json({ courses });
   } catch (error) {
     console.error("❌ Get My Paid Courses Error:", error);
-    res.status(500).json({ message: "Failed to load paid courses" });
+    return res.status(500).json({
+      message: "Failed to load paid courses",
+    });
   }
 };
