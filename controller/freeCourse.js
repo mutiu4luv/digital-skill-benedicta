@@ -11,7 +11,13 @@ export const createFreeCourse = async (req, res) => {
       return res.status(400).json({ message: "Title is required" });
     }
 
-    const coachId = assignedCoachId;
+    const coachId = assignedCoachId || req.user?.id;
+
+    if (!coachId) {
+      return res.status(400).json({
+        message: "Coach ID is missing. Please select a coach or log in again.",
+      });
+    }
 
     const course = await FreeCourse.create({
       title: title.trim(),
