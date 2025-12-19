@@ -371,6 +371,7 @@ export const getMyPaidSelfLearningCourses = async (req, res) => {
                 status: payment.status,
                 proofUrl: payment.proofUrl,
                 submittedAt: payment.submittedAt,
+                paymentConfirmed: payment.paymentConfirmed,
               }
             : null,
         };
