@@ -176,7 +176,14 @@ export const getCourseContent = async (req, res) => {
       })
       .sort({ createdAt: 1 });
 
-    // ✅ ALWAYS return contents (even if empty)
+    // 🚫 Coach did NOT upload content for this course
+    if (contents.length === 0) {
+      return res.status(403).json({
+        message:
+          "You have not uploaded any content for this course. Please select the exact course you uploaded content for.",
+      });
+    }
+
     return res.status(200).json({ contents });
   } catch (error) {
     console.error("❌ Get Course Content Error:", error);
