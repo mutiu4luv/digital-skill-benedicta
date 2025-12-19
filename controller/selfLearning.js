@@ -176,14 +176,7 @@ export const getCourseContent = async (req, res) => {
       })
       .sort({ createdAt: 1 });
 
-    // 🚫 Coach selected a course they don't own
-    if (!contents || contents.length === 0) {
-      return res.status(403).json({
-        message:
-          "You do not have access to this course. Please select a course assigned to you.",
-      });
-    }
-
+    // ✅ ALWAYS return contents (even if empty)
     return res.status(200).json({ contents });
   } catch (error) {
     console.error("❌ Get Course Content Error:", error);
