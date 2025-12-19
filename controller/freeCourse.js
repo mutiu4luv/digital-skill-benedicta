@@ -5,24 +5,22 @@ import FreeCourseEnrollment from "../module/freeCourseEnrollment.js";
 
 export const createFreeCourse = async (req, res) => {
   try {
-    const { title, description, assignedCoachId } = req.body;
+    const { title, description, coachId, assignedCoachId } = req.body;
 
     if (!title) {
       return res.status(400).json({ message: "Title is required" });
     }
 
-    const coachId = assignedCoachId || req.user?.id;
+    const finalCoachId = coachId || assignedCoachId || req.user?.id;
 
-    if (!coachId) {
-      return res.status(400).json({
-        message: "Coach ID is missing. Please select a coach or log in again.",
-      });
+    if (!finalCoachId) {
+      return res.status(400).json({ message: "A Coach must be assigned." });
     }
 
     const course = await FreeCourse.create({
       title: title.trim(),
       description: description?.trim(),
-      coachId,
+      coachId: finalCoachId,
     });
 
     res.status(201).json({
