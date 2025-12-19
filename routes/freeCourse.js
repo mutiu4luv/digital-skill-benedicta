@@ -23,7 +23,7 @@ router.post("/free-courses/:courseId/content", protect, addFreeCourseContent);
 
 router.get(
   "/free-courses/:courseId/contents",
-  prompt,
+  protect,
   getFreeCourseContentForStudent
 );
 router.delete("/free-courses/:courseId", protect, deleteFreeCourse);
