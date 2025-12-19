@@ -271,18 +271,14 @@ export const registerSelfLearning = async (req, res) => {
 
 export const getCourseContentForStudent = async (req, res) => {
   try {
-    const studentId = req.user?.id;
+    const studentId = req.user.id;
     const { courseId } = req.params;
-
-    if (!studentId) {
-      return res.status(401).json({ message: "Unauthorized" });
-    }
 
     if (!mongoose.Types.ObjectId.isValid(courseId)) {
       return res.status(400).json({ message: "Invalid course ID" });
     }
 
-    // ✅ CHECK: student must be enrolled AND paid
+    // ✅ Student must be enrolled AND payment confirmed
     const enrollment = await selfLearningEnrollment.findOne({
       studentId,
       courseId,
@@ -291,23 +287,20 @@ export const getCourseContentForStudent = async (req, res) => {
 
     if (!enrollment) {
       return res.status(403).json({
-        message: "You are not enrolled in this course",
+        message: "You must complete payment to access this course",
       });
     }
 
-    // ✅ Fetch ONLY this course content
+    // ✅ Fetch course content uploaded by coach
     const contents = await selfLearningContent
       .find({ courseId })
+      .select("title type url createdAt")
       .sort({ createdAt: 1 });
 
-    return res.status(200).json({
-      contents,
-    });
+    res.status(200).json({ contents });
   } catch (error) {
-    console.error("❌ Fetch Course Content Error:", error);
-    res.status(500).json({
-      message: "Failed to load course content",
-    });
+    console.error("❌ Student content fetch error:", error);
+    res.status(500).json({ message: "Failed to load course materials" });
   }
 };
 
