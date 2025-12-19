@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import FreeCourse from "../module/freeCoure.js";
 import FreeCourseContent from "../module/freeCourseContent";
 import FreeCourseEnrollment from "../module/freeCourseEnrollment";
@@ -146,5 +147,43 @@ export const getFreeCourseContentForStudent = async (req, res) => {
     res.json({ contents });
   } catch (err) {
     res.status(500).json({ message: "Failed to load contents" });
+  }
+};
+// DELETE COURSE BY OWNER
+
+export const deleteFreeCourse = async (req, res) => {
+  try {
+    const { courseId } = req.params;
+    const userId = req.user.id;
+
+    // Validate courseId
+    if (!mongoose.Types.ObjectId.isValid(courseId)) {
+      return res.status(400).json({ message: "Invalid course ID" });
+    }
+
+    // Find course
+    const course = await FreeLearningCourse.findById(courseId);
+
+    if (!course) {
+      return res.status(404).json({ message: "Course not found" });
+    }
+
+    // 🔐 Only owner/coach who created the course can delete
+    if (course.coachId.toString() !== userId) {
+      return res.status(403).json({
+        message: "You are not allowed to delete this course",
+      });
+    }
+
+    await course.deleteOne();
+
+    return res.status(200).json({
+      message: "Course deleted successfully",
+    });
+  } catch (error) {
+    console.error("❌ Delete Free Course Error:", error);
+    return res.status(500).json({
+      message: "Failed to delete course",
+    });
   }
 };

@@ -3,6 +3,7 @@ import { protect } from "../middleware/authMiddleware";
 import {
   addFreeCourseContent,
   createFreeCourse,
+  deleteFreeCourse,
   getFreeCourseContentForStudent,
   getFreeCourses,
   getMyFreeCourses,
@@ -25,5 +26,6 @@ router.get(
   prompt,
   getFreeCourseContentForStudent
 );
+router.delete("/free-courses/:courseId", protect, deleteFreeCourse);
 
 export default router;
