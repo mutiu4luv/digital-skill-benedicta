@@ -1,44 +1,62 @@
 import express from "express";
-import { authorizeRoles, protect } from "../middleware/authMiddleware.js";
-import {
-  addFreeCourseContent,
-  createFreeCourse,
-  deleteFreeCourse,
-  getFreeCourseContentForStudent,
-  getFreeCourses,
-  getMyFreeCourses,
-  registerFreeCourse,
-} from "../controller/freeCourse.js";
 import multer from "multer";
+import { protect, authorizeRoles } from "../middleware/authMiddleware.js";
+import {
+  createFreeCourse,
+  getFreeCourses,
+  registerFreeCourse,
+  getMyFreeCourses,
+  addFreeCourseContent,
+  getFreeCourseContentForStudent,
+  getFreeCourseContentForCoach,
+  deleteFreeCourse,
+} from "../controller/freeCourse.js";
 
 const router = express.Router();
-const storage = multer.memoryStorage();
-const upload = multer({ storage });
+const upload = multer({ storage: multer.memoryStorage() });
 
-router.post(
-  "/free-courses",
-  protect,
-  authorizeRoles("owner"),
-  createFreeCourse
-);
+router.post("/free-courses", protect, createFreeCourse);
 router.get("/free-courses", protect, getFreeCourses);
 
-router.post("/free-courses/:courseId/register", protect, registerFreeCourse);
-
-router.get("/free-courses/my", protect, getMyFreeCourses);
-
+// upload content (coach only)
 router.post(
   "/free-courses/:courseId/content",
-  upload.single("file"),
   protect,
+  authorizeRoles("coach"),
+  upload.single("file"),
   addFreeCourseContent
 );
 
+// 👇 STUDENT (requires enrollment)
 router.get(
   "/free-courses/:courseId/contents",
   protect,
+  authorizeRoles("student"),
   getFreeCourseContentForStudent
 );
-router.delete("/free-courses/:courseId", protect, deleteFreeCourse);
+
+// 👇 COACH
+router.get(
+  "/free-courses/:courseId/contents/coach",
+  protect,
+  authorizeRoles("coach"),
+  getFreeCourseContentForCoach
+);
+
+router.post(
+  "/free-courses/:courseId/register",
+  protect,
+  authorizeRoles("student"),
+  registerFreeCourse
+);
+
+router.get("/free-courses/my", protect, getMyFreeCourses);
+
+router.delete(
+  "/free-courses/:courseId",
+  protect,
+  authorizeRoles("coach", "owner"),
+  deleteFreeCourse
+);
 
 export default router;
