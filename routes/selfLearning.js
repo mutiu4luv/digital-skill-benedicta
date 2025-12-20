@@ -18,6 +18,7 @@ import {
   uploadPaymentProof,
 } from "../controller/selfLearningPayment.js";
 import multer from "multer";
+import { getFreeCourseContentForCoach } from "../controller/freeCourse.js";
 
 const router = express.Router();
 const storage = multer.memoryStorage();
@@ -43,6 +44,11 @@ router.post(
   protect,
   authorizeRoles("student"),
   registerSelfLearning
+);
+router.get(
+  "/free-courses/:courseId/contents/coach",
+  protect,
+  getFreeCourseContentForCoach
 );
 router.post(
   "/payment/confirm",

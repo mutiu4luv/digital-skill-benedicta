@@ -158,7 +158,7 @@ export const addFreeCourseContent = async (req, res) => {
       });
     }
 
-    const content = await freeCourseContent.create({
+    const content = await FreeCourseContent.create({
       courseId,
       type,
       title: title.trim(),
@@ -237,5 +237,32 @@ export const deleteFreeCourse = async (req, res) => {
     return res.status(500).json({
       message: "Failed to delete course",
     });
+  }
+};
+// get free course contents for COACH (owner only)
+export const getFreeCourseContentForCoach = async (req, res) => {
+  try {
+    const coachId = req.user.id;
+    const { courseId } = req.params;
+
+    // validate course
+    const course = await FreeCourse.findById(courseId);
+    if (!course) {
+      return res.status(404).json({ message: "Free course not found" });
+    }
+
+    // 🔐 ensure coach owns the course
+    if (course.coachId.toString() !== coachId.toString()) {
+      return res.status(403).json({ message: "Not authorized" });
+    }
+
+    const contents = await FreeCourseContent.find({ courseId }).sort({
+      createdAt: 1,
+    });
+
+    res.json({ contents });
+  } catch (err) {
+    console.error("Get free content (coach) error:", err);
+    res.status(500).json({ message: "Failed to load contents" });
   }
 };
