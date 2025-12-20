@@ -10,6 +10,7 @@ import {
   getFreeCourseContentForStudent,
   getFreeCourseContentForCoach,
   deleteFreeCourse,
+  getMyFreeCoursesForCoach,
 } from "../controller/freeCourse.js";
 
 const router = express.Router();
@@ -41,6 +42,13 @@ router.get(
   protect,
   authorizeRoles("coach"),
   getFreeCourseContentForCoach
+);
+// get My FreeCourses For each Coach
+router.get(
+  "/free-courses/coach/my",
+  protect,
+  authorizeRoles("coach"),
+  getMyFreeCoursesForCoach
 );
 
 router.post(
