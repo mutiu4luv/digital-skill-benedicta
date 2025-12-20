@@ -266,15 +266,18 @@ export const getFreeCourseContentForCoach = async (req, res) => {
     res.status(500).json({ message: "Failed to load contents" });
   }
 };
-// get free courses created by logged-in coach
+// ✅ get free courses created by logged-in coach
 export const getMyFreeCoursesForCoach = async (req, res) => {
   try {
     const coachId = req.user.id;
 
-    const courses = await FreeCourse.find({ coachId }).sort({ createdAt: -1 });
+    const courses = await FreeCourse.find({
+      coachId: coachId, // 👈 strict ownership
+    }).sort({ createdAt: -1 });
 
     res.json({ courses });
   } catch (err) {
+    console.error("Get coach free courses error:", err);
     res.status(500).json({ message: "Failed to load courses" });
   }
 };

@@ -50,7 +50,6 @@ router.get(
   authorizeRoles("coach"),
   getMyFreeCoursesForCoach
 );
-
 router.post(
   "/free-courses/:courseId/register",
   protect,
