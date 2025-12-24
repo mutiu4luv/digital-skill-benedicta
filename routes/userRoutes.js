@@ -10,6 +10,8 @@ import {
   getAllCoaches,
   updateProfile,
   getMyProfile,
+  forgotPassword,
+  resetPassword,
 } from "../controller/userController.js";
 import { protect, authorizeRoles } from "../middleware/authMiddleware.js";
 
@@ -33,5 +35,7 @@ router.get("/all", protect, authorizeRoles("owner"), getAllUsers);
 
 router.put("/:id", protect, authorizeRoles("owner"), updateUser);
 router.delete("/:id", protect, authorizeRoles("owner"), deleteUser);
+router.post("/forgot-password", forgotPassword);
+router.post("/reset-password", resetPassword);
 
 export default router;
