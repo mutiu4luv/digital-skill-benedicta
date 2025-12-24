@@ -326,3 +326,99 @@ export const getAllCoaches = async (req, res) => {
     });
   }
 };
+
+// update profile by student, coach and owner
+export const updateProfile = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { fullName, phoneNumber, country, oldPassword, newPassword } =
+      req.body;
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    /* -----------------------------------
+       ✅ Update basic profile fields
+    ----------------------------------- */
+    if (fullName) user.fullName = fullName;
+    if (phoneNumber) user.phoneNumber = phoneNumber;
+    if (country) user.country = country;
+
+    /* -----------------------------------
+       🔐 PASSWORD UPDATE LOGIC
+    ----------------------------------- */
+    if (newPassword) {
+      // Old password is required
+      if (!oldPassword) {
+        return res.status(400).json({
+          message: "Old password is required to update password",
+        });
+      }
+
+      // Compare old password
+      const isMatch = await bcrypt.compare(oldPassword, user.password);
+      if (!isMatch) {
+        return res.status(401).json({
+          message: "Old password is incorrect",
+        });
+      }
+
+      // Validate new password
+      if (newPassword.length < 5) {
+        return res.status(400).json({
+          message: "New password must be at least 5 characters long",
+        });
+      }
+
+      // Hash and update password
+      user.password = await bcrypt.hash(newPassword, 10);
+    }
+
+    /* -----------------------------------
+       🖼 Profile photo update (Cloudinary)
+    ----------------------------------- */
+    if (req.file && req.file.buffer) {
+      const uploadResult = await new Promise((resolve, reject) => {
+        const stream = cloudinary.uploader.upload_stream(
+          {
+            folder: "hgsc_users",
+            transformation: [{ width: 500, height: 500, crop: "fill" }],
+          },
+          (error, result) => {
+            if (error) reject(error);
+            else resolve(result);
+          }
+        );
+        streamifier.createReadStream(req.file.buffer).pipe(stream);
+      });
+
+      user.profilePhoto = uploadResult.secure_url;
+    }
+
+    await user.save();
+
+    /* -----------------------------------
+       ✅ RESPONSE
+    ----------------------------------- */
+    res.status(200).json({
+      message: "Profile updated successfully",
+      user: {
+        id: user._id,
+        fullName: user.fullName,
+        email: user.email,
+        phoneNumber: user.phoneNumber,
+        country: user.country,
+        photo: user.profilePhoto,
+        role: user.role,
+      },
+    });
+  } catch (error) {
+    console.error("❌ Update profile error:", error);
+    res.status(500).json({
+      message: "Failed to update profile",
+      error: error.message,
+    });
+  }
+};
