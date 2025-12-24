@@ -16,7 +16,7 @@ import {
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage() });
 
-router.post("/free-courses", protect, createFreeCourse);
+router.post("/free-courses", protect, upload.single("image"), createFreeCourse);
 router.get("/free-courses", protect, getFreeCourses);
 
 // upload content (coach only)

@@ -4,6 +4,10 @@ const freeCourseSchema = new mongoose.Schema(
   {
     title: { type: String, required: true },
     description: String,
+    image: {
+      type: String,
+      default: "",
+    },
     coachId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",

@@ -18,10 +18,32 @@ export const createFreeCourse = async (req, res) => {
       return res.status(400).json({ message: "A Coach must be assigned." });
     }
 
+    /* ----------------------------------
+       🖼 UPLOAD IMAGE (OPTIONAL)
+    ---------------------------------- */
+    let imageUrl = "";
+
+    if (req.file) {
+      const uploadResult = await new Promise((resolve, reject) => {
+        cloudinary.uploader
+          .upload_stream({ folder: "hgsc_free_courses" }, (error, result) => {
+            if (error) reject(error);
+            else resolve(result);
+          })
+          .end(req.file.buffer);
+      });
+
+      imageUrl = uploadResult.secure_url;
+    }
+
+    /* ----------------------------------
+       🚀 CREATE COURSE
+    ---------------------------------- */
     const course = await FreeCourse.create({
       title: title.trim(),
       description: description?.trim(),
       coachId: finalCoachId,
+      image: imageUrl,
     });
 
     res.status(201).json({
@@ -29,7 +51,7 @@ export const createFreeCourse = async (req, res) => {
       course,
     });
   } catch (err) {
-    console.error("Create free course error:", err);
+    console.error("❌ Create free course error:", err);
     res.status(500).json({ message: "Server error" });
   }
 };
