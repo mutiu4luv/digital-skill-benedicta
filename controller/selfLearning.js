@@ -16,14 +16,14 @@ export const createSelfLearningCourse = async (req, res) => {
       return res.status(401).json({ message: "Unauthorized" });
     }
 
-    // 🔐 Determine coach
+    /* ----------------------------------
+       🔐 DETERMINE COACH
+    ---------------------------------- */
     let coachId = userId;
 
     if (["admin", "owner"].includes(role)) {
       if (!selectedCoachId) {
-        return res.status(400).json({
-          message: "Coach is required",
-        });
+        return res.status(400).json({ message: "Coach is required" });
       }
       coachId = selectedCoachId;
     }
@@ -34,15 +34,34 @@ export const createSelfLearningCourse = async (req, res) => {
       });
     }
 
-    // 🚀 Create course
+    /* ----------------------------------
+       🖼 UPLOAD IMAGE TO CLOUDINARY
+    ---------------------------------- */
+    let imageUrl = "";
+
+    if (req.file) {
+      const uploadResult = await cloudinary.uploader.upload(req.file.path, {
+        folder: "hgsc_courses",
+      });
+
+      imageUrl = uploadResult.secure_url;
+
+      // 🧹 Remove local file after upload
+      fs.unlinkSync(req.file.path);
+    }
+
+    /* ----------------------------------
+       🚀 CREATE COURSE
+    ---------------------------------- */
     const createdCourse = await selfLearningCourse.create({
       title: title.trim(),
       description: description.trim(),
       price: Number(price),
       coachId,
+      image: imageUrl,
     });
 
-    // 🔁 Re-fetch with coach populated
+    // 🔁 Populate coach
     const course = await selfLearningCourse
       .findById(createdCourse._id)
       .populate("coachId", "fullName email profilePhoto");
