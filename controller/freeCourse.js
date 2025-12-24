@@ -230,23 +230,26 @@ export const deleteFreeCourse = async (req, res) => {
     const { courseId } = req.params;
     const userId = req.user.id;
 
-    // Validate courseId
     if (!mongoose.Types.ObjectId.isValid(courseId)) {
       return res.status(400).json({ message: "Invalid course ID" });
     }
 
-    // Find course
     const course = await FreeCourse.findById(courseId);
 
     if (!course) {
       return res.status(404).json({ message: "Course not found" });
     }
 
-    // 🔐 Only owner/coach who created the course can delete
-    if (course.coachId.toString() !== userId) {
+    // ✅ OWNER or COURSE COACH
+    if (req.user.role !== "owner" && course.coachId.toString() !== userId) {
       return res.status(403).json({
         message: "You are not allowed to delete this course",
       });
+    }
+
+    // ☁️ DELETE IMAGE FROM CLOUDINARY
+    if (course.image?.public_id) {
+      await cloudinary.uploader.destroy(course.image.public_id);
     }
 
     await course.deleteOne();
@@ -261,6 +264,7 @@ export const deleteFreeCourse = async (req, res) => {
     });
   }
 };
+
 // get free course contents for COACH (owner only)
 export const getFreeCourseContentForCoach = async (req, res) => {
   try {
