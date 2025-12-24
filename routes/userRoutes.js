@@ -22,11 +22,16 @@ const upload = multer({
 router.post("/register", upload.single("profilePhoto"), registerUser);
 router.post("/verify-email", verifyEmail);
 router.post("/login", loginUser);
-router.get("/all", protect, authorizeRoles("owner"), getAllUsers);
-router.delete("/:id", protect, authorizeRoles("owner"), deleteUser);
-router.put("/:id", protect, authorizeRoles("owner"), updateUser);
-router.get("/coaches", protect, getAllCoaches);
-router.put("/profile", protect, upload.single("profilePhoto"), updateProfile);
+
+// ✅ PROFILE ROUTES FIRST
 router.get("/me", protect, getMyProfile);
+router.put("/profile", protect, upload.single("profilePhoto"), updateProfile);
+
+// ✅ OTHER FIXED ROUTES
+router.get("/coaches", protect, getAllCoaches);
+router.get("/all", protect, authorizeRoles("owner"), getAllUsers);
+
+router.put("/:id", protect, authorizeRoles("owner"), updateUser);
+router.delete("/:id", protect, authorizeRoles("owner"), deleteUser);
 
 export default router;
