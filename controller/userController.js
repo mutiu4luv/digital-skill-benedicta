@@ -422,3 +422,26 @@ export const updateProfile = async (req, res) => {
     });
   }
 };
+
+//get my profile
+export const getMyProfile = async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id).select("-password");
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    res.status(200).json({
+      id: user._id,
+      fullName: user.fullName,
+      email: user.email,
+      phoneNumber: user.phoneNumber,
+      country: user.country,
+      photo: user.profilePhoto,
+      role: user.role,
+    });
+  } catch (error) {
+    res.status(500).json({ message: "Failed to fetch profile" });
+  }
+};

@@ -9,6 +9,7 @@ import {
   updateUser,
   getAllCoaches,
   updateProfile,
+  getMyProfile,
 } from "../controller/userController.js";
 import { protect, authorizeRoles } from "../middleware/authMiddleware.js";
 
@@ -26,5 +27,6 @@ router.delete("/:id", protect, authorizeRoles("owner"), deleteUser);
 router.put("/:id", protect, authorizeRoles("owner"), updateUser);
 router.get("/coaches", protect, getAllCoaches);
 router.put("/profile", protect, upload.single("profilePhoto"), updateProfile);
+router.get("/me", protect, getMyProfile);
 
 export default router;
