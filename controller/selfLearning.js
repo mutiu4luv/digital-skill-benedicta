@@ -16,9 +16,6 @@ export const createSelfLearningCourse = async (req, res) => {
       return res.status(401).json({ message: "Unauthorized" });
     }
 
-    /* ----------------------------------
-       🔐 DETERMINE COACH
-    ---------------------------------- */
     let coachId = userId;
 
     if (["admin", "owner"].includes(role)) {
@@ -34,25 +31,23 @@ export const createSelfLearningCourse = async (req, res) => {
       });
     }
 
-    /* ----------------------------------
-       🖼 UPLOAD IMAGE TO CLOUDINARY
-    ---------------------------------- */
     let imageUrl = "";
 
     if (req.file) {
-      const uploadResult = await cloudinary.uploader.upload(req.file.path, {
-        folder: "hgsc_courses",
-      });
+      const streamUpload = () =>
+        new Promise((resolve, reject) => {
+          cloudinary.uploader
+            .upload_stream({ folder: "hgsc_courses" }, (error, result) => {
+              if (error) reject(error);
+              else resolve(result);
+            })
+            .end(req.file.buffer);
+        });
 
+      const uploadResult = await streamUpload();
       imageUrl = uploadResult.secure_url;
-
-      // 🧹 Remove local file after upload
-      fs.unlinkSync(req.file.path);
     }
 
-    /* ----------------------------------
-       🚀 CREATE COURSE
-    ---------------------------------- */
     const createdCourse = await selfLearningCourse.create({
       title: title.trim(),
       description: description.trim(),
@@ -61,7 +56,6 @@ export const createSelfLearningCourse = async (req, res) => {
       image: imageUrl,
     });
 
-    // 🔁 Populate coach
     const course = await selfLearningCourse
       .findById(createdCourse._id)
       .populate("coachId", "fullName email profilePhoto");
@@ -72,10 +66,9 @@ export const createSelfLearningCourse = async (req, res) => {
     });
   } catch (error) {
     console.error("❌ Create Course Error:", error);
-
-    return res.status(500).json({
-      message: "Server error while creating course",
-    });
+    return res
+      .status(500)
+      .json({ message: "Server error while creating course" });
   }
 };
 
