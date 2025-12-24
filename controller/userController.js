@@ -445,3 +445,104 @@ export const getMyProfile = async (req, res) => {
     res.status(500).json({ message: "Failed to fetch profile" });
   }
 };
+
+// forgot password
+export const forgotPassword = async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) return res.status(400).json({ message: "Email is required" });
+
+    const user = await User.findOne({ email });
+    if (!user) return res.status(404).json({ message: "Email Does not Exist" });
+
+    // 🔢 Generate 6-digit OTP
+    const resetCode = Math.floor(100000 + Math.random() * 900000);
+
+    // ⏰ Expires in 10 minutes
+    user.resetPasswordCode = resetCode;
+    user.resetPasswordExpires = Date.now() + 10 * 60 * 1000;
+
+    await user.save();
+
+    // ✉️ Email content
+    const htmlContent = `
+      <div style="font-family: Arial; line-height:1.6;">
+        <h2>Password Reset Request 🔐</h2>
+        <p>Hello ${user.fullName},</p>
+        <p>Your password reset code is:</p>
+        <h1 style="background:#0a7;color:#fff;padding:10px;border-radius:8px;">
+          ${resetCode}
+        </h1>
+        <p>This code expires in <b>10 minutes</b>.</p>
+      </div>
+    `;
+
+    const emailData = {
+      sender: {
+        email: process.env.EMAIL_SENDER,
+        name: "HGSC² Digital Skills",
+      },
+      to: [{ email: user.email, name: user.fullName }],
+      subject: "Reset Your Password",
+      htmlContent,
+    };
+
+    await brevoEmailApi.sendTransacEmail(emailData);
+
+    res.status(200).json({
+      message: "Password reset code sent to your email",
+    });
+  } catch (error) {
+    console.error("❌ Forgot password error:", error);
+    res.status(500).json({
+      message: "Failed to send reset code",
+      error: error.message,
+    });
+  }
+};
+// reset password
+
+export const resetPassword = async (req, res) => {
+  try {
+    const { email, otp, newPassword } = req.body;
+
+    if (!email || !otp || !newPassword)
+      return res.status(400).json({ message: "All fields are required" });
+
+    if (newPassword.length < 5)
+      return res
+        .status(400)
+        .json({ message: "Password must be at least 5 characters" });
+
+    const user = await User.findOne({ email });
+    if (!user) return res.status(404).json({ message: "User not found" });
+
+    // ❌ OTP mismatch
+    if (user.resetPasswordCode !== Number(otp))
+      return res.status(400).json({ message: "Invalid reset code" });
+
+    // ❌ OTP expired
+    if (Date.now() > user.resetPasswordExpires)
+      return res.status(400).json({ message: "Reset code expired" });
+
+    // 🔐 Hash new password
+    user.password = await bcrypt.hash(newPassword, 10);
+
+    // 🧹 Clear reset fields
+    user.resetPasswordCode = null;
+    user.resetPasswordExpires = null;
+
+    await user.save();
+
+    res.status(200).json({
+      message: "✅ Password reset successful. You can now log in.",
+    });
+  } catch (error) {
+    console.error("❌ Reset password error:", error);
+    res.status(500).json({
+      message: "Password reset failed",
+      error: error.message,
+    });
+  }
+};
