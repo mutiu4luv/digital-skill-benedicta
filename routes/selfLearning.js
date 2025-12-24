@@ -27,6 +27,7 @@ const upload = multer({ storage });
 router.post(
   "/course",
   protect,
+  upload.single("image"),
   authorizeRoles("owner"),
   createSelfLearningCourse
 );

@@ -5,6 +5,9 @@ const selfLearningCourseSchema = new mongoose.Schema(
     title: { type: String, required: true },
     description: String,
     price: { type: Number, required: false },
+    image: {
+      type: String,
+    },
     coachId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
