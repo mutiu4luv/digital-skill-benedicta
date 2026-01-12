@@ -337,21 +337,35 @@ export const getSelfLearningCourses = async (req, res) => {
 };
 
 // 📚 Delete Self-Learning Course by owner
+
 export const deleteSelfLearningCourse = async (req, res) => {
   try {
-    const coachId = req.user.id;
+    // ✅ ALWAYS use _id from token
+    const authUserId = req.user._id;
+    const authUserRole = req.user.role;
     const { courseId } = req.params;
+
+    // ✅ Validate ObjectId
+    if (!mongoose.Types.ObjectId.isValid(courseId)) {
+      return res.status(400).json({ message: "Invalid course ID" });
+    }
 
     const course = await selfLearningCourse.findById(courseId);
     if (!course) {
       return res.status(404).json({ message: "Course not found" });
     }
 
-    if (course.coachId.toString() !== coachId.toString()) {
+    // ✅ Normalize coachId (handles populated or not)
+    const courseCoachId = course.coachId?._id
+      ? course.coachId._id.toString()
+      : course.coachId.toString();
+
+    // ✅ Ownership OR Admin override
+    if (authUserRole !== "admin" && courseCoachId !== authUserId.toString()) {
       return res.status(403).json({ message: "Access denied" });
     }
 
-    // delete all course contents
+    // ✅ Delete all contents + Cloudinary assets
     const contents = await selfLearningContent.find({ courseId });
 
     for (const content of contents) {
@@ -363,11 +377,18 @@ export const deleteSelfLearningCourse = async (req, res) => {
       await content.deleteOne();
     }
 
+    // ✅ Delete course itself
     await course.deleteOne();
 
-    res.json({ message: "Course deleted successfully" });
+    return res.status(200).json({
+      message: "Course deleted successfully",
+    });
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    console.error("DELETE COURSE ERROR:", err);
+    return res.status(500).json({
+      message: "Server error",
+      error: err.message,
+    });
   }
 };
 
