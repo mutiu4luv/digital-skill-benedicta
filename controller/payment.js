@@ -147,6 +147,7 @@ export const adminRejectPayment = async (req, res) => {
 export const getPendingConfirmationStudents = async (req, res) => {
   try {
     const cohorts = await Cohort.find({
+      "studentIds.enrollments.paid": true,
       "studentIds.enrollments.paymentConfirmed": false,
     })
       .populate("studentIds.studentId", "fullName email phoneNumber")
@@ -156,33 +157,35 @@ export const getPendingConfirmationStudents = async (req, res) => {
 
     cohorts.forEach((cohort) => {
       cohort.studentIds.forEach((student) => {
-        const pendingEnrollments = student.enrollments.filter(
-          (e) => e.paymentConfirmed === false && e.proofOfPayment?.url
-        );
+        student.enrollments.forEach((enrollment) => {
+          if (
+            enrollment.paid === true &&
+            enrollment.paymentConfirmed === false &&
+            enrollment.proofOfPayment &&
+            enrollment.proofOfPayment.url
+          ) {
+            pendingStudents.push({
+              _id: student.studentId._id,
+              fullName: student.studentId.fullName,
+              email: student.studentId.email,
+              phoneNumber: student.studentId.phoneNumber,
 
-        pendingEnrollments.forEach((enrollment) => {
-          pendingStudents.push({
-            _id: student.studentId._id,
-            fullName: student.studentId.fullName,
-            email: student.studentId.email,
-            phoneNumber: student.studentId.phoneNumber,
+              paid: enrollment.paid,
+              paymentConfirmed: enrollment.paymentConfirmed,
 
-            paid: enrollment.paid,
-            paymentConfirmed: enrollment.paymentConfirmed,
+              registeredCohort: {
+                cohortId: cohort._id,
+                courseId: enrollment.courseId?._id || null,
+                courseName: enrollment.courseId?.name || "-",
+                registeredAt: enrollment.paidAt || null,
 
-            registeredCohort: {
-              cohortId: cohort._id,
-              courseId: enrollment.courseId?._id || null,
-              courseName: enrollment.courseId?.name || "-",
-              registeredAt: enrollment.paidAt || null,
-
-              // ✅ GUARANTEED NOW
-              proofOfPayment: {
-                url: enrollment.proofOfPayment.url,
-                publicId: enrollment.proofOfPayment.publicId,
+                proofOfPayment: {
+                  url: enrollment.proofOfPayment.url,
+                  publicId: enrollment.proofOfPayment.publicId,
+                },
               },
-            },
-          });
+            });
+          }
         });
       });
     });
