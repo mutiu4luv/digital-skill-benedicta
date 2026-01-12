@@ -144,12 +144,11 @@ export const adminRejectPayment = async (req, res) => {
 };
 
 // GET /api/payment/pending-confirmation
-
 export const getPendingConfirmationStudents = async (req, res) => {
   try {
+    // Find all cohorts with students who have pending payments
     const cohorts = await Cohort.find({
       "studentIds.enrollments.paymentConfirmed": false,
-      "studentIds.enrollments.proofOfPayment": { $exists: true, $ne: null },
     })
       .populate("studentIds.studentId", "fullName email phoneNumber")
       .populate("studentIds.enrollments.courseId", "name");
@@ -159,12 +158,7 @@ export const getPendingConfirmationStudents = async (req, res) => {
     cohorts.forEach((cohort) => {
       cohort.studentIds.forEach((student) => {
         student.enrollments.forEach((enrollment) => {
-          if (
-            enrollment.paid === true &&
-            enrollment.paymentConfirmed === false &&
-            enrollment.proofOfPayment &&
-            enrollment.proofOfPayment.url
-          ) {
+          if (!enrollment.paymentConfirmed) {
             pendingStudents.push({
               _id: student.studentId._id,
               fullName: student.studentId.fullName,
@@ -178,10 +172,12 @@ export const getPendingConfirmationStudents = async (req, res) => {
                 courseName: enrollment.courseId?.name || "-",
                 registeredAt:
                   enrollment.registeredAt || enrollment.paidAt || null,
-                proofOfPayment: {
-                  url: enrollment.proofOfPayment.url,
-                  publicId: enrollment.proofOfPayment.publicId,
-                },
+                proofOfPayment: enrollment.proofOfPayment
+                  ? {
+                      url: enrollment.proofOfPayment.url || "",
+                      publicId: enrollment.proofOfPayment.publicId || "",
+                    }
+                  : null,
               },
             });
           }
@@ -195,6 +191,7 @@ export const getPendingConfirmationStudents = async (req, res) => {
     return res.status(500).json({ message: "Server Error" });
   }
 };
+
 // export const getPendingConfirmationStudents = async (req, res) => {
 //   try {
 //     // Find all cohorts with students who have pending payments
