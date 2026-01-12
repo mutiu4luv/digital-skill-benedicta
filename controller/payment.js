@@ -147,7 +147,10 @@ export const adminRejectPayment = async (req, res) => {
 
 export const getPendingConfirmationStudents = async (req, res) => {
   try {
-    const cohorts = await Cohort.find()
+    const cohorts = await Cohort.find({
+      "studentIds.enrollments.paymentConfirmed": false,
+      "studentIds.enrollments.proofOfPayment": { $exists: true, $ne: null },
+    })
       .populate("studentIds.studentId", "fullName email phoneNumber")
       .populate("studentIds.enrollments.courseId", "name");
 
@@ -156,7 +159,6 @@ export const getPendingConfirmationStudents = async (req, res) => {
     cohorts.forEach((cohort) => {
       cohort.studentIds.forEach((student) => {
         student.enrollments.forEach((enrollment) => {
-          // ✅ ONLY students who ACTUALLY uploaded proof
           if (
             enrollment.paid === true &&
             enrollment.paymentConfirmed === false &&
@@ -168,16 +170,14 @@ export const getPendingConfirmationStudents = async (req, res) => {
               fullName: student.studentId.fullName,
               email: student.studentId.email,
               phoneNumber: student.studentId.phoneNumber,
-
               paid: enrollment.paid,
               paymentConfirmed: enrollment.paymentConfirmed,
-
               registeredCohort: {
                 cohortId: cohort._id,
                 courseId: enrollment.courseId?._id || null,
                 courseName: enrollment.courseId?.name || "-",
-                registeredAt: enrollment.paidAt || null,
-
+                registeredAt:
+                  enrollment.registeredAt || enrollment.paidAt || null,
                 proofOfPayment: {
                   url: enrollment.proofOfPayment.url,
                   publicId: enrollment.proofOfPayment.publicId,
@@ -195,7 +195,6 @@ export const getPendingConfirmationStudents = async (req, res) => {
     return res.status(500).json({ message: "Server Error" });
   }
 };
-
 // export const getPendingConfirmationStudents = async (req, res) => {
 //   try {
 //     // Find all cohorts with students who have pending payments
