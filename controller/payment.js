@@ -156,32 +156,33 @@ export const getPendingConfirmationStudents = async (req, res) => {
 
     cohorts.forEach((cohort) => {
       cohort.studentIds.forEach((student) => {
-        student.enrollments.forEach((enrollment) => {
-          if (!enrollment.paymentConfirmed) {
-            pendingStudents.push({
-              _id: student.studentId._id,
-              fullName: student.studentId.fullName,
-              email: student.studentId.email,
-              phoneNumber: student.studentId.phoneNumber,
+        const pendingEnrollments = student.enrollments.filter(
+          (e) => e.paymentConfirmed === false && e.proofOfPayment?.url
+        );
 
-              paid: enrollment.paid,
-              paymentConfirmed: enrollment.paymentConfirmed,
+        pendingEnrollments.forEach((enrollment) => {
+          pendingStudents.push({
+            _id: student.studentId._id,
+            fullName: student.studentId.fullName,
+            email: student.studentId.email,
+            phoneNumber: student.studentId.phoneNumber,
 
-              registeredCohort: {
-                cohortId: cohort._id,
-                courseId: enrollment.courseId?._id || null,
-                courseName: enrollment.courseId?.name || "-",
-                registeredAt: enrollment.paidAt || null,
+            paid: enrollment.paid,
+            paymentConfirmed: enrollment.paymentConfirmed,
 
-                proofOfPayment: enrollment.proofOfPayment
-                  ? {
-                      url: enrollment.proofOfPayment.url,
-                      publicId: enrollment.proofOfPayment.publicId,
-                    }
-                  : null,
+            registeredCohort: {
+              cohortId: cohort._id,
+              courseId: enrollment.courseId?._id || null,
+              courseName: enrollment.courseId?.name || "-",
+              registeredAt: enrollment.paidAt || null,
+
+              // ✅ GUARANTEED NOW
+              proofOfPayment: {
+                url: enrollment.proofOfPayment.url,
+                publicId: enrollment.proofOfPayment.publicId,
               },
-            });
-          }
+            },
+          });
         });
       });
     });
