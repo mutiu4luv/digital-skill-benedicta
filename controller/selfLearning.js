@@ -361,7 +361,7 @@ export const deleteSelfLearningCourse = async (req, res) => {
       : course.coachId.toString();
 
     // ✅ Ownership OR Admin override
-    if (authUserRole !== "admin" && courseCoachId !== authUserId.toString()) {
+    if (authUserRole !== "owner" && courseCoachId !== authUserId.toString()) {
       return res.status(403).json({ message: "Access denied" });
     }
 
