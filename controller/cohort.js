@@ -4,6 +4,7 @@ import Course from "../module/course.js";
 import userModule from "../module/userModule.js";
 import coachUpload from "../module/coachUpload.js";
 import User from "../module/userModule.js";
+import cloudinary from "../config/cloudnary.js";
 
 //CREATE COHORT
 function convertDurationStringToDays(duration) {
