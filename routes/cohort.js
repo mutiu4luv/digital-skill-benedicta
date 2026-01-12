@@ -16,7 +16,7 @@ import {
   getUpcomingClass,
 } from "../controller/cohort.js";
 import { authorizeRoles, protect } from "../middleware/authMiddleware.js"; // auth middleware
-
+import upload from "../middleware/multer.js";
 const router = express.Router();
 router.post("/", protect, authorizeRoles("owner"), createCohort);
 router.get("/", protect, authorizeRoles("owner", "coach"), getAllCohorts);
@@ -36,9 +36,15 @@ router.put(
   authorizeRoles("owner", "coach"),
   endCohortByCourse
 );
+// router.post(
+//   "/student/register-cohort/:cohortId",
+//   protect,
+//   registerStudentToCohort
+// );
 router.post(
   "/student/register-cohort/:cohortId",
   protect,
+  upload.single("proof"),
   registerStudentToCohort
 );
 router.get("/active-cohorts", protect, getActiveCohorts);
