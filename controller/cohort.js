@@ -220,13 +220,21 @@ export const createCohort = async (req, res) => {
 
 export const registerStudentToCohort = async (req, res) => {
   const { cohortId } = req.params;
-  const { courseId } = req.body;
   const studentId = req.user?.id;
 
+  // ✅ SAFE access (multer-compatible)
+  const courseId = req.body?.courseId;
+
   if (!studentId) {
-    return res
-      .status(401)
-      .json({ message: "You must be logged in to register" });
+    return res.status(401).json({
+      message: "You must be logged in to register",
+    });
+  }
+
+  if (!courseId) {
+    return res.status(400).json({
+      message: "Course ID is required",
+    });
   }
 
   if (!req.file) {
@@ -254,6 +262,7 @@ export const registerStudentToCohort = async (req, res) => {
       return res.status(404).json({ message: "Cohort not found" });
     }
 
+    // 4️⃣ Validate course belongs to cohort
     const selectedCourse = cohort.courses.find(
       (c) =>
         c.courseId &&
@@ -267,7 +276,7 @@ export const registerStudentToCohort = async (req, res) => {
       });
     }
 
-    // 4️⃣ Normalize studentIds
+    // 5️⃣ Normalize studentIds
     if (!Array.isArray(cohort.studentIds)) {
       cohort.studentIds = [];
     }
@@ -285,7 +294,7 @@ export const registerStudentToCohort = async (req, res) => {
     }
 
     const alreadyRegistered = studentEntry.enrollments.some(
-      (e) => e.courseId.toString() === courseId
+      (e) => e.courseId.toString() === courseId.toString()
     );
 
     if (alreadyRegistered) {
@@ -294,7 +303,7 @@ export const registerStudentToCohort = async (req, res) => {
       });
     }
 
-    // 5️⃣ Save enrollment
+    // 6️⃣ Save enrollment
     studentEntry.enrollments.push({
       courseId,
       paid: true,
@@ -320,6 +329,7 @@ export const registerStudentToCohort = async (req, res) => {
     });
   }
 };
+
 //GET STUDENTS IN A COHORT
 export const getCohortStudents = async (req, res) => {
   try {
