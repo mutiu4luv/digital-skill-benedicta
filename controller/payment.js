@@ -58,7 +58,7 @@ export const getPaidStudents = async (req, res) => {
   }
 };
 
-// ADMIN: Confirm Payment for a Student
+// ADMIN: Confirm Payment for cohort Student
 export const adminConfirmPayment = async (req, res) => {
   try {
     const { cohortId, courseId } = req.body;
@@ -101,6 +101,44 @@ export const adminConfirmPayment = async (req, res) => {
     });
   } catch (error) {
     console.error("Admin Payment Confirmation Error:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+// ADMIN: Reject Payment for cohort Student
+export const adminRejectPayment = async (req, res) => {
+  try {
+    const { cohortId, courseId, reason } = req.body;
+    const studentId = req.params.id;
+
+    const cohort = await Cohort.findById(cohortId);
+    if (!cohort) return res.status(404).json({ message: "Cohort not found" });
+
+    const studentEntry = cohort.studentIds.find(
+      (s) => s.studentId.toString() === studentId
+    );
+
+    if (!studentEntry)
+      return res.status(404).json({ message: "Student not found" });
+
+    const enrollment = studentEntry.enrollments.find(
+      (e) => e.courseId.toString() === courseId
+    );
+
+    if (!enrollment)
+      return res.status(404).json({ message: "Enrollment not found" });
+
+    enrollment.paid = false;
+    enrollment.paymentConfirmed = false;
+    enrollment.hasAccess = false;
+    enrollment.rejectionReason = reason;
+
+    await cohort.save();
+
+    res.status(200).json({
+      message: "Payment rejected successfully",
+    });
+  } catch (error) {
+    console.error("Reject error:", error);
     res.status(500).json({ message: "Server error" });
   }
 };
