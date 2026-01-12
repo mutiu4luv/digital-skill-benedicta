@@ -68,7 +68,7 @@ router.post(
 router.delete(
   "/course/:courseId",
   protect,
-  authorizeRoles("owner"),
+  // authorizeRoles("owner"),
   deleteSelfLearningCourse
 );
 router.get("/payments", protect, authorizeRoles("owner"), getPendingPayments);
