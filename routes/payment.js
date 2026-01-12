@@ -16,7 +16,7 @@ router.get("/pending-confirmation", protect, getPendingConfirmationStudents);
 router.get("/paid-students", protect, getPaidStudents);
 router.put("/users/:id/confirm-payment", protect, adminConfirmPayment);
 router.put(
-  "/payment/users/:id/reject-payment",
+  "/users/:id/reject-payment",
   protect,
   authorizeRoles("owner"),
   adminRejectPayment
