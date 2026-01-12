@@ -104,26 +104,20 @@ export const createCohort = async (req, res) => {
 export const registerStudentToCohort = async (req, res) => {
   const { cohortId } = req.params;
   const studentId = req.user?.id;
-
-  // ✅ SAFE access (multer-compatible)
   const courseId = req.body?.courseId;
 
   if (!studentId) {
-    return res.status(401).json({
-      message: "You must be logged in to register",
-    });
+    return res
+      .status(401)
+      .json({ message: "You must be logged in to register" });
   }
 
   if (!courseId) {
-    return res.status(400).json({
-      message: "Course ID is required",
-    });
+    return res.status(400).json({ message: "Course ID is required" });
   }
 
   if (!req.file) {
-    return res.status(400).json({
-      message: "Proof of payment is required",
-    });
+    return res.status(400).json({ message: "Proof of payment is required" });
   }
 
   try {
@@ -135,15 +129,11 @@ export const registerStudentToCohort = async (req, res) => {
 
     // 2️⃣ Validate student
     const student = await userModule.findById(studentId);
-    if (!student) {
-      return res.status(404).json({ message: "Student not found" });
-    }
+    if (!student) return res.status(404).json({ message: "Student not found" });
 
     // 3️⃣ Validate cohort
     const cohort = await Cohort.findById(cohortId);
-    if (!cohort) {
-      return res.status(404).json({ message: "Cohort not found" });
-    }
+    if (!cohort) return res.status(404).json({ message: "Cohort not found" });
 
     // 4️⃣ Validate course belongs to cohort
     const selectedCourse = cohort.courses.find(
@@ -153,26 +143,20 @@ export const registerStudentToCohort = async (req, res) => {
           c.courseId?._id?.toString() === courseId)
     );
 
-    if (!selectedCourse) {
-      return res.status(400).json({
-        message: "Selected course does not belong to this cohort",
-      });
-    }
+    if (!selectedCourse)
+      return res
+        .status(400)
+        .json({ message: "Selected course does not belong to this cohort" });
 
     // 5️⃣ Normalize studentIds
-    if (!Array.isArray(cohort.studentIds)) {
-      cohort.studentIds = [];
-    }
+    if (!Array.isArray(cohort.studentIds)) cohort.studentIds = [];
 
     let studentEntry = cohort.studentIds.find(
       (s) => s.studentId.toString() === studentId.toString()
     );
 
     if (!studentEntry) {
-      studentEntry = {
-        studentId,
-        enrollments: [],
-      };
+      studentEntry = { studentId, enrollments: [] };
       cohort.studentIds.push(studentEntry);
     }
 
@@ -180,22 +164,22 @@ export const registerStudentToCohort = async (req, res) => {
       (e) => e.courseId.toString() === courseId.toString()
     );
 
-    if (alreadyRegistered) {
-      return res.status(400).json({
-        message: "You already registered for this course",
-      });
-    }
+    if (alreadyRegistered)
+      return res
+        .status(400)
+        .json({ message: "You already registered for this course" });
 
-    // 6️⃣ Save enrollment
+    // 6️⃣ Save enrollment with proof of payment
     studentEntry.enrollments.push({
       courseId,
       paid: true,
       paymentConfirmed: false,
       hasAccess: false,
       paidAt: new Date(),
+      registeredAt: new Date(), // optional, track registration date
       proofOfPayment: {
-        url: uploadResult.secure_url,
-        publicId: uploadResult.public_id,
+        url: uploadResult.secure_url || "",
+        publicId: uploadResult.public_id || "",
       },
     });
 
@@ -203,15 +187,127 @@ export const registerStudentToCohort = async (req, res) => {
 
     return res.status(200).json({
       message: "Registration submitted. Awaiting payment confirmation.",
+      proofOfPayment: uploadResult.secure_url, // optional: return URL
     });
   } catch (err) {
     console.error("Registration Error:", err);
-    return res.status(500).json({
-      message: "Server error",
-      error: err.message,
-    });
+    return res
+      .status(500)
+      .json({ message: "Server error", error: err.message });
   }
 };
+
+// export const registerStudentToCohort = async (req, res) => {
+//   const { cohortId } = req.params;
+//   const studentId = req.user?.id;
+
+//   // ✅ SAFE access (multer-compatible)
+//   const courseId = req.body?.courseId;
+
+//   if (!studentId) {
+//     return res.status(401).json({
+//       message: "You must be logged in to register",
+//     });
+//   }
+
+//   if (!courseId) {
+//     return res.status(400).json({
+//       message: "Course ID is required",
+//     });
+//   }
+
+//   if (!req.file) {
+//     return res.status(400).json({
+//       message: "Proof of payment is required",
+//     });
+//   }
+
+//   try {
+//     // 1️⃣ Upload proof to Cloudinary
+//     const uploadResult = await cloudinary.uploader.upload(req.file.path, {
+//       folder: "payment_proofs",
+//       resource_type: "auto",
+//     });
+
+//     // 2️⃣ Validate student
+//     const student = await userModule.findById(studentId);
+//     if (!student) {
+//       return res.status(404).json({ message: "Student not found" });
+//     }
+
+//     // 3️⃣ Validate cohort
+//     const cohort = await Cohort.findById(cohortId);
+//     if (!cohort) {
+//       return res.status(404).json({ message: "Cohort not found" });
+//     }
+
+//     // 4️⃣ Validate course belongs to cohort
+//     const selectedCourse = cohort.courses.find(
+//       (c) =>
+//         c.courseId &&
+//         (c.courseId.toString() === courseId ||
+//           c.courseId?._id?.toString() === courseId)
+//     );
+
+//     if (!selectedCourse) {
+//       return res.status(400).json({
+//         message: "Selected course does not belong to this cohort",
+//       });
+//     }
+
+//     // 5️⃣ Normalize studentIds
+//     if (!Array.isArray(cohort.studentIds)) {
+//       cohort.studentIds = [];
+//     }
+
+//     let studentEntry = cohort.studentIds.find(
+//       (s) => s.studentId.toString() === studentId.toString()
+//     );
+
+//     if (!studentEntry) {
+//       studentEntry = {
+//         studentId,
+//         enrollments: [],
+//       };
+//       cohort.studentIds.push(studentEntry);
+//     }
+
+//     const alreadyRegistered = studentEntry.enrollments.some(
+//       (e) => e.courseId.toString() === courseId.toString()
+//     );
+
+//     if (alreadyRegistered) {
+//       return res.status(400).json({
+//         message: "You already registered for this course",
+//       });
+//     }
+
+//     // 6️⃣ Save enrollment
+//     studentEntry.enrollments.push({
+//       courseId,
+//       paid: true,
+//       paymentConfirmed: false,
+//       hasAccess: false,
+//       paidAt: new Date(),
+//       proofOfPayment: {
+//         url: uploadResult.secure_url,
+//         publicId: uploadResult.public_id,
+//       },
+//     });
+
+//     await cohort.save();
+
+//     return res.status(200).json({
+//       message: "Registration submitted. Awaiting payment confirmation.",
+//     });
+//   } catch (err) {
+//     console.error("Registration Error:", err);
+//     return res.status(500).json({
+//       message: "Server error",
+//       error: err.message,
+//     });
+//   }
+// };
 
 //GET STUDENTS IN A COHORT
 export const getCohortStudents = async (req, res) => {
