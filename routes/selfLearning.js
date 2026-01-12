@@ -91,4 +91,5 @@ router.delete(
   authorizeRoles("owner", "coach"),
   deleteSelfLearningContent
 );
+
 export default router;
