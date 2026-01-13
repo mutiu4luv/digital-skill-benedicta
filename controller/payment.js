@@ -162,6 +162,7 @@ export const getPendingConfirmationStudents = async (req, res) => {
           if (enrollment.paymentConfirmed) return;
 
           pendingStudents.push({
+            // Use both studentId and courseId for uniqueness if needed
             _id: student.studentId._id,
             fullName: student.studentId.fullName,
             email: student.studentId.email,
