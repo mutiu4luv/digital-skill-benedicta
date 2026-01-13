@@ -6,7 +6,6 @@ export const submitFeedback = async (req, res) => {
   try {
     const { studentId, coachId, rating, comment } = req.body;
 
-    // ✅ Basic validation
     if (!studentId || !coachId || !rating) {
       return res.status(400).json({ message: "Missing required fields" });
     }
@@ -15,10 +14,9 @@ export const submitFeedback = async (req, res) => {
       !mongoose.Types.ObjectId.isValid(studentId) ||
       !mongoose.Types.ObjectId.isValid(coachId)
     ) {
-      return res.status(400).json({ message: "Invalid studentId or coachId" });
+      return res.status(400).json({ message: "Invalid IDs" });
     }
 
-    // ✅ Save feedback
     const feedback = await Feedback.create({
       student: studentId,
       coach: coachId,
@@ -26,28 +24,72 @@ export const submitFeedback = async (req, res) => {
       comment: comment || "",
     });
 
-    // ✅ Recalculate coach average rating
+    // 🔄 Recalculate average rating
     const feedbacks = await Feedback.find({ coach: coachId });
     const avgRating =
       feedbacks.reduce((sum, f) => sum + f.rating, 0) / feedbacks.length;
 
-    // ✅ Update coach record with new rating
     await User.findByIdAndUpdate(coachId, { avgRating });
 
-    return res.status(201).json({
+    res.status(201).json({
       message: "Feedback submitted successfully",
       feedback,
       avgRating,
     });
   } catch (error) {
     console.error("❌ Feedback submission error:", error);
-    return res
-      .status(500)
-      .json({ message: "Error submitting feedback", error: error.message });
+    res.status(500).json({
+      message: "Error submitting feedback",
+      error: error.message,
+    });
   }
 };
 
 // export const submitFeedback = async (req, res) => {
+//   try {
+//     const { studentId, coachId, rating, comment } = req.body;
+
+//     // ✅ Basic validation
+//     if (!studentId || !coachId || !rating) {
+//       return res.status(400).json({ message: "Missing required fields" });
+//     }
+
+//     if (
+//       !mongoose.Types.ObjectId.isValid(studentId) ||
+//       !mongoose.Types.ObjectId.isValid(coachId)
+//     ) {
+//       return res.status(400).json({ message: "Invalid studentId or coachId" });
+//     }
+
+//     // ✅ Save feedback
+//     const feedback = await Feedback.create({
+//       student: studentId,
+//       coach: coachId,
+//       rating,
+//       comment: comment || "",
+//     });
+
+//     // ✅ Recalculate coach average rating
+//     const feedbacks = await Feedback.find({ coach: coachId });
+//     const avgRating =
+//       feedbacks.reduce((sum, f) => sum + f.rating, 0) / feedbacks.length;
+
+//     // ✅ Update coach record with new rating
+//     await User.findByIdAndUpdate(coachId, { avgRating });
+
+//     return res.status(201).json({
+//       message: "Feedback submitted successfully",
+//       feedback,
+//       avgRating,
+//     });
+//   } catch (error) {
+//     console.error("❌ Feedback submission error:", error);
+//     return res
+//       .status(500)
+//       .json({ message: "Error submitting feedback", error: error.message });
+//   }
+// };
+
 //   try {
 //     const { studentId, coachId, rating, comment } = req.body;
 
@@ -105,6 +147,32 @@ export const getCoachMonthlyRatings = async (req, res) => {
     console.error("❌ Error fetching coach rating history:", error);
     res.status(500).json({
       message: "Error fetching rating history",
+      error: error.message,
+    });
+  }
+};
+
+// 🗣️ Get all feedback comments for a specific coach
+export const getCoachFeedbackComments = async (req, res) => {
+  try {
+    const { coachId } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(coachId)) {
+      return res.status(400).json({ message: "Invalid coachId" });
+    }
+
+    const feedbacks = await Feedback.find({ coach: coachId })
+      .populate("student", "fullName email")
+      .sort({ createdAt: -1 }); // 🔥 most recent first
+
+    res.status(200).json({
+      total: feedbacks.length,
+      comments: feedbacks,
+    });
+  } catch (error) {
+    console.error("❌ Error fetching coach comments:", error);
+    res.status(500).json({
+      message: "Error fetching coach comments",
       error: error.message,
     });
   }
