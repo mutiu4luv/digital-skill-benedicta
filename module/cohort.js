@@ -73,6 +73,11 @@ const cohortSchema = new mongoose.Schema(
             },
             paid: { type: Boolean, default: false },
             paymentConfirmed: { type: Boolean, default: false },
+            paymentStatus: {
+              type: String,
+              enum: ["pending", "confirmed", "rejected"],
+              default: "pending",
+            },
             hasAccess: { type: Boolean, default: false },
             paidAt: { type: Date, default: null },
             registeredAt: { type: Date, default: null },
@@ -80,6 +85,7 @@ const cohortSchema = new mongoose.Schema(
               url: { type: String },
               publicId: { type: String },
             },
+            rejectionReason: { type: String, default: "" },
           },
         ],
       },
@@ -88,4 +94,4 @@ const cohortSchema = new mongoose.Schema(
   { timestamps: true, minimize: false }
 );
 
-export default mongoose.model("Cohort", cohortSchema); // <-- use `export default`
+export default mongoose.model("Cohort", cohortSchema);

@@ -64,46 +64,81 @@ export const adminConfirmPayment = async (req, res) => {
     const { cohortId, courseId } = req.body;
     const studentId = req.params.id;
 
-    const foundCohort = await Cohort.findById(cohortId);
-    if (!foundCohort)
-      return res.status(404).json({ message: "Cohort not found" });
+    const cohort = await Cohort.findById(cohortId);
+    if (!cohort) return res.status(404).json({ message: "Cohort not found" });
 
-    // Log for debugging
-    console.log("foundCohort.studentIds:", foundCohort.studentIds);
-
-    const studentEntry = foundCohort.studentIds.find((s) => {
-      // Support both plain ObjectId and nested studentId
-      const id = s.studentId ? s.studentId.toString() : s._id?.toString();
-      return id === studentId;
-    });
-
-    if (!studentEntry)
-      return res
-        .status(404)
-        .json({ message: "Student not found in this cohort" });
-
-    const enrollment = studentEntry.enrollments?.find(
-      (e) => e.courseId.toString() === courseId.toString()
+    const studentEntry = cohort.studentIds.find(
+      (s) => s.studentId.toString() === studentId
     );
+    if (!studentEntry)
+      return res.status(404).json({ message: "Student not found" });
 
+    const enrollment = studentEntry.enrollments.find(
+      (e) => e.courseId.toString() === courseId
+    );
     if (!enrollment)
       return res.status(404).json({ message: "Enrollment not found" });
 
-    // ✅ Confirm payment
     enrollment.paymentConfirmed = true;
+    enrollment.paymentStatus = "confirmed";
     enrollment.hasAccess = true;
     enrollment.paid = true;
 
-    await foundCohort.save();
+    await cohort.save();
 
-    return res.status(200).json({
-      message: "Payment confirmed by admin. Student now has access.",
+    res.status(200).json({
+      message: "Payment confirmed. Student now has access.",
     });
-  } catch (error) {
-    console.error("Admin Payment Confirmation Error:", error);
+  } catch (err) {
     res.status(500).json({ message: "Server error" });
   }
 };
+
+// export const adminConfirmPayment = async (req, res) => {
+//   try {
+//     const { cohortId, courseId } = req.body;
+//     const studentId = req.params.id;
+
+//     const foundCohort = await Cohort.findById(cohortId);
+//     if (!foundCohort)
+//       return res.status(404).json({ message: "Cohort not found" });
+
+//     // Log for debugging
+//     console.log("foundCohort.studentIds:", foundCohort.studentIds);
+
+//     const studentEntry = foundCohort.studentIds.find((s) => {
+//       // Support both plain ObjectId and nested studentId
+//       const id = s.studentId ? s.studentId.toString() : s._id?.toString();
+//       return id === studentId;
+//     });
+
+//     if (!studentEntry)
+//       return res
+//         .status(404)
+//         .json({ message: "Student not found in this cohort" });
+
+//     const enrollment = studentEntry.enrollments?.find(
+//       (e) => e.courseId.toString() === courseId.toString()
+//     );
+
+//     if (!enrollment)
+//       return res.status(404).json({ message: "Enrollment not found" });
+
+//     // ✅ Confirm payment
+//     enrollment.paymentConfirmed = true;
+//     enrollment.hasAccess = true;
+//     enrollment.paid = true;
+
+//     await foundCohort.save();
+
+//     return res.status(200).json({
+//       message: "Payment confirmed by admin. Student now has access.",
+//     });
+//   } catch (error) {
+//     console.error("Admin Payment Confirmation Error:", error);
+//     res.status(500).json({ message: "Server error" });
+//   }
+// };
 // ADMIN: Reject Payment for cohort Student
 export const adminRejectPayment = async (req, res) => {
   try {
@@ -116,29 +151,25 @@ export const adminRejectPayment = async (req, res) => {
     const studentEntry = cohort.studentIds.find(
       (s) => s.studentId.toString() === studentId
     );
-
     if (!studentEntry)
       return res.status(404).json({ message: "Student not found" });
 
     const enrollment = studentEntry.enrollments.find(
       (e) => e.courseId.toString() === courseId
     );
-
     if (!enrollment)
       return res.status(404).json({ message: "Enrollment not found" });
 
     enrollment.paid = false;
     enrollment.paymentConfirmed = false;
+    enrollment.paymentStatus = "rejected";
     enrollment.hasAccess = false;
     enrollment.rejectionReason = reason;
 
     await cohort.save();
 
-    res.status(200).json({
-      message: "Payment rejected successfully",
-    });
-  } catch (error) {
-    console.error("Reject error:", error);
+    res.status(200).json({ message: "Payment rejected successfully" });
+  } catch (err) {
     res.status(500).json({ message: "Server error" });
   }
 };
@@ -146,9 +177,8 @@ export const adminRejectPayment = async (req, res) => {
 // GET /api/payment/pending-confirmation
 export const getPendingConfirmationStudents = async (req, res) => {
   try {
-    // Find all cohorts with students who have pending payments
     const cohorts = await Cohort.find({
-      "studentIds.enrollments.paymentConfirmed": false,
+      "studentIds.enrollments.paymentStatus": "pending",
     })
       .populate("studentIds.studentId", "fullName email phoneNumber")
       .populate("studentIds.enrollments.courseId", "name");
@@ -158,26 +188,23 @@ export const getPendingConfirmationStudents = async (req, res) => {
     cohorts.forEach((cohort) => {
       cohort.studentIds.forEach((student) => {
         student.enrollments.forEach((enrollment) => {
-          if (!enrollment.paymentConfirmed) {
+          if (enrollment.paymentStatus === "pending") {
             pendingStudents.push({
               _id: student.studentId._id,
               fullName: student.studentId.fullName,
               email: student.studentId.email,
               phoneNumber: student.studentId.phoneNumber,
+
               paid: enrollment.paid,
               paymentConfirmed: enrollment.paymentConfirmed,
+              paymentStatus: enrollment.paymentStatus,
+
               registeredCohort: {
                 cohortId: cohort._id,
-                courseId: enrollment.courseId?._id || null,
+                courseId: enrollment.courseId?._id,
                 courseName: enrollment.courseId?.name || "-",
-                registeredAt:
-                  enrollment.registeredAt || enrollment.paidAt || null,
-                proofOfPayment: enrollment.proofOfPayment
-                  ? {
-                      url: enrollment.proofOfPayment.url || "",
-                      publicId: enrollment.proofOfPayment.publicId || "",
-                    }
-                  : null,
+                registeredAt: enrollment.paidAt,
+                proofOfPayment: enrollment.proofOfPayment || null,
               },
             });
           }
@@ -185,12 +212,59 @@ export const getPendingConfirmationStudents = async (req, res) => {
       });
     });
 
-    return res.status(200).json({ students: pendingStudents });
+    res.status(200).json({ students: pendingStudents });
   } catch (err) {
-    console.error("Fetch Pending Payments Error:", err);
-    return res.status(500).json({ message: "Server Error" });
+    res.status(500).json({ message: "Server Error" });
   }
 };
+
+// export const getPendingConfirmationStudents = async (req, res) => {
+//   try {
+//     // Find all cohorts with students who have pending payments
+//     const cohorts = await Cohort.find({
+//       "studentIds.enrollments.paymentConfirmed": false,
+//     })
+//       .populate("studentIds.studentId", "fullName email phoneNumber")
+//       .populate("studentIds.enrollments.courseId", "name");
+
+//     const pendingStudents = [];
+
+//     cohorts.forEach((cohort) => {
+//       cohort.studentIds.forEach((student) => {
+//         student.enrollments.forEach((enrollment) => {
+//           if (!enrollment.paymentConfirmed) {
+//             pendingStudents.push({
+//               _id: student.studentId._id,
+//               fullName: student.studentId.fullName,
+//               email: student.studentId.email,
+//               phoneNumber: student.studentId.phoneNumber,
+//               paid: enrollment.paid,
+//               paymentConfirmed: enrollment.paymentConfirmed,
+//               registeredCohort: {
+//                 cohortId: cohort._id,
+//                 courseId: enrollment.courseId?._id || null,
+//                 courseName: enrollment.courseId?.name || "-",
+//                 registeredAt:
+//                   enrollment.registeredAt || enrollment.paidAt || null,
+//                 proofOfPayment: enrollment.proofOfPayment
+//                   ? {
+//                       url: enrollment.proofOfPayment.url || "",
+//                       publicId: enrollment.proofOfPayment.publicId || "",
+//                     }
+//                   : null,
+//               },
+//             });
+//           }
+//         });
+//       });
+//     });
+
+//     return res.status(200).json({ students: pendingStudents });
+//   } catch (err) {
+//     console.error("Fetch Pending Payments Error:", err);
+//     return res.status(500).json({ message: "Server Error" });
+//   }
+// };
 
 // export const getPendingConfirmationStudents = async (req, res) => {
 //   try {
