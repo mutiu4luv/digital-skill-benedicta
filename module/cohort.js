@@ -76,6 +76,10 @@ const cohortSchema = new mongoose.Schema(
             hasAccess: { type: Boolean, default: false },
             paidAt: { type: Date, default: null },
             registeredAt: { type: Date, default: null },
+            proofOfPayment: {
+              url: { type: String },
+              publicId: { type: String },
+            },
           },
         ],
       },
