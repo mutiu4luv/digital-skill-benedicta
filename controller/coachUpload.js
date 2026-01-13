@@ -415,12 +415,11 @@ export const deleteVideo = async (req, res) => {
   }
 };
 
-// ✅ Student fetches course video with 3-hour unlock window
-
+// ✅ Student fetches course video without expiry
 export const getStudentCourseMaterials = async (req, res) => {
   try {
     const studentId = req.user.id;
-    const now = Date.now(); // current timestamp in ms
+    const now = Date.now();
 
     // Convert to ObjectId safely
     let studentObjectId;
@@ -441,9 +440,9 @@ export const getStudentCourseMaterials = async (req, res) => {
     });
 
     if (!cohorts || cohorts.length === 0) {
-      return res
-        .status(404)
-        .json({ message: "You are not enrolled in any cohort yet." });
+      return res.status(404).json({
+        message: "You are not enrolled in any cohort yet.",
+      });
     }
 
     const unlockedMaterials = [];
@@ -452,17 +451,18 @@ export const getStudentCourseMaterials = async (req, res) => {
     for (const cohort of cohorts) {
       const studentData = cohort.studentIds.find(
         (s) =>
-          s.studentId.toString() === studentId.toString() ||
+          s.studentId?.toString() === studentId.toString() ||
           s.studentId === studentId
       );
 
       if (!studentData || !Array.isArray(studentData.enrollments)) continue;
 
       for (const enrollment of studentData.enrollments) {
+        // ❗ Only allow paid & confirmed students
         if (!enrollment.paymentConfirmed) continue;
 
         const courseInCohort = cohort.courses.find(
-          (c) => c.courseId.toString() === enrollment.courseId.toString()
+          (c) => c.courseId?.toString() === enrollment.courseId?.toString()
         );
 
         if (!courseInCohort) continue;
@@ -473,19 +473,17 @@ export const getStudentCourseMaterials = async (req, res) => {
         }).select("title type fileUrl coach unlockAt createdAt updatedAt");
 
         for (const upload of uploads) {
-          const unlockTime = upload.unlockAt?.getTime() || 0;
-          const expireTime = unlockTime + 3 * 60 * 60 * 1000; // 3 hours in ms
+          const unlockTime = upload.unlockAt ? upload.unlockAt.getTime() : 0;
 
-          if (unlockTime <= now && now <= expireTime) {
-            // unlocked → include fileUrl
+          // ✅ UNLOCK LOGIC (NO EXPIRY)
+          if (unlockTime <= now) {
             unlockedMaterials.push({
               cohortId: cohort._id,
               courseId: courseInCohort.courseId,
               ...upload.toObject(),
-              fileUrl: upload.fileUrl, // ✅ important
+              fileUrl: upload.fileUrl,
             });
           } else {
-            // locked or expired → hide URL
             lockedMaterials.push({
               cohortId: cohort._id,
               courseId: courseInCohort.courseId,
@@ -507,24 +505,287 @@ export const getStudentCourseMaterials = async (req, res) => {
       message: "✅ Course materials fetched successfully",
       unlockedMaterials,
       lockedMaterialsMessage: lockedMaterials.length
-        ? `Your coach has uploaded ${lockedMaterials.length} material(s). They will be available after the unlock time or are expired.`
+        ? `Your coach has uploaded ${lockedMaterials.length} material(s). They will be available after the unlock time.`
         : null,
     });
   } catch (error) {
     console.error("❌ Fetch course materials failed:", error);
-    return res
-      .status(500)
-      .json({ message: "Server error", error: error.message });
+    return res.status(500).json({
+      message: "Server error",
+      error: error.message,
+    });
   }
 };
+// ✅ Student fetches course video with 3-hour unlock window
+// export const getStudentCourseMaterials = async (req, res) => {
+//   try {
+//     const studentId = req.user.id;
+//     const now = Date.now(); // current timestamp in ms
+
+//     // Convert to ObjectId safely
+//     let studentObjectId;
+//     try {
+//       studentObjectId = new mongoose.Types.ObjectId(studentId);
+//     } catch {
+//       studentObjectId = null;
+//     }
+
+//     // Fetch cohorts where student exists
+//     const cohorts = await Cohort.find({
+//       $or: [
+//         { "studentIds.studentId": studentId },
+//         ...(studentObjectId
+//           ? [{ "studentIds.studentId": studentObjectId }]
+//           : []),
+//       ],
+//     });
+
+//     if (!cohorts || cohorts.length === 0) {
+//       return res
+//         .status(404)
+//         .json({ message: "You are not enrolled in any cohort yet." });
+//     }
+
+//     const unlockedMaterials = [];
+//     const lockedMaterials = [];
+
+//     for (const cohort of cohorts) {
+//       const studentData = cohort.studentIds.find(
+//         (s) =>
+//           s.studentId.toString() === studentId.toString() ||
+//           s.studentId === studentId
+//       );
+
+//       if (!studentData || !Array.isArray(studentData.enrollments)) continue;
+
+//       for (const enrollment of studentData.enrollments) {
+//         if (!enrollment.paymentConfirmed) continue;
+
+//         const courseInCohort = cohort.courses.find(
+//           (c) => c.courseId.toString() === enrollment.courseId.toString()
+//         );
+
+//         if (!courseInCohort) continue;
+
+//         const uploads = await Material.find({
+//           cohortId: cohort._id,
+//           course: courseInCohort.courseId,
+//         }).select("title type fileUrl coach unlockAt createdAt updatedAt");
+
+//         for (const upload of uploads) {
+//           const unlockTime = upload.unlockAt?.getTime() || 0;
+//           const expireTime = unlockTime + 3 * 60 * 60 * 1000; // 3 hours in ms
+
+//           if (unlockTime <= now && now <= expireTime) {
+//             // unlocked → include fileUrl
+//             unlockedMaterials.push({
+//               cohortId: cohort._id,
+//               courseId: courseInCohort.courseId,
+//               ...upload.toObject(),
+//               fileUrl: upload.fileUrl, // ✅ important
+//             });
+//           } else {
+//             // locked or expired → hide URL
+//             lockedMaterials.push({
+//               cohortId: cohort._id,
+//               courseId: courseInCohort.courseId,
+//               ...upload.toObject(),
+//               fileUrl: null,
+//             });
+//           }
+//         }
+//       }
+//     }
+
+//     if (unlockedMaterials.length === 0 && lockedMaterials.length === 0) {
+//       return res.status(404).json({
+//         message: "Your coach has not uploaded any course materials yet.",
+//       });
+//     }
+
+//     return res.status(200).json({
+//       message: "✅ Course materials fetched successfully",
+//       unlockedMaterials,
+//       lockedMaterialsMessage: lockedMaterials.length
+//         ? `Your coach has uploaded ${lockedMaterials.length} material(s). They will be available after the unlock time or are expired.`
+//         : null,
+//     });
+//   } catch (error) {
+//     console.error("❌ Fetch course materials failed:", error);
+//     return res
+//       .status(500)
+//       .json({ message: "Server error", error: error.message });
+//   }
+// };
 
 // ✅ Student fetches documents with 3-hour unlock window
+// get student documents with pagination, grouped by course and expiry logic of 3 hours
+// export const getStudentDocuments = async (req, res) => {
+//   try {
+//     const studentId = req.user.id;
 
+//     // Always use UTC for all comparisons
+//     const now = moment().utc().toDate();
+
+//     const page = parseInt(req.query.page) || 1;
+//     const limit = parseInt(req.query.limit) || 10;
+//     const skip = (page - 1) * limit;
+
+//     // 1️⃣ Get cohorts the student belongs to
+//     const cohorts = await Cohort.find({ "studentIds.studentId": studentId })
+//       .select("studentIds courses")
+//       .populate({
+//         path: "studentIds.enrollments.courseId",
+//         select: "_id name",
+//       })
+//       .populate({
+//         path: "courses.courseId",
+//         select: "_id name coach",
+//         populate: { path: "coach", select: "_id fullName profilePhoto email" },
+//       });
+
+//     // 2️⃣ Build list of accessible course IDs
+//     const allowedCourseIds = [];
+
+//     cohorts.forEach((cohort) => {
+//       const student = cohort.studentIds.find(
+//         (s) => s.studentId.toString() === studentId
+//       );
+//       if (!student?.enrollments) return;
+
+//       student.enrollments.forEach((enrollment) => {
+//         if (enrollment.hasAccess)
+//           allowedCourseIds.push(enrollment.courseId._id.toString());
+//       });
+//     });
+
+//     if (!allowedCourseIds.length) {
+//       return res.status(200).json({
+//         message: "No accessible course materials",
+//         unlockedMaterials: [],
+//         upcomingMaterials: [],
+//         nextClass: null,
+//         nextClassCountdown: null,
+//         lockedMaterialsMessage: "No materials available",
+//         materialsByCourse: {},
+//         pagination: { page, limit, total: 0 },
+//       });
+//     }
+
+//     // 3️⃣ Fetch materials for allowed courses
+//     const allMaterials = await Material.find({
+//       course: { $in: allowedCourseIds },
+//     })
+//       .populate("course", "_id name coach")
+//       .sort({ unlockAt: 1 });
+
+//     const materialsByCourse = {};
+//     const unlockedMaterials = [];
+//     const upcomingMaterials = [];
+//     let nextClass = null;
+
+//     allMaterials.forEach((material) => {
+//       const unlockTime = moment(material.unlockAt).utc().toDate();
+//       const expireTime = new Date(unlockTime.getTime() + 3 * 60 * 60 * 1000); // 3 hours
+
+//       const isUnlocked = now >= unlockTime && now <= expireTime;
+//       const isUpcoming = now < unlockTime;
+
+//       // Skip expired materials
+//       if (!isUnlocked && !isUpcoming) return;
+
+//       const courseId = material.course._id.toString();
+
+//       // Ensure group exists
+//       if (!materialsByCourse[courseId]) {
+//         materialsByCourse[courseId] = {
+//           courseId: material.course._id,
+//           courseName: material.course.name,
+//           coach: material.course.coach,
+//           unlocked: [],
+//           upcoming: [],
+//         };
+//       }
+
+//       // ✅ Show fileUrl only if unlocked
+//       const fileUrl = isUnlocked ? material.fileUrl : null;
+
+//       const item = {
+//         _id: material._id,
+//         title: material.title,
+//         type: material.type,
+//         fileUrl,
+//         unlockAt: material.unlockAt,
+//         courseId: { _id: material.course._id, name: material.course.name },
+//         coachId: material.course.coach?._id,
+//         createdAt: material.createdAt,
+//       };
+
+//       if (isUnlocked) {
+//         materialsByCourse[courseId].unlocked.push(item);
+//         unlockedMaterials.push(item);
+//       } else if (isUpcoming) {
+//         materialsByCourse[courseId].upcoming.push(item);
+//         upcomingMaterials.push(item);
+
+//         if (!nextClass || moment(item.unlockAt).isBefore(nextClass.unlockAt)) {
+//           nextClass = item;
+//         }
+//       }
+//     });
+
+//     // 4️⃣ Build next class countdown
+//     let nextClassCountdown = null;
+//     if (nextClass) {
+//       const duration = moment.duration(
+//         moment(nextClass.unlockAt).diff(moment.utc())
+//       );
+//       const hours = Math.floor(duration.asHours());
+//       const minutes = duration.minutes();
+//       nextClassCountdown = `Next class unlocks in: ${hours}h ${minutes}m`;
+//     }
+
+//     // 5️⃣ Pagination by course groups
+//     const courseIds = Object.keys(materialsByCourse);
+//     const paginatedIds = courseIds.slice(skip, skip + limit);
+
+//     const paginatedData = {};
+//     paginatedIds.forEach((id) => {
+//       paginatedData[id] = materialsByCourse[id];
+//     });
+
+//     res.status(200).json({
+//       message: "✅ Materials fetched successfully",
+//       unlockedMaterials,
+//       upcomingMaterials,
+//       nextClass,
+//       nextClassCountdown,
+//       lockedMaterialsMessage:
+//         unlockedMaterials.length + upcomingMaterials.length === 0
+//           ? "No materials available"
+//           : null,
+//       materialsByCourse: paginatedData,
+//       pagination: {
+//         page,
+//         limit,
+//         total: courseIds.length,
+//       },
+//     });
+//   } catch (error) {
+//     console.error("❌ Could not fetch materials:", error);
+//     res.status(500).json({
+//       message: "Could not fetch materials",
+//       error: error.message,
+//     });
+//   }
+// };
+
+// ✅ Student fetches documents without expiry logic
 export const getStudentDocuments = async (req, res) => {
   try {
     const studentId = req.user.id;
 
-    // Always use UTC for all comparisons
+    // Always use UTC
     const now = moment().utc().toDate();
 
     const page = parseInt(req.query.page) || 1;
@@ -541,7 +802,10 @@ export const getStudentDocuments = async (req, res) => {
       .populate({
         path: "courses.courseId",
         select: "_id name coach",
-        populate: { path: "coach", select: "_id fullName profilePhoto email" },
+        populate: {
+          path: "coach",
+          select: "_id fullName profilePhoto email",
+        },
       });
 
     // 2️⃣ Build list of accessible course IDs
@@ -554,8 +818,9 @@ export const getStudentDocuments = async (req, res) => {
       if (!student?.enrollments) return;
 
       student.enrollments.forEach((enrollment) => {
-        if (enrollment.hasAccess)
+        if (enrollment.hasAccess && enrollment.courseId?._id) {
           allowedCourseIds.push(enrollment.courseId._id.toString());
+        }
       });
     });
 
@@ -585,14 +850,12 @@ export const getStudentDocuments = async (req, res) => {
     let nextClass = null;
 
     allMaterials.forEach((material) => {
-      const unlockTime = moment(material.unlockAt).utc().toDate();
-      const expireTime = new Date(unlockTime.getTime() + 3 * 60 * 60 * 1000); // 3 hours
+      const unlockTime = material.unlockAt
+        ? moment(material.unlockAt).utc().toDate()
+        : null;
 
-      const isUnlocked = now >= unlockTime && now <= expireTime;
-      const isUpcoming = now < unlockTime;
-
-      // Skip expired materials
-      if (!isUnlocked && !isUpcoming) return;
+      const isUnlocked = !unlockTime || now >= unlockTime;
+      const isUpcoming = unlockTime && now < unlockTime;
 
       const courseId = material.course._id.toString();
 
@@ -607,16 +870,16 @@ export const getStudentDocuments = async (req, res) => {
         };
       }
 
-      // ✅ Show fileUrl only if unlocked
-      const fileUrl = isUnlocked ? material.fileUrl : null;
-
       const item = {
         _id: material._id,
         title: material.title,
         type: material.type,
-        fileUrl,
+        fileUrl: isUnlocked ? material.fileUrl : null,
         unlockAt: material.unlockAt,
-        courseId: { _id: material.course._id, name: material.course.name },
+        courseId: {
+          _id: material.course._id,
+          name: material.course.name,
+        },
         coachId: material.course.coach?._id,
         createdAt: material.createdAt,
       };
@@ -636,7 +899,7 @@ export const getStudentDocuments = async (req, res) => {
 
     // 4️⃣ Build next class countdown
     let nextClassCountdown = null;
-    if (nextClass) {
+    if (nextClass?.unlockAt) {
       const duration = moment.duration(
         moment(nextClass.unlockAt).diff(moment.utc())
       );
