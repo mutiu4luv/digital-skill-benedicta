@@ -784,8 +784,6 @@ export const getStudentCourseMaterials = async (req, res) => {
 export const getStudentDocuments = async (req, res) => {
   try {
     const studentId = req.user.id;
-
-    // Always use UTC
     const now = moment().utc().toDate();
 
     const page = parseInt(req.query.page) || 1;
@@ -808,13 +806,14 @@ export const getStudentDocuments = async (req, res) => {
         },
       });
 
-    // 2️⃣ Build list of accessible course IDs
+    // 2️⃣ Allowed course IDs
     const allowedCourseIds = [];
 
     cohorts.forEach((cohort) => {
       const student = cohort.studentIds.find(
         (s) => s.studentId.toString() === studentId
       );
+
       if (!student?.enrollments) return;
 
       student.enrollments.forEach((enrollment) => {
@@ -831,18 +830,17 @@ export const getStudentDocuments = async (req, res) => {
         upcomingMaterials: [],
         nextClass: null,
         nextClassCountdown: null,
-        lockedMaterialsMessage: "No materials available",
         materialsByCourse: {},
         pagination: { page, limit, total: 0 },
       });
     }
 
-    // 3️⃣ Fetch materials for allowed courses
+    // 3️⃣ Fetch ALL materials (NO EXPIRY LOGIC)
     const allMaterials = await Material.find({
       course: { $in: allowedCourseIds },
     })
       .populate("course", "_id name coach")
-      .sort({ unlockAt: 1 });
+      .sort({ createdAt: -1 });
 
     const materialsByCourse = {};
     const unlockedMaterials = [];
@@ -859,7 +857,6 @@ export const getStudentDocuments = async (req, res) => {
 
       const courseId = material.course._id.toString();
 
-      // Ensure group exists
       if (!materialsByCourse[courseId]) {
         materialsByCourse[courseId] = {
           courseId: material.course._id,
@@ -874,20 +871,23 @@ export const getStudentDocuments = async (req, res) => {
         _id: material._id,
         title: material.title,
         type: material.type,
-        fileUrl: isUnlocked ? material.fileUrl : null,
+
+        // 🔥 ALWAYS RETURN FILE URL ONCE UNLOCKED
+        fileUrl: material.fileUrl,
+
         unlockAt: material.unlockAt,
+        createdAt: material.createdAt,
         courseId: {
           _id: material.course._id,
           name: material.course.name,
         },
         coachId: material.course.coach?._id,
-        createdAt: material.createdAt,
       };
 
       if (isUnlocked) {
         materialsByCourse[courseId].unlocked.push(item);
         unlockedMaterials.push(item);
-      } else if (isUpcoming) {
+      } else {
         materialsByCourse[courseId].upcoming.push(item);
         upcomingMaterials.push(item);
 
@@ -897,18 +897,18 @@ export const getStudentDocuments = async (req, res) => {
       }
     });
 
-    // 4️⃣ Build next class countdown
+    // 4️⃣ Countdown (only for UPCOMING)
     let nextClassCountdown = null;
     if (nextClass?.unlockAt) {
       const duration = moment.duration(
         moment(nextClass.unlockAt).diff(moment.utc())
       );
-      const hours = Math.floor(duration.asHours());
-      const minutes = duration.minutes();
-      nextClassCountdown = `Next class unlocks in: ${hours}h ${minutes}m`;
+      nextClassCountdown = `Next class unlocks in: ${Math.floor(
+        duration.asHours()
+      )}h ${duration.minutes()}m`;
     }
 
-    // 5️⃣ Pagination by course groups
+    // 5️⃣ Pagination
     const courseIds = Object.keys(materialsByCourse);
     const paginatedIds = courseIds.slice(skip, skip + limit);
 
@@ -917,26 +917,18 @@ export const getStudentDocuments = async (req, res) => {
       paginatedData[id] = materialsByCourse[id];
     });
 
-    res.status(200).json({
+    return res.status(200).json({
       message: "✅ Materials fetched successfully",
       unlockedMaterials,
       upcomingMaterials,
       nextClass,
       nextClassCountdown,
-      lockedMaterialsMessage:
-        unlockedMaterials.length + upcomingMaterials.length === 0
-          ? "No materials available"
-          : null,
       materialsByCourse: paginatedData,
-      pagination: {
-        page,
-        limit,
-        total: courseIds.length,
-      },
+      pagination: { page, limit, total: courseIds.length },
     });
   } catch (error) {
     console.error("❌ Could not fetch materials:", error);
-    res.status(500).json({
+    return res.status(500).json({
       message: "Could not fetch materials",
       error: error.message,
     });
