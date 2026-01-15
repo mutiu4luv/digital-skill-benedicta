@@ -790,7 +790,7 @@ export const getStudentDocuments = async (req, res) => {
     const limit = parseInt(req.query.limit) || 10;
     const skip = (page - 1) * limit;
 
-    // 1️⃣ Get cohorts the student belongs to
+    //  Get cohorts the student belongs to
     const cohorts = await Cohort.find({ "studentIds.studentId": studentId })
       .select("studentIds courses")
       .populate({
@@ -806,7 +806,7 @@ export const getStudentDocuments = async (req, res) => {
         },
       });
 
-    // 2️⃣ Allowed course IDs
+    //  Allowed course IDs
     const allowedCourseIds = [];
 
     cohorts.forEach((cohort) => {
@@ -835,7 +835,7 @@ export const getStudentDocuments = async (req, res) => {
       });
     }
 
-    // 3️⃣ Fetch ALL materials (NO EXPIRY LOGIC)
+    //  Fetch ALL materials (NO EXPIRY LOGIC)
     const allMaterials = await Material.find({
       course: { $in: allowedCourseIds },
     })
@@ -879,7 +879,7 @@ export const getStudentDocuments = async (req, res) => {
       }
     });
 
-    // 4️⃣ Countdown (only for UPCOMING)
+    //  Countdown (only for UPCOMING)
     let nextClassCountdown = null;
     if (nextClass?.unlockAt) {
       const duration = moment.duration(
@@ -890,7 +890,7 @@ export const getStudentDocuments = async (req, res) => {
       )}h ${duration.minutes()}m`;
     }
 
-    // 5️⃣ Pagination
+    //  Pagination
     const courseIds = Object.keys(materialsByCourse);
     const paginatedIds = courseIds.slice(skip, skip + limit);
 
