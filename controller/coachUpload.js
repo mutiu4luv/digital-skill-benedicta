@@ -102,48 +102,30 @@ export const uploadDocument = async (req, res) => {
       return res.status(400).json({ message: "No document file uploaded" });
     }
 
-    if (!courseId) {
-      return res.status(400).json({ message: "Course ID is required" });
+    if (!courseId || !unlockAt) {
+      return res
+        .status(400)
+        .json({ message: "Course and unlock time required" });
     }
 
-    if (!unlockAt) {
-      return res.status(400).json({ message: "Unlock time is required" });
-    }
-
-    // ✅ Validate course
     const course = await Course.findById(courseId);
     if (!course) {
       return res.status(404).json({ message: "Course not found" });
     }
 
-    // 🔐 Ensure coach owns the course
     if (!course.coach.equals(coachId)) {
-      return res.status(403).json({
-        message: "You are not the coach of this course",
-      });
+      return res.status(403).json({ message: "Unauthorized" });
     }
 
-    // ✅ Convert LOCAL (Nigeria) time
-    const localTime = new Date(unlockAt);
+    // ✅ CORRECT: Do NOT manually adjust time
+    const utcUnlockTime = new Date(unlockAt);
 
-    const utcUnlockTime = new Date(
-      localTime.getUTCFullYear(),
-      localTime.getUTCMonth(),
-      localTime.getUTCDate(),
-      localTime.getUTCHours(),
-      localTime.getUTCMinutes(),
-      0,
-      0
-    );
-
-    // 📤 Upload document
     const uploadResult = await streamUpload(
       req.file.buffer,
       "documents",
       "auto"
     );
 
-    // 💾 Save to DB (UTC)
     const document = await Material.create({
       title,
       fileUrl: uploadResult.secure_url,
@@ -155,20 +137,7 @@ export const uploadDocument = async (req, res) => {
 
     return res.status(201).json({
       message: "✅ Document uploaded successfully",
-      unlockedMaterials: [
-        {
-          _id: document._id,
-          title: document.title,
-          fileUrl: document.fileUrl,
-          type: document.type,
-          coach: document.coach,
-          courseId: { _id: course._id, name: course.name },
-          unlockAt: document.unlockAt,
-          createdAt: document.createdAt,
-          updatedAt: document.updatedAt,
-        },
-      ],
-      lockedMaterialsMessage: null,
+      document,
     });
   } catch (error) {
     console.error("❌ Document upload failed:", error);
@@ -178,6 +147,92 @@ export const uploadDocument = async (req, res) => {
     });
   }
 };
+
+// export const uploadDocument = async (req, res) => {
+//   try {
+//     const { title, courseId, unlockAt } = req.body;
+//     const coachId = req.user.id;
+
+//     if (!req.file) {
+//       return res.status(400).json({ message: "No document file uploaded" });
+//     }
+
+//     if (!courseId) {
+//       return res.status(400).json({ message: "Course ID is required" });
+//     }
+
+//     if (!unlockAt) {
+//       return res.status(400).json({ message: "Unlock time is required" });
+//     }
+
+//     // ✅ Validate course
+//     const course = await Course.findById(courseId);
+//     if (!course) {
+//       return res.status(404).json({ message: "Course not found" });
+//     }
+
+//     // 🔐 Ensure coach owns the course
+//     if (!course.coach.equals(coachId)) {
+//       return res.status(403).json({
+//         message: "You are not the coach of this course",
+//       });
+//     }
+
+//     // ✅ Convert LOCAL (Nigeria) time
+//     const localTime = new Date(unlockAt);
+
+//     const utcUnlockTime = new Date(
+//       localTime.getUTCFullYear(),
+//       localTime.getUTCMonth(),
+//       localTime.getUTCDate(),
+//       localTime.getUTCHours(),
+//       localTime.getUTCMinutes(),
+//       0,
+//       0
+//     );
+
+//     // 📤 Upload document
+//     const uploadResult = await streamUpload(
+//       req.file.buffer,
+//       "documents",
+//       "auto"
+//     );
+
+//     // 💾 Save to DB (UTC)
+//     const document = await Material.create({
+//       title,
+//       fileUrl: uploadResult.secure_url,
+//       type: "document",
+//       coach: coachId,
+//       course: courseId,
+//       unlockAt: utcUnlockTime,
+//     });
+
+//     return res.status(201).json({
+//       message: "✅ Document uploaded successfully",
+//       unlockedMaterials: [
+//         {
+//           _id: document._id,
+//           title: document.title,
+//           fileUrl: document.fileUrl,
+//           type: document.type,
+//           coach: document.coach,
+//           courseId: { _id: course._id, name: course.name },
+//           unlockAt: document.unlockAt,
+//           createdAt: document.createdAt,
+//           updatedAt: document.updatedAt,
+//         },
+//       ],
+//       lockedMaterialsMessage: null,
+//     });
+//   } catch (error) {
+//     console.error("❌ Document upload failed:", error);
+//     return res.status(500).json({
+//       message: "Document upload failed",
+//       error: error.message,
+//     });
+//   }
+// };
 
 // export const uploadDocument = async (req, res) => {
 //   try {
