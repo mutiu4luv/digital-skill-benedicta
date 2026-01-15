@@ -854,63 +854,179 @@ export const getStudentsUnderCoach = async (req, res) => {
   try {
     const coachId = req.user.id;
 
-    // Find all cohorts where this coach teaches at least one course
+    /**
+     * 1️⃣ Fetch all cohorts where this coach teaches
+     *    We only need minimal fields for performance
+     */
     const cohorts = await Cohort.find({
       "courses.coachId": coachId,
-    }).populate("studentIds.studentId", "fullName email");
+    })
+      .select("name courses studentIds")
+      .populate("studentIds.studentId", "fullName email phoneNumber");
 
+    /**
+     * 2️⃣ Collect all courseIds taught by this coach
+     */
+    const coachCourseIds = new Set();
+
+    cohorts.forEach((cohort) => {
+      cohort.courses.forEach((course) => {
+        if (course.coachId.toString() === coachId) {
+          coachCourseIds.add(course.courseId.toString());
+        }
+      });
+    });
+
+    if (coachCourseIds.size === 0) {
+      return res.status(200).json({ count: 0, students: [] });
+    }
+
+    /**
+     * 3️⃣ Build students map (deduplicated)
+     */
     const studentsMap = new Map();
 
     cohorts.forEach((cohort) => {
-      cohort.studentIds.forEach((s) => {
-        // Filter only enrollments where the course is taught by this coach
-        const filteredEnrollments = s.enrollments.filter((enr) =>
-          cohort.courses.some(
-            (c) =>
-              c.coachId.toString() === coachId &&
-              c.courseId.equals(enr.courseId)
-          )
+      cohort.studentIds.forEach((studentEntry) => {
+        // ❗ Student user may have been deleted
+        if (!studentEntry.studentId) return;
+
+        /**
+         * 4️⃣ Filter enrollments to ONLY coach’s courses
+         */
+        const relevantEnrollments = studentEntry.enrollments.filter(
+          (enrollment) =>
+            enrollment.courseId &&
+            coachCourseIds.has(enrollment.courseId.toString())
         );
 
-        // ❗ If the student did NOT enroll in any course taught by this coach → skip
-        if (filteredEnrollments.length === 0) return;
+        if (relevantEnrollments.length === 0) return;
 
-        const studentId = s.studentId._id.toString();
+        const studentId = studentEntry.studentId._id.toString();
 
+        /**
+         * 5️⃣ Initialize student record if not exists
+         */
         if (!studentsMap.has(studentId)) {
-          // Add the student with filtered enrollments
           studentsMap.set(studentId, {
-            studentId: s.studentId._id,
-            fullName: s.studentId.fullName,
-            email: s.studentId.email,
-            cohorts: [cohort.name],
-            enrollments: filteredEnrollments.map((enr) => ({
+            studentId: studentEntry.studentId._id,
+            fullName: studentEntry.studentId.fullName,
+            email: studentEntry.studentId.email,
+            phoneNumber: studentEntry.studentId.phoneNumber || null,
+            cohorts: new Set([cohort.name]),
+            enrollments: [],
+          });
+        }
+
+        const student = studentsMap.get(studentId);
+
+        /**
+         * 6️⃣ Append enrollments (avoid duplicates)
+         */
+        relevantEnrollments.forEach((enr) => {
+          const exists = student.enrollments.some(
+            (e) => e.courseId.toString() === enr.courseId.toString()
+          );
+
+          if (!exists) {
+            student.enrollments.push({
               courseId: enr.courseId,
               paid: enr.paid,
               paymentConfirmed: enr.paymentConfirmed,
               hasAccess: enr.hasAccess,
               paidAt: enr.paidAt,
               registeredAt: enr.registeredAt,
-            })),
-          });
-        } else {
-          // Student already exists → just add cohort name (avoid duplicates)
-          const existing = studentsMap.get(studentId);
-          if (!existing.cohorts.includes(cohort.name)) {
-            existing.cohorts.push(cohort.name);
+            });
           }
-        }
+        });
+
+        student.cohorts.add(cohort.name);
       });
     });
 
-    const students = Array.from(studentsMap.values());
+    /**
+     * 7️⃣ Normalize Sets → Arrays for JSON
+     */
+    const students = Array.from(studentsMap.values()).map((s) => ({
+      ...s,
+      cohorts: Array.from(s.cohorts),
+    }));
 
-    return res.status(200).json({ count: students.length, students });
-  } catch (err) {
-    console.error("Get students under coach error:", err);
-    return res.status(500).json({ message: "Server error" });
+    return res.status(200).json({
+      count: students.length,
+      students,
+    });
+  } catch (error) {
+    console.error("❌ Get students under coach error:", error);
+    return res.status(500).json({
+      message: "Server error",
+      error: error.message,
+    });
   }
 };
+
+// export const getStudentsUnderCoach = async (req, res) => {
+//   try {
+//     const coachId = req.user.id;
+
+//     // Find all cohorts where this coach teaches at least one course
+//     const cohorts = await Cohort.find({
+//       "courses.coachId": coachId,
+//     }).populate("studentIds.studentId", "fullName email");
+
+//     const studentsMap = new Map();
+
+//     cohorts.forEach((cohort) => {
+//       cohort.studentIds.forEach((s) => {
+//         // Filter only enrollments where the course is taught by this coach
+//         const filteredEnrollments = s.enrollments.filter((enr) =>
+//           cohort.courses.some(
+//             (c) =>
+//               c.coachId.toString() === coachId &&
+//               c.courseId.equals(enr.courseId)
+//           )
+//         );
+
+//         // ❗ If the student did NOT enroll in any course taught by this coach → skip
+//         if (filteredEnrollments.length === 0) return;
+
+//         const studentId = s.studentId._id.toString();
+
+//         if (!studentsMap.has(studentId)) {
+//           // Add the student with filtered enrollments
+//           studentsMap.set(studentId, {
+//             studentId: s.studentId._id,
+//             fullName: s.studentId.fullName,
+//             email: s.studentId.email,
+//             cohorts: [cohort.name],
+//             enrollments: filteredEnrollments.map((enr) => ({
+//               courseId: enr.courseId,
+//               paid: enr.paid,
+//               paymentConfirmed: enr.paymentConfirmed,
+//               hasAccess: enr.hasAccess,
+//               paidAt: enr.paidAt,
+//               registeredAt: enr.registeredAt,
+//             })),
+//           });
+//         } else {
+//           // Student already exists → just add cohort name (avoid duplicates)
+//           const existing = studentsMap.get(studentId);
+//           if (!existing.cohorts.includes(cohort.name)) {
+//             existing.cohorts.push(cohort.name);
+//           }
+//         }
+//       });
+//     });
+
+//     const students = Array.from(studentsMap.values());
+
+//     return res.status(200).json({ count: students.length, students });
+//   } catch (err) {
+//     console.error("Get students under coach error:", err);
+//     return res.status(500).json({ message: "Server error" });
+//   }
+// };
+
 // get upcoming class for student
 
 export const getUpcomingClass = async (req, res) => {
