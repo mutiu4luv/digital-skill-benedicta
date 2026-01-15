@@ -855,25 +855,13 @@ export const getStudentDocuments = async (req, res) => {
       const isUnlocked = !unlockTime || now >= unlockTime;
       const isUpcoming = unlockTime && now < unlockTime;
 
-      const courseId = material.course._id.toString();
-
-      if (!materialsByCourse[courseId]) {
-        materialsByCourse[courseId] = {
-          courseId: material.course._id,
-          courseName: material.course.name,
-          coach: material.course.coach,
-          unlocked: [],
-          upcoming: [],
-        };
-      }
-
       const item = {
         _id: material._id,
         title: material.title,
         type: material.type,
 
-        // 🔥 ALWAYS RETURN FILE URL ONCE UNLOCKED
-        fileUrl: material.fileUrl,
+        // 🔐 THIS IS THE KEY FIX
+        fileUrl: isUnlocked ? material.fileUrl : null,
 
         unlockAt: material.unlockAt,
         createdAt: material.createdAt,
@@ -885,15 +873,9 @@ export const getStudentDocuments = async (req, res) => {
       };
 
       if (isUnlocked) {
-        materialsByCourse[courseId].unlocked.push(item);
         unlockedMaterials.push(item);
       } else {
-        materialsByCourse[courseId].upcoming.push(item);
         upcomingMaterials.push(item);
-
-        if (!nextClass || moment(item.unlockAt).isBefore(nextClass.unlockAt)) {
-          nextClass = item;
-        }
       }
     });
 
