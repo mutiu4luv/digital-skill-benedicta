@@ -22,7 +22,7 @@ const streamUpload = (buffer, folder, resourceType) => {
 };
 
 // =============================================
-//  COACH UPLOAD VIDEO (upload anytime)
+//  COACH UPLOAD COHORT VIDEO (upload anytime)
 //  Coach chooses classStartTime from frontend
 // =============================================
 export const uploadVideo = async (req, res) => {
@@ -92,7 +92,7 @@ export const uploadVideo = async (req, res) => {
   }
 };
 
-// ✅ Upload Document
+// ✅coach Upload cohort Document
 export const uploadDocument = async (req, res) => {
   try {
     const { title, courseId, unlockAt } = req.body;
@@ -476,7 +476,6 @@ export const getStudentCourseMaterials = async (req, res) => {
     const studentId = req.user.id;
     const now = Date.now();
 
-    // Convert to ObjectId safely
     let studentObjectId;
     try {
       studentObjectId = new mongoose.Types.ObjectId(studentId);
@@ -484,7 +483,6 @@ export const getStudentCourseMaterials = async (req, res) => {
       studentObjectId = null;
     }
 
-    // Fetch cohorts where student exists
     const cohorts = await Cohort.find({
       $or: [
         { "studentIds.studentId": studentId },
@@ -510,10 +508,9 @@ export const getStudentCourseMaterials = async (req, res) => {
           s.studentId === studentId
       );
 
-      if (!studentData || !Array.isArray(studentData.enrollments)) continue;
+      if (!studentData?.enrollments) continue;
 
       for (const enrollment of studentData.enrollments) {
-        // ❗ Only allow paid & confirmed students
         if (!enrollment.paymentConfirmed) continue;
 
         const courseInCohort = cohort.courses.find(
@@ -525,32 +522,36 @@ export const getStudentCourseMaterials = async (req, res) => {
         const uploads = await Material.find({
           cohortId: cohort._id,
           course: courseInCohort.courseId,
-        }).select("title type fileUrl coach unlockAt createdAt updatedAt");
+        })
+          .select("title type fileUrl coach unlockAt createdAt updatedAt")
+          .sort({ createdAt: -1 }); // DB-level ordering
 
-        for (const upload of uploads) {
+        uploads.forEach((upload) => {
           const unlockTime = upload.unlockAt ? upload.unlockAt.getTime() : 0;
 
-          // ✅ UNLOCK LOGIC (NO EXPIRY)
+          const item = {
+            cohortId: cohort._id,
+            courseId: courseInCohort.courseId,
+            ...upload.toObject(),
+            fileUrl: unlockTime <= now ? upload.fileUrl : null,
+          };
+
           if (unlockTime <= now) {
-            unlockedMaterials.push({
-              cohortId: cohort._id,
-              courseId: courseInCohort.courseId,
-              ...upload.toObject(),
-              fileUrl: upload.fileUrl,
-            });
+            unlockedMaterials.push(item);
           } else {
-            lockedMaterials.push({
-              cohortId: cohort._id,
-              courseId: courseInCohort.courseId,
-              ...upload.toObject(),
-              fileUrl: null,
-            });
+            lockedMaterials.push(item);
           }
-        }
+        });
       }
     }
 
-    if (unlockedMaterials.length === 0 && lockedMaterials.length === 0) {
+    // ✅ FINAL GLOBAL SORT (CRITICAL)
+    unlockedMaterials.sort(
+      (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
+    );
+    lockedMaterials.sort((a, b) => new Date(a.unlockAt) - new Date(b.unlockAt));
+
+    if (!unlockedMaterials.length && !lockedMaterials.length) {
       return res.status(404).json({
         message: "Your coach has not uploaded any course materials yet.",
       });
@@ -571,6 +572,7 @@ export const getStudentCourseMaterials = async (req, res) => {
     });
   }
 };
+
 // ✅ Student fetches course video with 3-hour unlock window
 // export const getStudentCourseMaterials = async (req, res) => {
 //   try {
@@ -845,7 +847,6 @@ export const getStudentDocuments = async (req, res) => {
     const limit = parseInt(req.query.limit) || 10;
     const skip = (page - 1) * limit;
 
-    //  Get cohorts the student belongs to
     const cohorts = await Cohort.find({ "studentIds.studentId": studentId })
       .select("studentIds courses")
       .populate({
@@ -861,7 +862,6 @@ export const getStudentDocuments = async (req, res) => {
         },
       });
 
-    //  Allowed course IDs
     const allowedCourseIds = [];
 
     cohorts.forEach((cohort) => {
@@ -883,24 +883,18 @@ export const getStudentDocuments = async (req, res) => {
         message: "No accessible course materials",
         unlockedMaterials: [],
         upcomingMaterials: [],
-        nextClass: null,
-        nextClassCountdown: null,
-        materialsByCourse: {},
         pagination: { page, limit, total: 0 },
       });
     }
 
-    //  Fetch ALL materials (NO EXPIRY LOGIC)
     const allMaterials = await Material.find({
       course: { $in: allowedCourseIds },
     })
       .populate("course", "_id name coach")
-      .sort({ createdAt: -1 });
+      .sort({ createdAt: -1 }); // newest first at DB level
 
-    const materialsByCourse = {};
     const unlockedMaterials = [];
     const upcomingMaterials = [];
-    let nextClass = null;
 
     allMaterials.forEach((material) => {
       const unlockTime = material.unlockAt
@@ -908,16 +902,12 @@ export const getStudentDocuments = async (req, res) => {
         : null;
 
       const isUnlocked = !unlockTime || now >= unlockTime;
-      const isUpcoming = unlockTime && now < unlockTime;
 
       const item = {
         _id: material._id,
         title: material.title,
         type: material.type,
-
-        // 🔐 THIS IS THE KEY FIX
         fileUrl: isUnlocked ? material.fileUrl : null,
-
         unlockAt: material.unlockAt,
         createdAt: material.createdAt,
         courseId: {
@@ -934,34 +924,23 @@ export const getStudentDocuments = async (req, res) => {
       }
     });
 
-    //  Countdown (only for UPCOMING)
-    let nextClassCountdown = null;
-    if (nextClass?.unlockAt) {
-      const duration = moment.duration(
-        moment(nextClass.unlockAt).diff(moment.utc())
-      );
-      nextClassCountdown = `Next class unlocks in: ${Math.floor(
-        duration.asHours()
-      )}h ${duration.minutes()}m`;
-    }
-
-    //  Pagination
-    const courseIds = Object.keys(materialsByCourse);
-    const paginatedIds = courseIds.slice(skip, skip + limit);
-
-    const paginatedData = {};
-    paginatedIds.forEach((id) => {
-      paginatedData[id] = materialsByCourse[id];
-    });
+    // ✅ FINAL GLOBAL SORT (most important fix)
+    unlockedMaterials.sort(
+      (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
+    );
+    upcomingMaterials.sort(
+      (a, b) => new Date(b.unlockAt) - new Date(a.unlockAt)
+    );
 
     return res.status(200).json({
       message: "✅ Materials fetched successfully",
       unlockedMaterials,
       upcomingMaterials,
-      nextClass,
-      nextClassCountdown,
-      materialsByCourse: paginatedData,
-      pagination: { page, limit, total: courseIds.length },
+      pagination: {
+        page,
+        limit,
+        total: unlockedMaterials.length + upcomingMaterials.length,
+      },
     });
   } catch (error) {
     console.error("❌ Could not fetch materials:", error);
