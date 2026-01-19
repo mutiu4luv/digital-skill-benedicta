@@ -47,12 +47,12 @@ export const getLiveSession = async (req, res) => {
   const userId = req.user.id;
 
   const cohort = await Cohort.findById(cohortId);
-  if (!cohort) return res.status(404).json({ isLive: false });
+  if (!cohort) return res.json({ isLive: false });
 
-  // ✅ USE SAME ID FIELD AS startLiveSession
-  const course = cohort.courses.find((c) => c._id.toString() === courseId);
+  // ✅ Find cohort-course by *courseId*, not _id
+  const course = cohort.courses.find((c) => c.courseId.toString() === courseId);
 
-  if (!course?.liveSession?.isLive) {
+  if (!course || !course.liveSession?.isLive) {
     return res.json({ isLive: false });
   }
 
@@ -70,9 +70,33 @@ export const getLiveSession = async (req, res) => {
     return res.status(403).json({ isLive: false });
   }
 
-  res.json({
+  return res.json({
     isLive: true,
     meetLink: course.liveSession.meetLink,
     startedAt: course.liveSession.startedAt,
   });
+};
+
+// ✅ End live session
+export const endLiveSession = async (req, res) => {
+  const { cohortId, courseId } = req.params;
+  const coachId = req.user.id;
+
+  const cohort = await Cohort.findById(cohortId);
+  if (!cohort) return res.status(404).json({ message: "Cohort not found" });
+
+  const course = cohort.courses.find((c) => c.courseId.toString() === courseId);
+  if (!course) return res.status(404).json({ message: "Course not found" });
+
+  if (course.coachId.toString() !== coachId) {
+    return res.status(403).json({ message: "Not authorized" });
+  }
+
+  course.liveSession.isLive = false;
+  await cohort.save();
+
+  // 🔔 Notify students via socket
+  req.io.to(`${cohortId}:${courseId}`).emit("liveEnded", { courseId });
+
+  res.json({ success: true });
 };
