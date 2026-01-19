@@ -141,7 +141,6 @@ export const adminRejectPayment = async (req, res) => {
 };
 
 // GET /api/payment/pending-confirmation
-
 export const getPendingConfirmationStudents = async (req, res) => {
   try {
     const cohorts = await Cohort.find({
@@ -154,15 +153,19 @@ export const getPendingConfirmationStudents = async (req, res) => {
 
     cohorts.forEach((cohort) => {
       cohort.studentIds.forEach((student) => {
-        // 🔴 CRITICAL GUARD: skip broken references
+        // 🚨 Guard against deleted users
         if (!student.studentId) return;
 
         student.enrollments.forEach((enrollment) => {
-          // skip confirmed payments
-          if (enrollment.paymentConfirmed) return;
+          // ✅ ONLY REAL PENDING PAYMENTS
+          if (
+            enrollment.paymentConfirmed === true ||
+            enrollment.paymentStatus === "rejected"
+          ) {
+            return;
+          }
 
           pendingStudents.push({
-            // Use both studentId and courseId for uniqueness if needed
             _id: student.studentId._id,
             fullName: student.studentId.fullName,
             email: student.studentId.email,
@@ -170,6 +173,7 @@ export const getPendingConfirmationStudents = async (req, res) => {
 
             paid: enrollment.paid,
             paymentConfirmed: enrollment.paymentConfirmed,
+            paymentStatus: enrollment.paymentStatus || "pending",
 
             registeredCohort: {
               cohortId: cohort._id,
@@ -189,7 +193,10 @@ export const getPendingConfirmationStudents = async (req, res) => {
       });
     });
 
-    return res.status(200).json({ students: pendingStudents });
+    return res.status(200).json({
+      count: pendingStudents.length,
+      students: pendingStudents,
+    });
   } catch (err) {
     console.error("Fetch Pending Payments Error:", err);
     return res.status(500).json({ message: "Server Error" });
@@ -198,7 +205,6 @@ export const getPendingConfirmationStudents = async (req, res) => {
 
 // export const getPendingConfirmationStudents = async (req, res) => {
 //   try {
-//     // Find all cohorts with students who have pending payments
 //     const cohorts = await Cohort.find({
 //       "studentIds.enrollments.paymentConfirmed": false,
 //     })
@@ -209,30 +215,37 @@ export const getPendingConfirmationStudents = async (req, res) => {
 
 //     cohorts.forEach((cohort) => {
 //       cohort.studentIds.forEach((student) => {
+//         // 🔴 CRITICAL GUARD: skip broken references
+//         if (!student.studentId) return;
+
 //         student.enrollments.forEach((enrollment) => {
-//           if (!enrollment.paymentConfirmed) {
-//             pendingStudents.push({
-//               _id: student.studentId._id,
-//               fullName: student.studentId.fullName,
-//               email: student.studentId.email,
-//               phoneNumber: student.studentId.phoneNumber,
-//               paid: enrollment.paid,
-//               paymentConfirmed: enrollment.paymentConfirmed,
-//               registeredCohort: {
-//                 cohortId: cohort._id,
-//                 courseId: enrollment.courseId?._id || null,
-//                 courseName: enrollment.courseId?.name || "-",
-//                 registeredAt:
-//                   enrollment.registeredAt || enrollment.paidAt || null,
-//                 proofOfPayment: enrollment.proofOfPayment
-//                   ? {
-//                       url: enrollment.proofOfPayment.url || "",
-//                       publicId: enrollment.proofOfPayment.publicId || "",
-//                     }
-//                   : null,
-//               },
-//             });
-//           }
+//           // skip confirmed payments
+//           if (enrollment.paymentConfirmed) return;
+
+//           pendingStudents.push({
+//             // Use both studentId and courseId for uniqueness if needed
+//             _id: student.studentId._id,
+//             fullName: student.studentId.fullName,
+//             email: student.studentId.email,
+//             phoneNumber: student.studentId.phoneNumber,
+
+//             paid: enrollment.paid,
+//             paymentConfirmed: enrollment.paymentConfirmed,
+
+//             registeredCohort: {
+//               cohortId: cohort._id,
+//               courseId: enrollment.courseId?._id || null,
+//               courseName: enrollment.courseId?.name || "-",
+//               registeredAt:
+//                 enrollment.registeredAt || enrollment.paidAt || null,
+//               proofOfPayment: enrollment.proofOfPayment
+//                 ? {
+//                     url: enrollment.proofOfPayment.url || "",
+//                     publicId: enrollment.proofOfPayment.publicId || "",
+//                   }
+//                 : null,
+//             },
+//           });
 //         });
 //       });
 //     });
@@ -243,49 +256,6 @@ export const getPendingConfirmationStudents = async (req, res) => {
 //     return res.status(500).json({ message: "Server Error" });
 //   }
 // };
-
-// export const getPendingConfirmationStudents = async (req, res) => {
-//   try {
-//     // Find all cohorts with students who have pending payments
-//     const cohorts = await Cohort.find({
-//       "studentIds.enrollments.paymentConfirmed": false,
-//     })
-//       .populate("studentIds.studentId", "fullName email phoneNumber")
-//       .populate("studentIds.enrollments.courseId", "name");
-
-//     const pendingStudents = [];
-
-//     cohorts.forEach((cohort) => {
-//       cohort.studentIds.forEach((student) => {
-//         student.enrollments.forEach((enrollment) => {
-//           if (!enrollment.paymentConfirmed) {
-//             pendingStudents.push({
-//               _id: student.studentId._id,
-//               fullName: student.studentId.fullName,
-//               email: student.studentId.email,
-//               phoneNumber: student.studentId.phoneNumber,
-//               paid: enrollment.paid,
-//               paymentConfirmed: enrollment.paymentConfirmed,
-//               registeredCohort: {
-//                 cohortId: cohort._id,
-//                 courseId: enrollment.courseId?._id || null,
-//                 courseName: enrollment.courseId?.name || "-", // <-- course name here
-//                 registeredAt: enrollment.registeredAt || null,
-//               },
-//             });
-//           }
-//         });
-//       });
-//     });
-
-//     return res.status(200).json({ students: pendingStudents });
-//   } catch (err) {
-//     console.error("Fetch Pending Payments Error:", err);
-//     return res.status(500).json({ message: "Server Error" });
-//   }
-// };
-
-// COHORT BASED PAYMENT CONFIRMATION
 
 export const confirmCoursePayment = async (req, res) => {
   try {
