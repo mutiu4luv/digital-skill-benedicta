@@ -855,7 +855,7 @@ export const getStudentDocuments = async (req, res) => {
       })
       .populate({
         path: "courses.courseId",
-        select: "_id name coach",
+        select: "_id name coach ",
         populate: {
           path: "coach",
           select: "_id fullName profilePhoto email",
