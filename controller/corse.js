@@ -4,6 +4,7 @@ import Course from "../module/course.js";
 import User from "../module/userModule.js";
 import mongoose from "mongoose";
 import cohort from "../module/cohort.js";
+import Cohort from "../module/cohort.js";
 
 // ---------------------------------------------------------
 // ✅ Coach sets class schedule
@@ -264,27 +265,54 @@ export const getCohortCoursesForCoach = async (req, res) => {
     const { cohortId } = req.params;
     const coachId = req.user.id;
 
-    const cohort = await cohort
-      .findById(cohortId)
+    console.log("▶️ cohortId:", cohortId);
+    console.log("▶️ coachId:", coachId);
+
+    // ✅ Use Cohort model (NOT cohort)
+    const cohortDoc = await Cohort.findById(cohortId)
       .populate("courses.courseId")
       .populate("courses.coachId");
 
-    if (!cohort) return res.status(404).json({ message: "Cohort not found" });
+    console.log("▶️ cohortDoc:", cohortDoc);
 
-    // Only courses for this coach
-    const myCourses = cohort.courses
-      .filter((c) => c.coachId?._id.toString() === coachId)
+    if (!cohortDoc) {
+      console.log("❌ Cohort not found");
+      return res.status(404).json({ message: "Cohort not found" });
+    }
+
+    // ✅ Only courses belonging to this coach
+    const myCourses = cohortDoc.courses
+      .filter((c) => {
+        const isCoachMatch = c.coachId?._id?.toString() === coachId.toString();
+
+        console.log(
+          "🔍 Checking course:",
+          c.courseId?.name,
+          "Coach match:",
+          isCoachMatch
+        );
+
+        return isCoachMatch;
+      })
       .map((c) => ({
         cohortCourseId: c._id,
         courseId: c.courseId._id,
         courseName: c.courseId.name,
-        cohortName: cohort.name,
+        cohortName: cohortDoc.name,
         status: c.status,
       }));
 
-    return res.json({ courses: myCourses });
+    console.log("✅ Filtered courses:", myCourses);
+
+    return res.status(200).json({
+      message: "Cohort courses fetched successfully",
+      courses: myCourses,
+    });
   } catch (err) {
-    console.error("Get Cohort Courses For Coach Error:", err);
-    return res.status(500).json({ message: "Server error" });
+    console.error("❌ Get Cohort Courses For Coach Error:", err);
+    return res.status(500).json({
+      message: "Server error",
+      error: err.message,
+    });
   }
 };
