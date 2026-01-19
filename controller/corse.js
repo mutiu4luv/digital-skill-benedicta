@@ -264,7 +264,8 @@ export const getCohortCoursesForCoach = async (req, res) => {
     const { cohortId } = req.params;
     const coachId = req.user.id;
 
-    const cohort = await Cohort.findById(cohortId)
+    const cohort = await cohort
+      .findById(cohortId)
       .populate("courses.courseId")
       .populate("courses.coachId");
 
