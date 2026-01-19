@@ -47,15 +47,17 @@ export const getLiveSession = async (req, res) => {
   const userId = req.user.id;
 
   const cohort = await Cohort.findById(cohortId);
-  if (!cohort) return res.status(404).json({});
+  if (!cohort) return res.status(404).json({ isLive: false });
 
-  const course = cohort.courses.find((c) => c.courseId.toString() === courseId);
+  // ✅ USE SAME ID FIELD AS startLiveSession
+  const course = cohort.courses.find((c) => c._id.toString() === courseId);
+
   if (!course?.liveSession?.isLive) {
     return res.json({ isLive: false });
   }
 
-  // access check (coach OR enrolled student)
-  const isCoach = course.coachId.toString() === userId;
+  const isCoach = course.coachId?.toString() === userId;
+
   const isStudent = cohort.studentIds.some(
     (s) =>
       s.studentId.toString() === userId &&
@@ -65,11 +67,12 @@ export const getLiveSession = async (req, res) => {
   );
 
   if (!isCoach && !isStudent) {
-    return res.status(403).json({});
+    return res.status(403).json({ isLive: false });
   }
 
   res.json({
     isLive: true,
     meetLink: course.liveSession.meetLink,
+    startedAt: course.liveSession.startedAt,
   });
 };
