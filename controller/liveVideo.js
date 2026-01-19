@@ -1,7 +1,8 @@
 import Cohort from "../module/cohort.js";
 
+// Always use the same key for course lookup: use c._id for subdocument id
 export const startLiveSession = async (req, res) => {
-  const { cohortId, courseId } = req.params;
+  const { cohortId, courseId } = req.params; // courseId = subdocument _id
   const { meetLink } = req.body;
   const coachId = req.user.id;
 
@@ -12,6 +13,7 @@ export const startLiveSession = async (req, res) => {
   const cohort = await Cohort.findById(cohortId);
   if (!cohort) return res.status(404).json({ message: "Cohort not found" });
 
+  // Use subdocument _id for matching
   const course = cohort.courses.find(
     (c) =>
       c._id.toString() === courseId &&
@@ -41,7 +43,6 @@ export const startLiveSession = async (req, res) => {
 };
 
 // ✅ Get live session status
-
 export const getLiveSession = async (req, res) => {
   const { cohortId, courseId } = req.params;
   const userId = req.user.id;
@@ -49,8 +50,8 @@ export const getLiveSession = async (req, res) => {
   const cohort = await Cohort.findById(cohortId);
   if (!cohort) return res.json({ isLive: false });
 
-  // ✅ Find cohort-course by *courseId*, not _id
-  const course = cohort.courses.find((c) => c.courseId.toString() === courseId);
+  // Use subdocument _id for matching
+  const course = cohort.courses.find((c) => c._id.toString() === courseId);
 
   if (!course || !course.liveSession?.isLive) {
     return res.json({ isLive: false });
@@ -62,7 +63,8 @@ export const getLiveSession = async (req, res) => {
     (s) =>
       s.studentId.toString() === userId &&
       s.enrollments.some(
-        (e) => e.courseId.toString() === courseId && e.hasAccess
+        (e) =>
+          e.courseId.toString() === course.courseId.toString() && e.hasAccess
       )
   );
 
@@ -85,7 +87,8 @@ export const endLiveSession = async (req, res) => {
   const cohort = await Cohort.findById(cohortId);
   if (!cohort) return res.status(404).json({ message: "Cohort not found" });
 
-  const course = cohort.courses.find((c) => c.courseId.toString() === courseId);
+  // Use subdocument _id for matching
+  const course = cohort.courses.find((c) => c._id.toString() === courseId);
   if (!course) return res.status(404).json({ message: "Course not found" });
 
   if (course.coachId.toString() !== coachId) {
