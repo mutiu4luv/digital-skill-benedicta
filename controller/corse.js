@@ -257,3 +257,33 @@ export const getCoachCourses = async (req, res) => {
     });
   }
 };
+// Express route: GET /api/cohort/:cohortId/courses-for-coach
+
+export const getCohortCoursesForCoach = async (req, res) => {
+  try {
+    const { cohortId } = req.params;
+    const coachId = req.user.id;
+
+    const cohort = await Cohort.findById(cohortId)
+      .populate("courses.courseId")
+      .populate("courses.coachId");
+
+    if (!cohort) return res.status(404).json({ message: "Cohort not found" });
+
+    // Only courses for this coach
+    const myCourses = cohort.courses
+      .filter((c) => c.coachId?._id.toString() === coachId)
+      .map((c) => ({
+        cohortCourseId: c._id,
+        courseId: c.courseId._id,
+        courseName: c.courseId.name,
+        cohortName: cohort.name,
+        status: c.status,
+      }));
+
+    return res.json({ courses: myCourses });
+  } catch (err) {
+    console.error("Get Cohort Courses For Coach Error:", err);
+    return res.status(500).json({ message: "Server error" });
+  }
+};

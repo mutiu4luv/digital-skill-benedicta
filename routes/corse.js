@@ -8,6 +8,7 @@ import {
   deleteCourse,
   getCoachCourses,
   getMyCoursesForCoach,
+  getCohortCoursesForCoach,
 } from "../controller/corse.js";
 import { authorizeRoles, protect } from "../middleware/authMiddleware.js";
 import upload from "../middleware/multer.js";
@@ -22,6 +23,7 @@ router.put(
   authorizeRoles("coach"),
   setClassSchedule
 );
+router.get("/:cohortId/courses-for-coach", protect, getCohortCoursesForCoach);
 
 // Owner creates a course
 // router.post(
