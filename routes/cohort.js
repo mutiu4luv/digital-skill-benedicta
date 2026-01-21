@@ -67,14 +67,18 @@ router.get(
   getStudentsUnderCoach
 );
 
+// 🔹 UNDO start
 router.patch(
-  "/cohort/course/:cohortCourseId/undo-start",
+  "/course/:cohortCourseId/undo-start",
+  protect,
   authorizeRoles("owner"),
   undoStartCohortCourse
 );
 
+// 🔹 UNDO end
 router.patch(
-  "/cohort/course/:cohortCourseId/undo-end",
+  "/course/:cohortCourseId/undo-end",
+  protect,
   authorizeRoles("owner"),
   undoEndCohortCourse
 );

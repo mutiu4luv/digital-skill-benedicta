@@ -392,13 +392,6 @@ export const startCohortByCourse = async (req, res) => {
 // Undo start of a cohort course
 export const undoStartCohortCourse = async (req, res) => {
   const { cohortCourseId } = req.params;
-  const userRole = req.user.role;
-
-  if (userRole !== "owner") {
-    return res
-      .status(403)
-      .json({ message: "Only owner can undo course start" });
-  }
 
   if (!mongoose.Types.ObjectId.isValid(cohortCourseId)) {
     return res.status(400).json({ message: "Invalid course ID" });
@@ -419,37 +412,29 @@ export const undoStartCohortCourse = async (req, res) => {
 
     if (courseItem.status !== "in_progress") {
       return res.status(400).json({
-        message: "Only courses in progress can be undone",
+        message: "Only started courses can be undone",
       });
     }
 
     // ✅ Undo start
-    courseItem.status = "not_started";
+    courseItem.status = "pending";
     courseItem.startDate = null;
-    courseItem.endDate = null;
 
     await cohort.save();
 
-    return res.json({
+    res.json({
       message: "Course start undone successfully",
       course: courseItem,
     });
   } catch (error) {
     console.error("Undo start cohort error:", error);
-    return res.status(500).json({ message: "Server error" });
+    res.status(500).json({ message: "Server error" });
   }
 };
 
 // Undo end of a cohort course
 export const undoEndCohortCourse = async (req, res) => {
   const { cohortCourseId } = req.params;
-  const userRole = req.user.role;
-
-  if (userRole !== "owner") {
-    return res
-      .status(403)
-      .json({ message: "Only owner can undo course completion" });
-  }
 
   if (!mongoose.Types.ObjectId.isValid(cohortCourseId)) {
     return res.status(400).json({ message: "Invalid course ID" });
@@ -480,13 +465,13 @@ export const undoEndCohortCourse = async (req, res) => {
 
     await cohort.save();
 
-    return res.json({
+    res.json({
       message: "Course completion undone successfully",
       course: courseItem,
     });
   } catch (error) {
     console.error("Undo end cohort error:", error);
-    return res.status(500).json({ message: "Server error" });
+    res.status(500).json({ message: "Server error" });
   }
 };
 
