@@ -416,8 +416,8 @@ export const undoStartCohortCourse = async (req, res) => {
       });
     }
 
-    // ✅ Undo start
-    courseItem.status = "pending";
+    // ✅ FIX: revert to valid enum value
+    courseItem.status = "not_started";
     courseItem.startDate = null;
 
     await cohort.save();
@@ -442,6 +442,10 @@ export const undoEndCohortCourse = async (req, res) => {
 
   try {
     const cohort = await Cohort.findOne({ "courses._id": cohortCourseId });
+
+    if (!cohort) {
+      return res.status(404).json({ message: "Course not found in cohort" });
+    }
 
     if (!cohort) {
       return res.status(404).json({ message: "Course not found in cohort" });
