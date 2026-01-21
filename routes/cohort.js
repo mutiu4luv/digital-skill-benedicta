@@ -14,6 +14,8 @@ import {
   getCoachAssignedCohorts,
   getStudentsUnderCoach,
   getUpcomingClass,
+  undoStartCohortCourse,
+  undoEndCohortCourse,
 } from "../controller/cohort.js";
 import { authorizeRoles, protect } from "../middleware/authMiddleware.js"; // auth middleware
 import upload from "../middleware/multer.js";
@@ -63,6 +65,18 @@ router.get(
   protect,
   authorizeRoles("owner", "coach"),
   getStudentsUnderCoach
+);
+
+router.patch(
+  "/cohort/course/:cohortCourseId/undo-start",
+  authorizeRoles("owner"),
+  undoStartCohortCourse
+);
+
+router.patch(
+  "/cohort/course/:cohortCourseId/undo-end",
+  authorizeRoles("owner"),
+  undoEndCohortCourse
 );
 
 export default router;

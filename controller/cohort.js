@@ -389,6 +389,106 @@ export const startCohortByCourse = async (req, res) => {
     return res.status(500).json({ message: "Server error" });
   }
 };
+// Undo start of a cohort course
+export const undoStartCohortCourse = async (req, res) => {
+  const { cohortCourseId } = req.params;
+  const userRole = req.user.role;
+
+  if (userRole !== "owner") {
+    return res
+      .status(403)
+      .json({ message: "Only owner can undo course start" });
+  }
+
+  if (!mongoose.Types.ObjectId.isValid(cohortCourseId)) {
+    return res.status(400).json({ message: "Invalid course ID" });
+  }
+
+  try {
+    const cohort = await Cohort.findOne({ "courses._id": cohortCourseId });
+
+    if (!cohort) {
+      return res.status(404).json({ message: "Course not found in cohort" });
+    }
+
+    const courseItem = cohort.courses.id(cohortCourseId);
+
+    if (!courseItem) {
+      return res.status(404).json({ message: "Course not found" });
+    }
+
+    if (courseItem.status !== "in_progress") {
+      return res.status(400).json({
+        message: "Only courses in progress can be undone",
+      });
+    }
+
+    // ✅ Undo start
+    courseItem.status = "not_started";
+    courseItem.startDate = null;
+    courseItem.endDate = null;
+
+    await cohort.save();
+
+    return res.json({
+      message: "Course start undone successfully",
+      course: courseItem,
+    });
+  } catch (error) {
+    console.error("Undo start cohort error:", error);
+    return res.status(500).json({ message: "Server error" });
+  }
+};
+
+// Undo end of a cohort course
+export const undoEndCohortCourse = async (req, res) => {
+  const { cohortCourseId } = req.params;
+  const userRole = req.user.role;
+
+  if (userRole !== "owner") {
+    return res
+      .status(403)
+      .json({ message: "Only owner can undo course completion" });
+  }
+
+  if (!mongoose.Types.ObjectId.isValid(cohortCourseId)) {
+    return res.status(400).json({ message: "Invalid course ID" });
+  }
+
+  try {
+    const cohort = await Cohort.findOne({ "courses._id": cohortCourseId });
+
+    if (!cohort) {
+      return res.status(404).json({ message: "Course not found in cohort" });
+    }
+
+    const courseItem = cohort.courses.id(cohortCourseId);
+
+    if (!courseItem) {
+      return res.status(404).json({ message: "Course not found" });
+    }
+
+    if (courseItem.status !== "completed") {
+      return res.status(400).json({
+        message: "Only completed courses can be undone",
+      });
+    }
+
+    // ✅ Undo end
+    courseItem.status = "in_progress";
+    courseItem.endDate = null;
+
+    await cohort.save();
+
+    return res.json({
+      message: "Course completion undone successfully",
+      course: courseItem,
+    });
+  } catch (error) {
+    console.error("Undo end cohort error:", error);
+    return res.status(500).json({ message: "Server error" });
+  }
+};
 
 export const endCohortByCourse = async (req, res) => {
   const { cohortCourseId } = req.params;
