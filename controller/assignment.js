@@ -311,9 +311,7 @@ export const getCoachAssignments = async (req, res) => {
       }
     });
 
-    // Sort submissions:
-    // 1. Graded submissions first
-    // 2. Then most recent submittedAt or dueDate first
+    // Sort so that graded submissions come first, then by most recent
     allSubmissions.sort((a, b) => {
       const aGraded = a.grade !== null;
       const bGraded = b.grade !== null;
@@ -323,10 +321,10 @@ export const getCoachAssignments = async (req, res) => {
 
       const aDate = a.submittedAt || a.dueDate || 0;
       const bDate = b.submittedAt || b.dueDate || 0;
-      return new Date(bDate) - new Date(aDate); // most recent first
+      return new Date(bDate) - new Date(aDate);
     });
 
-    // Group assignments by cohort (no change)
+    // Group assignments by cohort
     const assignmentsByCohort = {};
     assignments.forEach((a) => {
       const cohortName = a.cohortId?.name || "No Cohort";
@@ -347,118 +345,6 @@ export const getCoachAssignments = async (req, res) => {
     });
   }
 };
-
-// export const getCoachAssignments = async (req, res) => {
-//   try {
-//     const coachId = req.user.id;
-
-//     // Fetch all assignments created by this coach
-//     const assignments = await Assignment.find({ coachId })
-//       .populate("submissions.studentId", "fullName email")
-//       .populate("cohortId", "name studentIds") // include studentIds to check access
-//       .populate("courseId", "name category duration");
-
-//     const allSubmissions = [];
-
-//     assignments.forEach((a) => {
-//       const cohort = a.cohortId;
-
-//       // Build a Set of student IDs who have access for this course
-//       const studentsWithAccess = new Set();
-//       if (cohort && Array.isArray(cohort.studentIds)) {
-//         cohort.studentIds.forEach((s) => {
-//           const enrollment = s.enrollments.find(
-//             (e) =>
-//               e.courseId.toString() === a.courseId._id.toString() && e.hasAccess
-//           );
-//           if (enrollment) studentsWithAccess.add(s.studentId.toString());
-//         });
-//       }
-
-//       if (Array.isArray(a.submissions) && a.submissions.length > 0) {
-//         a.submissions.forEach((s) => {
-//           // Only include submission if student has access
-//           if (!s.studentId || !studentsWithAccess.has(s.studentId.toString()))
-//             return;
-
-//           allSubmissions.push({
-//             assignmentId: a._id,
-//             title: a.title,
-//             description: a.description,
-//             dueDate: a.dueDate,
-//             cohort: cohort?.name || "No Cohort",
-//             cohortId: cohort?._id || null,
-//             courseName: a.courseId?.name || "N/A",
-//             student: {
-//               _id: s.studentId._id,
-//               fullName: s.studentId.fullName,
-//               email: s.studentId.email,
-//             },
-//             studentId: s.studentId._id,
-//             file: s.file || null,
-//             grade: s.grade ?? null,
-//             feedback: s.feedback ?? null,
-//             submittedAt: s.submittedAt,
-//             submissionId: s._id,
-//           });
-//         });
-//       } else {
-//         // No submissions — include assignment only if some student has access
-//         if (studentsWithAccess.size > 0) {
-//           allSubmissions.push({
-//             assignmentId: a._id,
-//             title: a.title,
-//             description: a.description,
-//             dueDate: a.dueDate,
-//             cohort: cohort?.name || "No Cohort",
-//             cohortId: cohort?._id || null,
-//             courseName: a.courseId?.name || "N/A",
-//             student: null,
-//             studentId: null,
-//             file: null,
-//             grade: null,
-//             feedback: null,
-//             submittedAt: a.createdAt, // fallback for sorting
-//             submissionId: null,
-//           });
-//         }
-//       }
-//     });
-
-//     // Sort so that graded submissions come first, then by most recent
-//     allSubmissions.sort((a, b) => {
-//       const aGraded = a.grade !== null;
-//       const bGraded = b.grade !== null;
-
-//       if (aGraded && !bGraded) return -1;
-//       if (!aGraded && bGraded) return 1;
-
-//       const aDate = a.submittedAt || a.dueDate || 0;
-//       const bDate = b.submittedAt || b.dueDate || 0;
-//       return new Date(bDate) - new Date(aDate);
-//     });
-
-//     // Group assignments by cohort
-//     const assignmentsByCohort = {};
-//     assignments.forEach((a) => {
-//       const cohortName = a.cohortId?.name || "No Cohort";
-//       if (!assignmentsByCohort[cohortName])
-//         assignmentsByCohort[cohortName] = [];
-//       assignmentsByCohort[cohortName].push(a);
-//     });
-
-//     return res.status(200).json({
-//       assignmentsByCohort,
-//       submissions: allSubmissions,
-//     });
-//   } catch (err) {
-//     console.error("Error fetching coach assignments:", err);
-//     return res.status(500).json({
-//       message: "Server error",
-//       error: err.message,
-//     });
-//   }
-// };
 // export const getCoachAssignments = async (req, res) => {
 //   try {
 //     const coachId = req.user.id;
