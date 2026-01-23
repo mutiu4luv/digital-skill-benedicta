@@ -182,6 +182,13 @@ export const submitAssignment = async (req, res) => {
         message: "Assignment has expired! Please submit before the due date.",
       });
     }
+    // const isExpired = new Date(assignment.dueDate) < new Date();
+
+    // if (isExpired) {
+    //   return res.status(403).json({
+    //     message: "Assignment has expired",
+    //   });
+    // }
 
     // 3️⃣ Check if student already submitted
     const alreadySubmitted = assignment.submissions.some(
@@ -451,5 +458,37 @@ export const submitAssignmentGrade = async (req, res) => {
     return res
       .status(500)
       .json({ message: "Server error", error: err.message });
+  }
+};
+
+// ✅ Coach updates assignment details
+export const updateAssignment = async (req, res) => {
+  try {
+    const coachId = req.user.id;
+    const { assignmentId } = req.params;
+    const { dueDate } = req.body;
+
+    const assignment = await Assignment.findById(assignmentId);
+    if (!assignment) {
+      return res.status(404).json({ message: "Assignment not found" });
+    }
+
+    if (assignment.coachId.toString() !== coachId) {
+      return res.status(403).json({ message: "Unauthorized" });
+    }
+
+    if (dueDate) {
+      assignment.dueDate = new Date(dueDate);
+    }
+
+    await assignment.save();
+
+    return res.status(200).json({
+      message: "Assignment updated successfully",
+      assignment,
+    });
+  } catch (err) {
+    console.error("Update Assignment Error:", err);
+    return res.status(500).json({ message: "Server error" });
   }
 };
