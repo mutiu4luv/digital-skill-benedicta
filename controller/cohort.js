@@ -1270,3 +1270,64 @@ export const setClassSchedule = async (req, res) => {
     course,
   });
 };
+
+// get students taught by a specific coach
+
+export const getStudentsTaughtByCoach = async (req, res) => {
+  try {
+    const coachId = req.query.coachId || req.user.id;
+
+    if (!mongoose.Types.ObjectId.isValid(coachId)) {
+      return res.status(400).json({ message: "Invalid coach ID" });
+    }
+
+    // 1️⃣ Find cohorts where this coach teaches at least one course
+    const cohorts = await Cohort.find({
+      "courses.coachId": coachId,
+    })
+      .populate("studentIds.studentId", "fullName email")
+      .lean();
+
+    if (!cohorts.length) {
+      return res.json({ students: [] });
+    }
+
+    // 2️⃣ Collect students who are enrolled in the coach's courses
+    const studentsMap = new Map();
+
+    cohorts.forEach((cohort) => {
+      // courses taught by this coach in this cohort
+      const coachCourseIds = cohort.courses
+        .filter((course) => course.coachId.toString() === coachId.toString())
+        .map((course) => course.courseId.toString());
+
+      cohort.studentIds.forEach((studentEntry) => {
+        const isEnrolledInCoachCourse = studentEntry.enrollments.some(
+          (enrollment) =>
+            coachCourseIds.includes(enrollment.courseId.toString())
+        );
+
+        if (isEnrolledInCoachCourse) {
+          studentsMap.set(
+            studentEntry.studentId._id.toString(),
+            studentEntry.studentId
+          );
+        }
+      });
+    });
+
+    // 3️⃣ Convert map → array
+    const students = Array.from(studentsMap.values());
+
+    res.status(200).json({
+      count: students.length,
+      students,
+    });
+  } catch (error) {
+    console.error("❌ getStudentsTaughtByCoach error:", error);
+    res.status(500).json({
+      message: "Failed to fetch students taught by coach",
+      error: error.message,
+    });
+  }
+};
