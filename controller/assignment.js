@@ -97,7 +97,7 @@ export const getStudentAssignments = async (req, res) => {
         (s) => s.studentId.toString() === studentId.toString()
       );
 
-      if (!student) continue; // safety
+      if (!student) continue;
 
       // Only allow courses where student hasAccess
       const allowedCourseIds =
@@ -121,12 +121,19 @@ export const getStudentAssignments = async (req, res) => {
           (s) => s.studentId?.toString() === studentId.toString()
         );
 
+        // 🔧 FIX: force due date to expire at 11:59:59 PM
+        let dueDate = null;
+        if (a.dueDate) {
+          dueDate = new Date(a.dueDate);
+          dueDate.setHours(23, 59, 59, 999);
+        }
+
         return {
           assignmentId: a._id,
           title: a.title,
           description: a.description,
           courseName: a.courseId?.name || "N/A",
-          dueDate: a.dueDate,
+          dueDate,
           file: submission?.file || null,
           status: submission ? "Submitted" : "Pending",
           grade: submission?.grade || "-",
@@ -152,6 +159,88 @@ export const getStudentAssignments = async (req, res) => {
       .json({ message: "Server error", error: err.message });
   }
 };
+
+// export const getStudentAssignments = async (req, res) => {
+//   try {
+//     const studentId = req.user.id;
+
+//     // Find all cohorts the student belongs to
+//     const cohorts = await Cohort.find({
+//       "studentIds.studentId": studentId,
+//     });
+
+//     if (!cohorts.length) {
+//       return res
+//         .status(404)
+//         .json({ message: "You are not enrolled in any cohort" });
+//     }
+
+//     let allowedAssignments = [];
+//     const now = new Date();
+
+//     for (const cohort of cohorts) {
+//       // Skip ended cohorts
+//       if (cohort.endDate && cohort.endDate < now) continue;
+
+//       const student = cohort.studentIds.find(
+//         (s) => s.studentId.toString() === studentId.toString()
+//       );
+
+//       if (!student) continue; // safety
+
+//       // Only allow courses where student hasAccess
+//       const allowedCourseIds =
+//         student.enrollments
+//           ?.filter((e) => e.hasAccess)
+//           ?.map((e) => e.courseId.toString()) || [];
+
+//       if (allowedCourseIds.length === 0) continue;
+
+//       // Fetch assignments only for eligible courses
+//       const assignments = await Assignment.find({
+//         cohortId: cohort._id,
+//         courseId: { $in: allowedCourseIds },
+//       })
+//         .populate("courseId", "name category duration")
+//         .populate("coachId", "fullName")
+//         .sort({ updatedAt: -1 });
+
+//       const formattedAssignments = assignments.map((a) => {
+//         const submission = a.submissions?.find(
+//           (s) => s.studentId?.toString() === studentId.toString()
+//         );
+
+//         return {
+//           assignmentId: a._id,
+//           title: a.title,
+//           description: a.description,
+//           courseName: a.courseId?.name || "N/A",
+//           dueDate: a.dueDate,
+//           file: submission?.file || null,
+//           status: submission ? "Submitted" : "Pending",
+//           grade: submission?.grade || "-",
+//           updatedAt: a.updatedAt,
+//         };
+//       });
+
+//       // Submitted assignments move to bottom
+//       formattedAssignments.sort((a, b) => {
+//         if (a.status === "Submitted" && b.status !== "Submitted") return 1;
+//         if (b.status === "Submitted" && a.status !== "Submitted") return -1;
+//         return new Date(b.updatedAt) - new Date(a.updatedAt);
+//       });
+
+//       allowedAssignments.push(...formattedAssignments);
+//     }
+
+//     return res.status(200).json({ assignments: allowedAssignments });
+//   } catch (err) {
+//     console.error("Get Student Assignments Error:", err);
+//     return res
+//       .status(500)
+//       .json({ message: "Server error", error: err.message });
+//   }
+// };
 
 // submit assignment by student
 export const submitAssignment = async (req, res) => {
@@ -345,74 +434,6 @@ export const getCoachAssignments = async (req, res) => {
     });
   }
 };
-// export const getCoachAssignments = async (req, res) => {
-//   try {
-//     const coachId = req.user.id;
-
-//     // Fetch all assignments created by this coach
-//     const assignments = await Assignment.find({ coachId })
-//       .populate("submissions.studentId", "fullName email")
-//       .populate("cohortId", "name") // <-- use correct cohort field
-//       .populate("courseId", "name category duration");
-
-//     // Flatten all submissions for easy frontend display
-//     const allSubmissions = [];
-
-//     assignments.forEach((a) => {
-//       if (a.submissions && a.submissions.length > 0) {
-//         a.submissions.forEach((s) => {
-//           allSubmissions.push({
-//             assignmentId: a._id,
-//             title: a.title,
-//             description: a.description,
-//             dueDate: a.dueDate,
-//             cohort: a.cohortId?.name || "No Cohort",
-//             cohortId: a.cohortId?._id || null,
-//             courseName: a.courseId?.name || "N/A",
-//             student: s.studentId
-//               ? {
-//                   _id: s.studentId._id,
-//                   fullName: s.studentId.fullName,
-//                   email: s.studentId.email,
-//                 }
-//               : { _id: null, fullName: "Unknown Student", email: null },
-//             studentId: s.studentId?._id || null,
-//             file: s.file || null,
-//             grade: s.grade !== undefined ? s.grade : null,
-//             feedback: s.feedback ?? null,
-//             submittedAt: s.submittedAt,
-//             submissionId: s._id,
-//           });
-//         });
-//       }
-//     });
-
-//     // Sort submissions by most recent first
-//     allSubmissions.sort(
-//       (a, b) => new Date(b.submittedAt) - new Date(a.submittedAt)
-//     );
-
-//     // Group assignments by cohort name
-//     const assignmentsByCohort = {};
-//     assignments.forEach((a) => {
-//       const cohortName = a.cohortId?.name || "No Cohort";
-//       if (!assignmentsByCohort[cohortName])
-//         assignmentsByCohort[cohortName] = [];
-//       assignmentsByCohort[cohortName].push(a);
-//     });
-
-//     return res.status(200).json({
-//       assignmentsByCohort,
-//       submissions: allSubmissions,
-//     });
-//   } catch (err) {
-//     console.error("Error fetching coach assignments:", err);
-//     return res.status(500).json({
-//       message: "Server error",
-//       error: err.message,
-//     });
-//   }
-// };
 
 // ✅ Coach grades a student submission
 export const submitAssignmentGrade = async (req, res) => {
