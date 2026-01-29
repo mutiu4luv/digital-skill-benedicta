@@ -2,45 +2,88 @@ import Cohort from "../module/cohort.js";
 
 // ✅ Start live session by coach
 export const startLiveSession = async (req, res) => {
-  const { cohortId, courseId } = req.params; // courseId = subdocument _id
+  const { cohortId, courseId } = req.params;
   const { meetLink } = req.body;
-  const coachId = req.user.id;
-
-  if (!meetLink) {
-    return res.status(400).json({ message: "Meet link required" });
-  }
+  const userId = req.user.id;
 
   const cohort = await Cohort.findById(cohortId);
   if (!cohort) return res.status(404).json({ message: "Cohort not found" });
 
-  // Use subdocument _id for matching
+  // 🔥 MUST MATCH SUBDOCUMENT
   const course = cohort.courses.find(
-    (c) =>
-      c._id.toString() === courseId &&
-      c.coachId &&
-      c.coachId.toString() === coachId
+    (c) => c._id.toString() === courseId || c.courseId.toString() === courseId
   );
 
   if (!course) {
-    return res.status(403).json({ message: "Not authorized" });
+    return res.status(404).json({ message: "Course not found in cohort" });
   }
 
+  // Coach-only
+  if (course.coachId.toString() !== userId) {
+    return res.status(403).json({ message: "Unauthorized" });
+  }
+
+  // ✅ WRITE TO THE SAME DOCUMENT STUDENTS READ
   course.liveSession = {
+    isLive: true,
     meetLink,
     startedAt: new Date(),
-    isLive: true,
   };
+
+  // 🚨 REQUIRED FOR SUBDOC UPDATE
+  cohort.markModified("courses");
 
   await cohort.save();
 
-  // 🔔 Notify students via socket
-  req.io.to(`${cohortId}:${courseId}`).emit("liveStarted", {
-    meetLink,
-    courseId,
+  console.log("✅ LIVE SAVED ON COURSE:", {
+    subId: course._id.toString(),
+    courseId: course.courseId.toString(),
+    liveSession: course.liveSession,
   });
 
-  res.json({ success: true, meetLink });
+  res.json({ success: true });
 };
+
+// export const startLiveSession = async (req, res) => {
+//   const { cohortId, courseId } = req.params; // courseId = subdocument _id
+//   const { meetLink } = req.body;
+//   const coachId = req.user.id;
+
+//   if (!meetLink) {
+//     return res.status(400).json({ message: "Meet link required" });
+//   }
+
+//   const cohort = await Cohort.findById(cohortId);
+//   if (!cohort) return res.status(404).json({ message: "Cohort not found" });
+
+//   // Use subdocument _id for matching
+//   const course = cohort.courses.find(
+//     (c) =>
+//       c._id.toString() === courseId &&
+//       c.coachId &&
+//       c.coachId.toString() === coachId
+//   );
+
+//   if (!course) {
+//     return res.status(403).json({ message: "Not authorized" });
+//   }
+
+//   course.liveSession = {
+//     meetLink,
+//     startedAt: new Date(),
+//     isLive: true,
+//   };
+
+//   await cohort.save();
+
+//   // 🔔 Notify students via socket
+//   req.io.to(`${cohortId}:${courseId}`).emit("liveStarted", {
+//     meetLink,
+//     courseId,
+//   });
+
+//   res.json({ success: true, meetLink });
+// };
 
 // ✅ Get live session status
 export const getLiveSession = async (req, res) => {
