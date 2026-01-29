@@ -1,6 +1,6 @@
 import Cohort from "../module/cohort.js";
 
-// Always use the same key for course lookup: use c._id for subdocument id
+// ✅ Start live session by coach
 export const startLiveSession = async (req, res) => {
   const { cohortId, courseId } = req.params; // courseId = subdocument _id
   const { meetLink } = req.body;
@@ -51,8 +51,9 @@ export const getLiveSession = async (req, res) => {
   if (!cohort) return res.json({ isLive: false });
 
   // Use subdocument _id for matching
-  const course = cohort.courses.find((c) => c._id.toString() === courseId);
-
+  const course = cohort.courses.find(
+    (c) => c._id.toString() === courseId || c.courseId.toString() === courseId
+  );
   if (!course || !course.liveSession?.isLive) {
     return res.json({ isLive: false });
   }
