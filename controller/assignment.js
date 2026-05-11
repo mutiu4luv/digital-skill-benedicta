@@ -3,6 +3,14 @@ import Cohort from "../module/cohort.js";
 import cloudinary from "../config/cloudnary.js";
 import fs from "fs";
 
+const toEndOfDay = (date) => {
+  if (!date) return date;
+
+  const dueDate = new Date(date);
+  dueDate.setHours(23, 59, 59, 999);
+  return dueDate;
+};
+
 // Controller to create an assignment with optional file upload
 export const createCohortAssignment = async (req, res) => {
   try {
@@ -54,7 +62,7 @@ export const createCohortAssignment = async (req, res) => {
       cohortId,
       courseId: courseInCohort.courseId,
       coachId,
-      dueDate,
+      dueDate: toEndOfDay(dueDate),
       file: fileUrl, // store cloudinary URL in DB
     });
 
@@ -121,12 +129,7 @@ export const getStudentAssignments = async (req, res) => {
           (s) => s.studentId?.toString() === studentId.toString()
         );
 
-        // 🔧 FIX: force due date to expire at 11:59:59 PM
-        let dueDate = null;
-        if (a.dueDate) {
-          dueDate = new Date(a.dueDate);
-          dueDate.setHours(23, 59, 59, 999);
-        }
+        const dueDate = toEndOfDay(a.dueDate);
 
         return {
           assignmentId: a._id,
@@ -266,7 +269,9 @@ export const submitAssignment = async (req, res) => {
     const now = new Date();
 
     // 2️⃣ Check expiry
-    if (assignment.dueDate && assignment.dueDate < now) {
+    const dueDate = toEndOfDay(assignment.dueDate);
+
+    if (dueDate && dueDate < now) {
       return res.status(403).json({
         message: "Assignment has expired! Please submit before the due date.",
       });
@@ -499,7 +504,7 @@ export const updateAssignment = async (req, res) => {
     }
 
     if (dueDate) {
-      assignment.dueDate = new Date(dueDate);
+      assignment.dueDate = toEndOfDay(dueDate);
     }
 
     await assignment.save();

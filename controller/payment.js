@@ -1,6 +1,31 @@
 import Cohort from "../module/cohort.js";
 import User from "../module/userModule.js";
 
+const normalizeProofOfPayment = (proof) => {
+  if (!proof) return null;
+
+  if (typeof proof === "string") {
+    return proof.trim() ? { url: proof, publicId: "" } : null;
+  }
+
+  const url = proof.url || proof.secure_url || proof.proofUrl || proof.path || "";
+  const publicId = proof.publicId || proof.public_id || proof.cloudinaryId || "";
+
+  return url ? { url, publicId } : null;
+};
+
+const getEnrollmentProof = (enrollment) => {
+  const rawEnrollment =
+    typeof enrollment.toObject === "function" ? enrollment.toObject() : enrollment;
+
+  return (
+    normalizeProofOfPayment(rawEnrollment.proofOfPayment) ||
+    normalizeProofOfPayment(rawEnrollment.proofUrl) ||
+    normalizeProofOfPayment(rawEnrollment.paymentProof) ||
+    normalizeProofOfPayment(rawEnrollment.slipUrl)
+  );
+};
+
 // paymentController.js
 export const confirmPayment = async (req, res) => {
   try {
@@ -92,6 +117,7 @@ export const adminConfirmPayment = async (req, res) => {
 
     // ✅ Confirm payment
     enrollment.paymentConfirmed = true;
+    enrollment.paymentStatus = "confirmed";
     enrollment.hasAccess = true;
     enrollment.paid = true;
 
@@ -157,10 +183,13 @@ export const getPendingConfirmationStudents = async (req, res) => {
         if (!student.studentId) return;
 
         student.enrollments.forEach((enrollment) => {
+          const proofOfPayment = getEnrollmentProof(enrollment);
+
           // ✅ ONLY REAL PENDING PAYMENTS
           if (
             enrollment.paymentConfirmed === true ||
-            enrollment.paymentStatus === "rejected"
+            enrollment.paymentStatus === "rejected" ||
+            (!enrollment.paid && !proofOfPayment)
           ) {
             return;
           }
@@ -181,12 +210,7 @@ export const getPendingConfirmationStudents = async (req, res) => {
               courseName: enrollment.courseId?.name || "-",
               registeredAt:
                 enrollment.registeredAt || enrollment.paidAt || null,
-              proofOfPayment: enrollment.proofOfPayment
-                ? {
-                    url: enrollment.proofOfPayment.url || "",
-                    publicId: enrollment.proofOfPayment.publicId || "",
-                  }
-                : null,
+              proofOfPayment,
             },
           });
         });
