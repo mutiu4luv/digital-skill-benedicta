@@ -54,7 +54,7 @@ router.get(
 router.post(
   "/payment/confirm",
   protect,
-  authorizeRoles("owner"),
+  authorizeRoles("admin", "owner"),
   confirmPayment
 );
 
@@ -71,7 +71,12 @@ router.delete(
   // authorizeRoles("owner"),
   deleteSelfLearningCourse
 );
-router.get("/payments", protect, authorizeRoles("owner"), getPendingPayments);
+router.get(
+  "/payments",
+  protect,
+  authorizeRoles("admin", "owner"),
+  getPendingPayments
+);
 
 router.get(
   "/course/:courseId/contents",
