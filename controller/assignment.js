@@ -1,6 +1,7 @@
 import Assignment from "../module/cohortAssignment.js";
 import Cohort from "../module/cohort.js";
 import cloudinary from "../config/cloudnary.js";
+import mongoose from "mongoose";
 import fs from "fs";
 
 const toEndOfDay = (date) => {
@@ -9,6 +10,36 @@ const toEndOfDay = (date) => {
   const dueDate = new Date(date);
   dueDate.setHours(23, 59, 59, 999);
   return dueDate;
+};
+
+const deleteLocalFile = (filePath) => {
+  try {
+    if (!filePath || !fs.existsSync(filePath)) return;
+    fs.unlinkSync(filePath);
+  } catch (err) {
+    console.error("Delete local assignment file error:", err);
+  }
+};
+
+const studentHasAssignmentAccess = async (assignment, studentId) => {
+  const cohort = await Cohort.findOne({
+    _id: assignment.cohortId,
+    "studentIds.studentId": studentId,
+  });
+
+  if (!cohort) return false;
+
+  const student = cohort.studentIds.find(
+    (s) => s.studentId?.toString() === studentId.toString()
+  );
+
+  return Boolean(
+    student?.enrollments?.some(
+      (enrollment) =>
+        enrollment.courseId?.toString() === assignment.courseId.toString() &&
+        enrollment.hasAccess
+    )
+  );
 };
 
 // Controller to create an assignment with optional file upload
@@ -247,13 +278,20 @@ export const getStudentAssignments = async (req, res) => {
 
 // submit assignment by student
 export const submitAssignment = async (req, res) => {
+  let filePath;
   try {
     const studentId = req.user.id;
     const { assignmentId } = req.params;
     const file = req.file;
+    filePath = file?.path;
 
     if (!assignmentId) {
       return res.status(400).json({ message: "Assignment ID is required" });
+    }
+
+    if (!mongoose.isValidObjectId(assignmentId)) {
+      deleteLocalFile(filePath);
+      return res.status(400).json({ message: "Invalid assignment ID" });
     }
 
     if (!file) {
@@ -263,7 +301,16 @@ export const submitAssignment = async (req, res) => {
     // 1️⃣ Find assignment
     const assignment = await Assignment.findById(assignmentId);
     if (!assignment) {
+      deleteLocalFile(filePath);
       return res.status(404).json({ message: "Assignment not found" });
+    }
+
+    const hasAccess = await studentHasAssignmentAccess(assignment, studentId);
+    if (!hasAccess) {
+      deleteLocalFile(filePath);
+      return res.status(403).json({
+        message: "You do not have access to submit this assignment",
+      });
     }
 
     const now = new Date();
@@ -272,6 +319,7 @@ export const submitAssignment = async (req, res) => {
     const dueDate = toEndOfDay(assignment.dueDate);
 
     if (dueDate && dueDate < now) {
+      deleteLocalFile(filePath);
       return res.status(403).json({
         message: "Assignment has expired! Please submit before the due date.",
       });
@@ -290,6 +338,7 @@ export const submitAssignment = async (req, res) => {
     );
 
     if (alreadySubmitted) {
+      deleteLocalFile(filePath);
       return res.status(400).json({
         message: "You have already submitted this assignment",
       });
@@ -302,7 +351,8 @@ export const submitAssignment = async (req, res) => {
     });
 
     // Delete local file after upload
-    fs.unlinkSync(file.path);
+    deleteLocalFile(filePath);
+    filePath = null;
 
     // 5️⃣ Save submission in DB
     assignment.submissions.push({
@@ -320,9 +370,10 @@ export const submitAssignment = async (req, res) => {
       submittedAt: now,
     });
   } catch (err) {
+    deleteLocalFile(filePath);
     console.error("Submit Assignment Error:", err);
     return res.status(500).json({
-      message: "Server error",
+      message: "Error submitting assignment",
       error: err.message,
     });
   }

@@ -13,7 +13,6 @@ import { sendEmail } from "../utilitis/sendEmail.js";
 const defaultClient = SibApiV3Sdk.ApiClient.instance;
 defaultClient.authentications["api-key"].apiKey = process.env.BREVO_API_KEY;
 const brevoEmailApi = new SibApiV3Sdk.TransactionalEmailsApi();
-console.log(process.env.BREVO_API_KEY);
 
 // ✅ Cloudinary configuration
 // cloudinary.v2.config({

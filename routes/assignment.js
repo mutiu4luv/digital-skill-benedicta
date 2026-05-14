@@ -8,7 +8,7 @@ import {
   updateAssignment,
 } from "../controller/assignment.js";
 import { authorizeRoles, protect } from "../middleware/authMiddleware.js";
-import upload from "../middleware/multer.js";
+import upload, { multerErrorHandler } from "../middleware/multer.js";
 
 const router = express.Router();
 
@@ -18,6 +18,7 @@ router.post(
   protect,
   authorizeRoles("coach"),
   upload.single("file"),
+  multerErrorHandler,
   createCohortAssignment
 );
 
@@ -27,6 +28,7 @@ router.post(
   "/:assignmentId/submit",
   protect,
   upload.single("file"),
+  multerErrorHandler,
   submitAssignment
 );
 router.get(

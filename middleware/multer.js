@@ -6,7 +6,7 @@ import fs from "fs";
 const uploadDir = "uploads/";
 if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir);
 
-function multerErrorHandler(err, req, res, next) {
+export function multerErrorHandler(err, req, res, next) {
   if (err instanceof multer.MulterError) {
     return res.status(400).json({ message: err.message });
   }
