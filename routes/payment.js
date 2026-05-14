@@ -14,11 +14,28 @@ const router = express.Router();
 router.get("/pending-confirmation", protect, getPendingConfirmationStudents);
 // router.post("/confirm", protect, confirmPayment);
 router.get("/paid-students", protect, getPaidStudents);
-router.put("/users/:id/confirm-payment", protect, adminConfirmPayment);
+router.put(
+  "/users/:id/confirm-payment",
+  protect,
+  authorizeRoles("owner", "admin"),
+  adminConfirmPayment
+);
+router.put(
+  "/confirm-payment",
+  protect,
+  authorizeRoles("owner", "admin"),
+  adminConfirmPayment
+);
 router.put(
   "/users/:id/reject-payment",
   protect,
-  authorizeRoles("owner"),
+  authorizeRoles("owner", "admin"),
+  adminRejectPayment
+);
+router.put(
+  "/reject-payment",
+  protect,
+  authorizeRoles("owner", "admin"),
   adminRejectPayment
 );
 // ----------------------

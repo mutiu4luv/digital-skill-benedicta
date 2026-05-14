@@ -160,28 +160,43 @@ export const registerStudentToCohort = async (req, res) => {
       cohort.studentIds.push(studentEntry);
     }
 
-    const alreadyRegistered = studentEntry.enrollments.some(
+    const existingEnrollment = studentEntry.enrollments.find(
       (e) => e.courseId.toString() === courseId.toString()
     );
 
-    if (alreadyRegistered)
+    if (existingEnrollment && existingEnrollment.paymentStatus !== "rejected")
       return res
         .status(400)
         .json({ message: "You already registered for this course" });
 
     // 6️⃣ Save enrollment with proof of payment
-    studentEntry.enrollments.push({
-      courseId,
-      paid: true,
-      paymentConfirmed: false,
-      hasAccess: false,
-      paidAt: new Date(),
-      registeredAt: new Date(), // optional, track registration date
-      proofOfPayment: {
+    if (existingEnrollment) {
+      existingEnrollment.paid = true;
+      existingEnrollment.paymentConfirmed = false;
+      existingEnrollment.paymentStatus = "pending";
+      existingEnrollment.hasAccess = false;
+      existingEnrollment.paidAt = new Date();
+      existingEnrollment.registeredAt = new Date();
+      existingEnrollment.rejectionReason = "";
+      existingEnrollment.proofOfPayment = {
         url: uploadResult.secure_url || "",
         publicId: uploadResult.public_id || "",
-      },
-    });
+      };
+    } else {
+      studentEntry.enrollments.push({
+        courseId,
+        paid: true,
+        paymentConfirmed: false,
+        paymentStatus: "pending",
+        hasAccess: false,
+        paidAt: new Date(),
+        registeredAt: new Date(), // optional, track registration date
+        proofOfPayment: {
+          url: uploadResult.secure_url || "",
+          publicId: uploadResult.public_id || "",
+        },
+      });
+    }
 
     await cohort.save();
 
@@ -313,8 +328,8 @@ export const registerStudentToCohort = async (req, res) => {
 export const getCohortStudents = async (req, res) => {
   try {
     const cohort = await Cohort.findById(req.params.cohortId).populate(
-      "studentIds",
-      "name email"
+      "studentIds.studentId",
+      "fullName email phoneNumber"
     );
     if (!cohort) return res.status(404).json({ message: "Cohort not found" });
 
