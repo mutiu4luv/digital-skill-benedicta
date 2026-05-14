@@ -26,6 +26,28 @@ const getEnrollmentProof = (enrollment) => {
   );
 };
 
+const getStudentIdValue = (studentEntry) => {
+  const rawStudent = studentEntry?.studentId || studentEntry?._id;
+  if (!rawStudent) return "";
+
+  if (rawStudent._id) return rawStudent._id.toString();
+  return rawStudent.toString();
+};
+
+const findStudentEntry = (cohort, studentId) => {
+  return cohort.studentIds.find(
+    (studentEntry) => getStudentIdValue(studentEntry) === studentId.toString()
+  );
+};
+
+const findEnrollment = (studentEntry, courseId) => {
+  return studentEntry?.enrollments?.find(
+    (enrollment) => enrollment.courseId?.toString() === courseId.toString()
+  );
+};
+
+const getRequestedStudentId = (req) => req.params.id || req.body.studentId;
+
 // paymentController.js
 export const confirmPayment = async (req, res) => {
   try {
@@ -88,29 +110,26 @@ export const getPaidStudents = async (req, res) => {
 export const adminConfirmPayment = async (req, res) => {
   try {
     const { cohortId, courseId } = req.body;
-    const studentId = req.params.id;
+    const studentId = getRequestedStudentId(req);
+
+    if (!studentId || !cohortId || !courseId) {
+      return res
+        .status(400)
+        .json({ message: "studentId, cohortId and courseId are required" });
+    }
 
     const foundCohort = await Cohort.findById(cohortId);
     if (!foundCohort)
       return res.status(404).json({ message: "Cohort not found" });
 
-    // Log for debugging
-    console.log("foundCohort.studentIds:", foundCohort.studentIds);
-
-    const studentEntry = foundCohort.studentIds.find((s) => {
-      // Support both plain ObjectId and nested studentId
-      const id = s.studentId ? s.studentId.toString() : s._id?.toString();
-      return id === studentId;
-    });
+    const studentEntry = findStudentEntry(foundCohort, studentId);
 
     if (!studentEntry)
       return res
         .status(404)
         .json({ message: "Student not found in this cohort" });
 
-    const enrollment = studentEntry.enrollments?.find(
-      (e) => e.courseId.toString() === courseId.toString()
-    );
+    const enrollment = findEnrollment(studentEntry, courseId);
 
     if (!enrollment)
       return res.status(404).json({ message: "Enrollment not found" });
@@ -135,20 +154,22 @@ export const adminConfirmPayment = async (req, res) => {
 export const adminRejectPayment = async (req, res) => {
   try {
     const { cohortId, courseId, reason } = req.body;
-    const studentId = req.params.id;
+    const studentId = getRequestedStudentId(req);
+
+    if (!studentId || !cohortId || !courseId) {
+      return res
+        .status(400)
+        .json({ message: "studentId, cohortId and courseId are required" });
+    }
 
     const cohort = await Cohort.findById(cohortId);
     if (!cohort) return res.status(404).json({ message: "Cohort not found" });
 
-    const studentEntry = cohort.studentIds.find(
-      (s) => s.studentId.toString() === studentId
-    );
+    const studentEntry = findStudentEntry(cohort, studentId);
     if (!studentEntry)
       return res.status(404).json({ message: "Student not found" });
 
-    const enrollment = studentEntry.enrollments.find(
-      (e) => e.courseId.toString() === courseId
-    );
+    const enrollment = findEnrollment(studentEntry, courseId);
     if (!enrollment)
       return res.status(404).json({ message: "Enrollment not found" });
 
@@ -156,13 +177,14 @@ export const adminRejectPayment = async (req, res) => {
     enrollment.paymentConfirmed = false;
     enrollment.paymentStatus = "rejected";
     enrollment.hasAccess = false;
-    enrollment.rejectionReason = reason;
+    enrollment.rejectionReason = reason || "";
 
     await cohort.save();
 
     res.status(200).json({ message: "Payment rejected successfully" });
   } catch (err) {
-    res.status(500).json({ message: "Server error" });
+    console.error("Admin Payment Rejection Error:", err);
+    res.status(500).json({ message: "Server error", error: err.message });
   }
 };
 
@@ -176,11 +198,21 @@ export const getPendingConfirmationStudents = async (req, res) => {
       .populate("studentIds.enrollments.courseId", "name");
 
     const pendingStudents = [];
+    const missingStudentIds = [];
 
     cohorts.forEach((cohort) => {
       cohort.studentIds.forEach((student) => {
-        // 🚨 Guard against deleted users
-        if (!student.studentId) return;
+        const populatedStudent =
+          student.studentId &&
+          typeof student.studentId === "object" &&
+          (student.studentId.fullName || student.studentId.email)
+            ? student.studentId
+            : null;
+        const studentId = getStudentIdValue(student);
+
+        if (!populatedStudent && studentId) {
+          missingStudentIds.push(studentId);
+        }
 
         student.enrollments.forEach((enrollment) => {
           const proofOfPayment = getEnrollmentProof(enrollment);
@@ -195,10 +227,10 @@ export const getPendingConfirmationStudents = async (req, res) => {
           }
 
           pendingStudents.push({
-            _id: student.studentId._id,
-            fullName: student.studentId.fullName,
-            email: student.studentId.email,
-            phoneNumber: student.studentId.phoneNumber,
+            _id: studentId,
+            fullName: populatedStudent?.fullName || "",
+            email: populatedStudent?.email || "",
+            phoneNumber: populatedStudent?.phoneNumber || "",
 
             paid: enrollment.paid,
             paymentConfirmed: enrollment.paymentConfirmed,
@@ -216,6 +248,24 @@ export const getPendingConfirmationStudents = async (req, res) => {
         });
       });
     });
+
+    if (missingStudentIds.length) {
+      const users = await User.find({ _id: { $in: missingStudentIds } }).select(
+        "fullName email phoneNumber"
+      );
+      const usersById = new Map(users.map((user) => [user._id.toString(), user]));
+
+      pendingStudents.forEach((student) => {
+        if (student.fullName) return;
+
+        const user = usersById.get(student._id.toString());
+        if (!user) return;
+
+        student.fullName = user.fullName;
+        student.email = user.email;
+        student.phoneNumber = user.phoneNumber;
+      });
+    }
 
     return res.status(200).json({
       count: pendingStudents.length,
