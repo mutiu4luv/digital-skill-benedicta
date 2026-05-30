@@ -5,6 +5,11 @@ export const startLiveSession = async (req, res) => {
   const { cohortId, courseId } = req.params;
   const { meetLink } = req.body;
   const userId = req.user.id;
+  const normalizedMeetLink = (meetLink || "").trim();
+
+  if (!normalizedMeetLink) {
+    return res.status(400).json({ message: "Meet link required" });
+  }
 
   const cohort = await Cohort.findById(cohortId);
   if (!cohort) return res.status(404).json({ message: "Cohort not found" });
@@ -26,7 +31,7 @@ export const startLiveSession = async (req, res) => {
   // ✅ WRITE TO THE SAME DOCUMENT STUDENTS READ
   course.liveSession = {
     isLive: true,
-    meetLink,
+    meetLink: normalizedMeetLink,
     startedAt: new Date(),
   };
 
@@ -41,7 +46,21 @@ export const startLiveSession = async (req, res) => {
     liveSession: course.liveSession,
   });
 
-  res.json({ success: true });
+  // Notify listeners in both room variants to avoid ID mismatch issues.
+  if (req.io) {
+    const roomBySubDocId = `${cohortId}:${course._id.toString()}`;
+    const roomByCourseId = `${cohortId}:${course.courseId.toString()}`;
+    const payload = {
+      meetLink: normalizedMeetLink,
+      courseId: course._id.toString(),
+      courseRefId: course.courseId.toString(),
+      startedAt: course.liveSession.startedAt,
+    };
+    req.io.to(roomBySubDocId).emit("liveStarted", payload);
+    req.io.to(roomByCourseId).emit("liveStarted", payload);
+  }
+
+  res.json({ success: true, liveSession: course.liveSession });
 };
 
 // export const startLiveSession = async (req, res) => {
