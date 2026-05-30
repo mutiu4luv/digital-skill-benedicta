@@ -26,6 +26,7 @@ import liveVideoRoutes from "./routes/liveVideo.js";
 import selfLearningRoutes from "./routes/selfLearning.js";
 import freeCourseRoute from "./routes/freeCourse.js";
 import directChatRoutes from "./routes/directChat.js";
+import groupChatRoutes from "./routes/groupChat.js";
 
 dotenv.config();
 
@@ -128,6 +129,7 @@ app.use("/api/live", liveVideoRoutes);
 app.use("/api/self-learning", selfLearningRoutes);
 app.use("/api/free-learning", freeCourseRoute);
 app.use("/api/direct-chat", directChatRoutes);
+app.use("/api/group-chat", groupChatRoutes);
 
 // ✅ 5. MongoDB Connection
 mongoose
