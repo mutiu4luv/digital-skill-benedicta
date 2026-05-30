@@ -78,10 +78,19 @@ app.use((req, res, next) => {
 io.on("connection", (socket) => {
   console.log("User connected:", socket.id);
 
-  socket.on("joinCohort", ({ cohortId, courseId }) => {
-    const room = `${cohortId}:${courseId}`;
-    socket.join(room);
-    console.log(`Socket ${socket.id} joined ${room}`);
+  socket.on("joinCohort", (payload = {}) => {
+    const { cohortId, courseId, room } = payload;
+    const resolvedRoom =
+      room || (cohortId && courseId ? `${cohortId}:${courseId}` : null);
+
+    if (!resolvedRoom) {
+      console.warn("joinCohort called without valid room payload:", payload);
+      return;
+    }
+
+    const roomName = String(resolvedRoom);
+    socket.join(roomName);
+    console.log(`Socket ${socket.id} joined ${roomName}`);
   });
 
   socket.on("disconnect", () => {
