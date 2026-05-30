@@ -81,8 +81,9 @@ export const sendGroupMessage = async (req, res) => {
     });
     await chat.save();
 
-    const saved = chat.messages[chat.messages.length - 1];
-    await saved.populate("senderId", "fullName role profilePhoto");
+    const savedIndex = chat.messages.length - 1;
+    await chat.populate(`messages.${savedIndex}.senderId`, "fullName role profilePhoto");
+    const saved = chat.messages[savedIndex];
 
     return res.status(201).json({ channel, message: saved });
   } catch (error) {
