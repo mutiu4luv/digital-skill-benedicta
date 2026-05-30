@@ -350,6 +350,74 @@ export const getAllCoaches = async (req, res) => {
   }
 };
 
+// 📣 Broadcast email (Owner only)
+export const sendBroadcastEmail = async (req, res) => {
+  try {
+    const { audience, subject, message } = req.body;
+
+    if (!audience || !["students", "coaches", "all"].includes(audience)) {
+      return res.status(400).json({
+        message: "Audience is required and must be students, coaches, or all",
+      });
+    }
+
+    if (!subject || !message) {
+      return res.status(400).json({ message: "Subject and message are required" });
+    }
+
+    const roleFilter =
+      audience === "students"
+        ? { role: "student" }
+        : audience === "coaches"
+        ? { role: "coach" }
+        : { role: { $in: ["student", "coach"] } };
+
+    const recipients = await User.find({
+      ...roleFilter,
+      email: { $exists: true, $ne: "" },
+    }).select("email fullName role");
+
+    if (!recipients.length) {
+      return res.status(404).json({ message: "No recipients found for this audience" });
+    }
+
+    const htmlContent = `
+      <div style="font-family:Arial,sans-serif;line-height:1.6;">
+        <h2 style="margin:0 0 12px 0;color:#0f766e;">HGSC² Digital Skills</h2>
+        <p style="white-space:pre-wrap;margin:0;">${message}</p>
+      </div>
+    `;
+
+    const results = await Promise.allSettled(
+      recipients.map((recipient) =>
+        sendEmail(
+          recipient.email,
+          subject,
+          htmlContent,
+          recipient.fullName || recipient.role
+        )
+      )
+    );
+
+    const sent = results.filter((r) => r.status === "fulfilled").length;
+    const failed = results.length - sent;
+
+    return res.status(200).json({
+      message: "Broadcast process completed",
+      audience,
+      totalRecipients: recipients.length,
+      sent,
+      failed,
+    });
+  } catch (error) {
+    console.error("❌ Broadcast email error:", error);
+    return res.status(500).json({
+      message: "Failed to send broadcast email",
+      error: error.message,
+    });
+  }
+};
+
 // update profile by student, coach and owner
 export const updateProfile = async (req, res) => {
   try {

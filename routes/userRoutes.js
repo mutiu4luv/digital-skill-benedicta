@@ -8,6 +8,7 @@ import {
   deleteUser,
   updateUser,
   getAllCoaches,
+  sendBroadcastEmail,
   updateProfile,
   getMyProfile,
   forgotPassword,
@@ -55,6 +56,12 @@ router.put("/profile", protect, upload.single("profilePhoto"), updateProfile);
 // ✅ OTHER FIXED ROUTES
 router.get("/coaches", protect, getAllCoaches);
 router.get("/all", protect, authorizeRoles("owner"), getAllUsers);
+router.post(
+  "/broadcast-email",
+  protect,
+  authorizeRoles("owner"),
+  sendBroadcastEmail
+);
 
 router.put("/:id", protect, authorizeRoles("owner"), updateUser);
 router.delete("/:id", protect, authorizeRoles("owner"), deleteUser);
