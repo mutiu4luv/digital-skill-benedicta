@@ -18,15 +18,21 @@ const brevoEmailApi = new SibApiV3Sdk.TransactionalEmailsApi();
  */
 export const sendEmail = async (to, subject, htmlContent, name = "") => {
   const senderEmail =
+    process.env.BREVO_SENDER_EMAIL ||
     process.env.EMAIL_SENDER ||
     process.env.SENDER_EMAIL ||
     process.env.EMAIL_USER;
   const senderName = process.env.SENDER_NAME || "HGSC² Digital Skills";
 
   if (!senderEmail) {
-    throw Object.assign(new Error("Missing sender email configuration"), {
+    throw Object.assign(
+      new Error(
+        "Missing sender email configuration. Set BREVO_SENDER_EMAIL or EMAIL_SENDER."
+      ),
+      {
       stage: "brevo",
-    });
+      }
+    );
   }
 
   const sendSmtpEmail = new SibApiV3Sdk.SendSmtpEmail({
