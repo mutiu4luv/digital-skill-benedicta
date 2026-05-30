@@ -2,17 +2,11 @@ import dotenv from "dotenv";
 dotenv.config();
 import cloudinary from "../config/cloudnary.js";
 
-import SibApiV3Sdk from "sib-api-v3-sdk";
 import streamifier from "streamifier";
 import User from "../module/userModule.js";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { sendEmail } from "../utilitis/sendEmail.js";
-
-// ✅ Initialize Brevo client safely
-const defaultClient = SibApiV3Sdk.ApiClient.instance;
-defaultClient.authentications["api-key"].apiKey = process.env.BREVO_API_KEY;
-const brevoEmailApi = new SibApiV3Sdk.TransactionalEmailsApi();
 
 // ✅ Cloudinary configuration
 // cloudinary.v2.config({
@@ -128,16 +122,13 @@ export const registerUser = async (req, res) => {
       </div>
     `;
 
-    const emailData = {
-      sender: { email: process.env.EMAIL_SENDER, name: "HGSC² Digital Skills" },
-      to: [{ email, name: fullName }],
-      subject: "Verify Your HGSC² Digital Skills Account",
-      htmlContent,
-    };
-
-    // ✅ Send email with Brevo
     try {
-      await brevoEmailApi.sendTransacEmail(emailData);
+      await sendEmail(
+        email,
+        "Verify Your HGSC² Digital Skills Account",
+        htmlContent,
+        fullName
+      );
     } catch (error) {
       console.error(
         "❌ Registration error [brevo]:",

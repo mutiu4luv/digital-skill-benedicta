@@ -82,6 +82,7 @@ const assignmentSchema = new mongoose.Schema(
           required: true,
         },
         file: { type: String, required: true },
+        files: [{ type: String }],
         submittedAt: { type: Date, default: Date.now },
         grade: { type: Number, default: null },
         feedback: { type: String, default: "" },

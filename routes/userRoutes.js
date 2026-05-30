@@ -21,7 +21,30 @@ const upload = multer({
   limits: { fileSize: 5 * 1024 * 1024 },
 });
 
-router.post("/register", upload.single("profilePhoto"), registerUser);
+const uploadProfilePhoto = (req, res, next) => {
+  upload.single("profilePhoto")(req, res, (err) => {
+    if (err instanceof multer.MulterError && err.code === "LIMIT_FILE_SIZE") {
+      return res.status(400).json({
+        message:
+          "Profile image is too large. Maximum allowed size is 5MB. Please compress the image or choose a smaller one.",
+        stage: "multer",
+        error: "File too large",
+      });
+    }
+
+    if (err) {
+      return res.status(400).json({
+        message: "Invalid profile image upload.",
+        stage: "multer",
+        error: err.message,
+      });
+    }
+
+    next();
+  });
+};
+
+router.post("/register", uploadProfilePhoto, registerUser);
 router.post("/verify-email", verifyEmail);
 router.post("/login", loginUser);
 

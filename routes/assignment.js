@@ -27,7 +27,10 @@ router.get("/student", protect, getStudentAssignments);
 router.post(
   "/:assignmentId/submit",
   protect,
-  upload.single("file"),
+  upload.fields([
+    { name: "files", maxCount: 10 },
+    { name: "file", maxCount: 1 },
+  ]),
   multerErrorHandler,
   submitAssignment
 );
