@@ -8,6 +8,18 @@ const groupMessageSchema = new mongoose.Schema(
       required: true,
     },
     text: { type: String, required: true, trim: true },
+    likedBy: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+      },
+    ],
+    dislikedBy: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+      },
+    ],
   },
   { timestamps: true }
 );
@@ -16,7 +28,7 @@ const groupChatSchema = new mongoose.Schema(
   {
     channel: {
       type: String,
-      enum: ["users", "coaches"],
+      enum: ["students", "coaches"],
       unique: true,
       required: true,
     },
