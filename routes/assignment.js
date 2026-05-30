@@ -27,7 +27,7 @@ router.get("/student", protect, getStudentAssignments);
 router.post(
   "/:assignmentId/submit",
   protect,
-  upload.single("file"),
+  upload.any(),
   multerErrorHandler,
   submitAssignment
 );

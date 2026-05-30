@@ -2,17 +2,11 @@ import dotenv from "dotenv";
 dotenv.config();
 import cloudinary from "../config/cloudnary.js";
 
-import SibApiV3Sdk from "sib-api-v3-sdk";
 import streamifier from "streamifier";
 import User from "../module/userModule.js";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { sendEmail } from "../utilitis/sendEmail.js";
-
-// ✅ Initialize Brevo client safely
-const defaultClient = SibApiV3Sdk.ApiClient.instance;
-defaultClient.authentications["api-key"].apiKey = process.env.BREVO_API_KEY;
-const brevoEmailApi = new SibApiV3Sdk.TransactionalEmailsApi();
 
 // ✅ Cloudinary configuration
 // cloudinary.v2.config({
@@ -47,28 +41,48 @@ export const registerUser = async (req, res) => {
         .status(400)
         .json({ message: "Please accept the terms & conditions" });
 
-    const existingUser = await User.findOne({ email });
+    let existingUser;
+    try {
+      existingUser = await User.findOne({ email });
+    } catch (error) {
+      console.error("❌ Registration error [db]:", error);
+      return res.status(500).json({
+        message: "Registration failed at database check stage.",
+        stage: "db",
+        error: error.message,
+      });
+    }
+
     if (existingUser)
       return res.status(400).json({ message: "Email already registered" });
 
     // ✅ Upload profile photo if provided
     let profilePhoto = "";
     if (req.file && req.file.buffer) {
-      const uploadResult = await new Promise((resolve, reject) => {
-        const stream = cloudinary.uploader.upload_stream(
-          {
-            folder: "hgsc_users",
-            transformation: [{ width: 500, height: 500, crop: "fill" }],
-          },
-          (error, result) => {
-            if (error) reject(error);
-            else resolve(result);
-          }
-        );
-        streamifier.createReadStream(req.file.buffer).pipe(stream);
-      });
+      try {
+        const uploadResult = await new Promise((resolve, reject) => {
+          const stream = cloudinary.uploader.upload_stream(
+            {
+              folder: "hgsc_users",
+              transformation: [{ width: 500, height: 500, crop: "fill" }],
+            },
+            (error, result) => {
+              if (error) reject(error);
+              else resolve(result);
+            }
+          );
+          streamifier.createReadStream(req.file.buffer).pipe(stream);
+        });
 
-      profilePhoto = uploadResult.secure_url;
+        profilePhoto = uploadResult.secure_url;
+      } catch (error) {
+        console.error("❌ Registration error [cloudinary]:", error);
+        return res.status(500).json({
+          message: "Registration failed at image upload stage.",
+          stage: "cloudinary",
+          error: error.message,
+        });
+      }
     }
 
     // ✅ Hash password
@@ -108,15 +122,24 @@ export const registerUser = async (req, res) => {
       </div>
     `;
 
-    const emailData = {
-      sender: { email: process.env.EMAIL_SENDER, name: "HGSC² Digital Skills" },
-      to: [{ email, name: fullName }],
-      subject: "Verify Your HGSC² Digital Skills Account",
-      htmlContent,
-    };
-
-    // ✅ Send email with Brevo
-    await brevoEmailApi.sendTransacEmail(emailData);
+    try {
+      await sendEmail(
+        email,
+        "Verify Your HGSC² Digital Skills Account",
+        htmlContent,
+        fullName
+      );
+    } catch (error) {
+      console.error(
+        "❌ Registration error [brevo]:",
+        error.response?.body || error
+      );
+      return res.status(500).json({
+        message: "Registration failed at email delivery stage.",
+        stage: "brevo",
+        error: error.response?.body?.message || error.message,
+      });
+    }
 
     console.log(`✅ Verification email sent to ${email}`);
 
@@ -126,9 +149,10 @@ export const registerUser = async (req, res) => {
         "Verification code sent to your email. Please check your inbox or spam folder.",
     });
   } catch (error) {
-    console.error("❌ Registration error:", error.response?.body || error);
+    console.error("❌ Registration error [unknown]:", error.response?.body || error);
     res.status(500).json({
-      message: "Error during registration or sending verification email.",
+      message: "Registration failed at unknown stage.",
+      stage: "unknown",
       error: error.response?.body?.message || error.message,
     });
   }

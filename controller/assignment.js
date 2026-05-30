@@ -168,7 +168,13 @@ export const getStudentAssignments = async (req, res) => {
           description: a.description,
           courseName: a.courseId?.name || "N/A",
           dueDate,
-          file: submission?.file || null,
+          file: submission?.file || submission?.files?.[0] || null,
+          files:
+            Array.isArray(submission?.files) && submission.files.length > 0
+              ? submission.files
+              : submission?.file
+              ? [submission.file]
+              : [],
           status: submission ? "Submitted" : "Pending",
           grade: submission?.grade || "-",
           updatedAt: a.updatedAt,
@@ -278,36 +284,51 @@ export const getStudentAssignments = async (req, res) => {
 
 // submit assignment by student
 export const submitAssignment = async (req, res) => {
-  let filePath;
+  let localFilePaths = [];
   try {
     const studentId = req.user.id;
     const { assignmentId } = req.params;
-    const file = req.file;
-    filePath = file?.path;
+    const filesFromArray = Array.isArray(req.files) ? req.files : [];
+    const filesFromFields = Array.isArray(req.files?.files) ? req.files.files : [];
+    const filesFromBracketFields = Array.isArray(req.files?.["files[]"])
+      ? req.files["files[]"]
+      : [];
+    const fileFromSingle = Array.isArray(req.files?.file) ? req.files.file : [];
+    const oneFromReqFile = req.file ? [req.file] : [];
+    const files = [
+      ...filesFromArray,
+      ...filesFromFields,
+      ...filesFromBracketFields,
+      ...fileFromSingle,
+      ...oneFromReqFile,
+    ];
+    localFilePaths = files.map((f) => f.path).filter(Boolean);
 
     if (!assignmentId) {
       return res.status(400).json({ message: "Assignment ID is required" });
     }
 
     if (!mongoose.isValidObjectId(assignmentId)) {
-      deleteLocalFile(filePath);
+      localFilePaths.forEach(deleteLocalFile);
       return res.status(400).json({ message: "Invalid assignment ID" });
     }
 
-    if (!file) {
-      return res.status(400).json({ message: "Submission file is required" });
+    if (!files.length) {
+      return res
+        .status(400)
+        .json({ message: "At least one submission file is required" });
     }
 
     // 1️⃣ Find assignment
     const assignment = await Assignment.findById(assignmentId);
     if (!assignment) {
-      deleteLocalFile(filePath);
+      localFilePaths.forEach(deleteLocalFile);
       return res.status(404).json({ message: "Assignment not found" });
     }
 
     const hasAccess = await studentHasAssignmentAccess(assignment, studentId);
     if (!hasAccess) {
-      deleteLocalFile(filePath);
+      localFilePaths.forEach(deleteLocalFile);
       return res.status(403).json({
         message: "You do not have access to submit this assignment",
       });
@@ -319,7 +340,7 @@ export const submitAssignment = async (req, res) => {
     const dueDate = toEndOfDay(assignment.dueDate);
 
     if (dueDate && dueDate < now) {
-      deleteLocalFile(filePath);
+      localFilePaths.forEach(deleteLocalFile);
       return res.status(403).json({
         message: "Assignment has expired! Please submit before the due date.",
       });
@@ -338,26 +359,29 @@ export const submitAssignment = async (req, res) => {
     );
 
     if (alreadySubmitted) {
-      deleteLocalFile(filePath);
+      localFilePaths.forEach(deleteLocalFile);
       return res.status(400).json({
         message: "You have already submitted this assignment",
       });
     }
 
-    // 4️⃣ Upload submission to Cloudinary
-    const result = await cloudinary.uploader.upload(file.path, {
-      folder: "assignment_submissions",
-      resource_type: "auto", // supports all file types
-    });
-
-    // Delete local file after upload
-    deleteLocalFile(filePath);
-    filePath = null;
+    // 4️⃣ Upload submission files to Cloudinary
+    const uploadedFiles = [];
+    for (const currentFile of files) {
+      const result = await cloudinary.uploader.upload(currentFile.path, {
+        folder: "assignment_submissions",
+        resource_type: "auto", // supports all file types
+      });
+      uploadedFiles.push(result.secure_url);
+      deleteLocalFile(currentFile.path);
+    }
+    localFilePaths = [];
 
     // 5️⃣ Save submission in DB
     assignment.submissions.push({
       studentId: studentId,
-      file: result.secure_url, // Cloudinary URL
+      file: uploadedFiles[0] || null, // backward compatibility
+      files: uploadedFiles, // all uploaded files
       submittedAt: now,
       grade: null,
     });
@@ -366,11 +390,12 @@ export const submitAssignment = async (req, res) => {
 
     return res.status(200).json({
       message: "Assignment submitted successfully!",
-      file: result.secure_url,
+      file: uploadedFiles[0] || null,
+      files: uploadedFiles,
       submittedAt: now,
     });
   } catch (err) {
-    deleteLocalFile(filePath);
+    localFilePaths.forEach(deleteLocalFile);
     console.error("Submit Assignment Error:", err);
     return res.status(500).json({
       message: "Error submitting assignment",
@@ -426,7 +451,13 @@ export const getCoachAssignments = async (req, res) => {
               email: s.studentId.email,
             },
             studentId: s.studentId._id,
-            file: s.file || null,
+            file: s.file || s.files?.[0] || null,
+            files:
+              Array.isArray(s.files) && s.files.length > 0
+                ? s.files
+                : s.file
+                ? [s.file]
+                : [],
             grade: s.grade ?? null,
             feedback: s.feedback ?? null,
             submittedAt: s.submittedAt,

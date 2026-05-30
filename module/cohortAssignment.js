@@ -24,6 +24,7 @@ const assignmentSchema = new mongoose.Schema(
       {
         studentId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
         file: { type: String },
+        files: [{ type: String }],
         submittedAt: { type: Date, default: Date.now },
         grade: { type: Number },
         feedback: { type: String },
