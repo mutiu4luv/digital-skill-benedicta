@@ -8,15 +8,14 @@ const normalizeChannel = (channel) => {
 };
 
 const canAccessChannel = (role, channel) => {
-  if (channel === "students")
-    return ["student", "coach", "owner", "admin"].includes(role);
+  if (channel === "students") return ["student", "owner", "admin"].includes(role);
   if (channel === "coaches") return ["coach", "owner", "admin"].includes(role);
   return false;
 };
 
 const getAllowedChannels = (role) => {
   if (role === "student") return ["students"];
-  if (role === "coach") return ["coaches", "students"];
+  if (role === "coach") return ["coaches"];
   if (role === "owner" || role === "admin") return ["coaches", "students"];
   return [];
 };
