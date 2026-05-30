@@ -16,8 +16,8 @@ const canAccessChannel = (role, channel) => {
 
 const getAllowedChannels = (role) => {
   if (role === "student") return ["students"];
-  if (role === "coach") return ["students", "coaches"];
-  if (role === "owner" || role === "admin") return ["students", "coaches"];
+  if (role === "coach") return ["coaches", "students"];
+  if (role === "owner" || role === "admin") return ["coaches", "students"];
   return [];
 };
 
