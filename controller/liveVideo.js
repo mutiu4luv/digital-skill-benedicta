@@ -150,19 +150,34 @@ export const endLiveSession = async (req, res) => {
   const cohort = await Cohort.findById(cohortId);
   if (!cohort) return res.status(404).json({ message: "Cohort not found" });
 
-  // Use subdocument _id for matching
-  const course = cohort.courses.find((c) => c._id.toString() === courseId);
+  const course = cohort.courses.find(
+    (c) => c._id.toString() === courseId || c.courseId.toString() === courseId
+  );
   if (!course) return res.status(404).json({ message: "Course not found" });
 
   if (course.coachId.toString() !== coachId) {
     return res.status(403).json({ message: "Not authorized" });
   }
 
-  course.liveSession.isLive = false;
+  if (!course.liveSession) {
+    course.liveSession = { isLive: false, meetLink: "", startedAt: null };
+  } else {
+    course.liveSession.isLive = false;
+  }
+  cohort.markModified("courses");
   await cohort.save();
 
-  // 🔔 Notify students via socket
-  req.io.to(`${cohortId}:${courseId}`).emit("liveEnded", { courseId });
+  // Notify listeners in both room variants.
+  if (req.io) {
+    const roomBySubDocId = `${cohortId}:${course._id.toString()}`;
+    const roomByCourseId = `${cohortId}:${course.courseId.toString()}`;
+    const payload = {
+      courseId: course._id.toString(),
+      courseRefId: course.courseId.toString(),
+    };
+    req.io.to(roomBySubDocId).emit("liveEnded", payload);
+    req.io.to(roomByCourseId).emit("liveEnded", payload);
+  }
 
   res.json({ success: true });
 };
