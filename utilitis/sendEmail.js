@@ -18,7 +18,9 @@ const brevoEmailApi = new SibApiV3Sdk.TransactionalEmailsApi();
  */
 export const sendEmail = async (to, subject, htmlContent, name = "") => {
   const senderEmail =
-    process.env.EMAIL_SENDER || process.env.SENDER_EMAIL || process.env.EMAIL_USER;
+    process.env.EMAIL_SENDER ||
+    process.env.SENDER_EMAIL ||
+    process.env.EMAIL_USER;
   const senderName = process.env.SENDER_NAME || "HGSC² Digital Skills";
 
   if (!senderEmail) {
@@ -50,7 +52,9 @@ export const sendEmail = async (to, subject, htmlContent, name = "") => {
     if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
       throw Object.assign(
         new Error(
-          brevoError.response?.body?.message || brevoError.message || "Brevo failed"
+          brevoError.response?.body?.message ||
+            brevoError.message ||
+            "Brevo failed"
         ),
         { stage: "brevo" }
       );
