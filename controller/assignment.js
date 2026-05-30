@@ -290,11 +290,15 @@ export const submitAssignment = async (req, res) => {
     const { assignmentId } = req.params;
     const filesFromArray = Array.isArray(req.files) ? req.files : [];
     const filesFromFields = Array.isArray(req.files?.files) ? req.files.files : [];
+    const filesFromBracketFields = Array.isArray(req.files?.["files[]"])
+      ? req.files["files[]"]
+      : [];
     const fileFromSingle = Array.isArray(req.files?.file) ? req.files.file : [];
     const oneFromReqFile = req.file ? [req.file] : [];
     const files = [
       ...filesFromArray,
       ...filesFromFields,
+      ...filesFromBracketFields,
       ...fileFromSingle,
       ...oneFromReqFile,
     ];
