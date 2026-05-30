@@ -200,3 +200,89 @@ export const reactToGroupMessage = async (req, res) => {
     return res.status(500).json({ message: "Failed to react to message" });
   }
 };
+
+export const editGroupMessage = async (req, res) => {
+  try {
+    const channel = normalizeChannel(req.params.channel);
+    const { messageId } = req.params;
+    const { text } = req.body;
+    const userId = String(req.user._id);
+    const role = req.user.role;
+
+    if (!["students", "coaches"].includes(channel)) {
+      return res.status(400).json({ message: "Invalid chat channel" });
+    }
+    if (!text || !text.trim()) {
+      return res.status(400).json({ message: "Message text is required" });
+    }
+    if (!canAccessChannel(role, channel)) {
+      return res.status(403).json({ message: "Unauthorized for this chat channel" });
+    }
+
+    const chat = await GroupChat.findOne({ channel, "messages._id": messageId });
+    if (!chat) return res.status(404).json({ message: "Message not found" });
+
+    const msg = chat.messages.id(messageId);
+    if (!msg) return res.status(404).json({ message: "Message not found" });
+
+    const isOwner = String(msg.senderId) === userId;
+    const isAdmin = role === "owner" || role === "admin";
+    if (!isOwner && !isAdmin) {
+      return res.status(403).json({ message: "You can only edit your own message" });
+    }
+
+    msg.text = text.trim();
+    await chat.save();
+
+    const messageIndex = chat.messages.findIndex(
+      (m) => String(m._id) === String(messageId)
+    );
+    if (messageIndex >= 0) {
+      await chat.populate(
+        `messages.${messageIndex}.senderId`,
+        "fullName role profilePhoto"
+      );
+    }
+
+    return res.status(200).json({ message: chat.messages.id(messageId) });
+  } catch (error) {
+    console.error("❌ editGroupMessage error:", error);
+    return res.status(500).json({ message: "Failed to edit message" });
+  }
+};
+
+export const deleteGroupMessage = async (req, res) => {
+  try {
+    const channel = normalizeChannel(req.params.channel);
+    const { messageId } = req.params;
+    const userId = String(req.user._id);
+    const role = req.user.role;
+
+    if (!["students", "coaches"].includes(channel)) {
+      return res.status(400).json({ message: "Invalid chat channel" });
+    }
+    if (!canAccessChannel(role, channel)) {
+      return res.status(403).json({ message: "Unauthorized for this chat channel" });
+    }
+
+    const chat = await GroupChat.findOne({ channel, "messages._id": messageId });
+    if (!chat) return res.status(404).json({ message: "Message not found" });
+
+    const msg = chat.messages.id(messageId);
+    if (!msg) return res.status(404).json({ message: "Message not found" });
+
+    const isOwner = String(msg.senderId) === userId;
+    const isAdmin = role === "owner" || role === "admin";
+    if (!isOwner && !isAdmin) {
+      return res.status(403).json({ message: "You can only delete your own message" });
+    }
+
+    chat.messages.pull({ _id: messageId });
+    await chat.save();
+
+    return res.status(200).json({ success: true, messageId });
+  } catch (error) {
+    console.error("❌ deleteGroupMessage error:", error);
+    return res.status(500).json({ message: "Failed to delete message" });
+  }
+};
