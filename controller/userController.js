@@ -381,6 +381,15 @@ export const sendBroadcastEmail = async (req, res) => {
       return res.status(404).json({ message: "No recipients found for this audience" });
     }
 
+    // Deduplicate emails to avoid double sends when records are duplicated.
+    const uniqueRecipientsMap = new Map();
+    recipients.forEach((r) => {
+      const key = String(r.email || "").trim().toLowerCase();
+      if (!key) return;
+      if (!uniqueRecipientsMap.has(key)) uniqueRecipientsMap.set(key, r);
+    });
+    const uniqueRecipients = Array.from(uniqueRecipientsMap.values());
+
     const htmlContent = `
       <div style="font-family:Arial,sans-serif;line-height:1.6;">
         <h2 style="margin:0 0 12px 0;color:#0f766e;">HGSC² Digital Skills</h2>
@@ -388,26 +397,56 @@ export const sendBroadcastEmail = async (req, res) => {
       </div>
     `;
 
-    const results = await Promise.allSettled(
-      recipients.map((recipient) =>
-        sendEmail(
-          recipient.email,
-          subject,
-          htmlContent,
-          recipient.fullName || recipient.role
-        )
-      )
-    );
+    // Send in small batches to reduce provider throttling/rate-limit failures.
+    const batchSize = 20;
+    const failedRecipients = [];
+    let sent = 0;
 
-    const sent = results.filter((r) => r.status === "fulfilled").length;
-    const failed = results.length - sent;
+    for (let i = 0; i < uniqueRecipients.length; i += batchSize) {
+      const batch = uniqueRecipients.slice(i, i + batchSize);
+      const batchResults = await Promise.allSettled(
+        batch.map((recipient) =>
+          sendEmail(
+            recipient.email,
+            subject,
+            htmlContent,
+            recipient.fullName || recipient.role
+          )
+        )
+      );
+
+      batchResults.forEach((result, idx) => {
+        if (result.status === "fulfilled") {
+          sent += 1;
+        } else {
+          failedRecipients.push({
+            email: batch[idx]?.email,
+            reason: result.reason?.message || "Email failed",
+          });
+        }
+      });
+    }
+
+    const failed = failedRecipients.length;
+
+    if (sent === 0) {
+      return res.status(502).json({
+        message: "Broadcast failed: no email was sent",
+        audience,
+        totalRecipients: uniqueRecipients.length,
+        sent,
+        failed,
+        failedRecipients: failedRecipients.slice(0, 10),
+      });
+    }
 
     return res.status(200).json({
       message: "Broadcast process completed",
       audience,
-      totalRecipients: recipients.length,
+      totalRecipients: uniqueRecipients.length,
       sent,
       failed,
+      failedRecipients: failedRecipients.slice(0, 10),
     });
   } catch (error) {
     console.error("❌ Broadcast email error:", error);
