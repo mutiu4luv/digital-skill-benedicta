@@ -169,13 +169,14 @@ export const reactToGroupMessage = async (req, res) => {
     const likedSet = new Set((msg.likedBy || []).map((id) => String(id)));
     const dislikedSet = new Set((msg.dislikedBy || []).map((id) => String(id)));
 
+    // A user can hold only one reaction state at a time.
+    // Clicking like always sets like (and removes dislike).
+    // Clicking unlike(dislike) always sets dislike (and removes like).
     if (reaction === "like") {
-      if (likedSet.has(userId)) likedSet.delete(userId);
-      else likedSet.add(userId);
+      likedSet.add(userId);
       dislikedSet.delete(userId);
     } else {
-      if (dislikedSet.has(userId)) dislikedSet.delete(userId);
-      else dislikedSet.add(userId);
+      dislikedSet.add(userId);
       likedSet.delete(userId);
     }
 
