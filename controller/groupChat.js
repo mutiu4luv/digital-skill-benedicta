@@ -20,6 +20,8 @@ const getAllowedChannels = (role) => {
   return [];
 };
 
+const EDIT_WINDOW_MS = 20 * 60 * 1000;
+
 export const getChatChannels = async (req, res) => {
   const channels = getAllowedChannels(req.user.role);
   return res.status(200).json({ channels });
@@ -225,9 +227,13 @@ export const editGroupMessage = async (req, res) => {
     if (!msg) return res.status(404).json({ message: "Message not found" });
 
     const isOwner = String(msg.senderId) === userId;
-    const isAdmin = role === "owner" || role === "admin";
-    if (!isOwner && !isAdmin) {
+    if (!isOwner) {
       return res.status(403).json({ message: "You can only edit your own message" });
+    }
+    if (Date.now() - new Date(msg.createdAt).getTime() > EDIT_WINDOW_MS) {
+      return res.status(403).json({
+        message: "Messages can only be edited within 20 minutes",
+      });
     }
 
     msg.text = text.trim();
@@ -271,8 +277,7 @@ export const deleteGroupMessage = async (req, res) => {
     if (!msg) return res.status(404).json({ message: "Message not found" });
 
     const isOwner = String(msg.senderId) === userId;
-    const isAdmin = role === "owner" || role === "admin";
-    if (!isOwner && !isAdmin) {
+    if (!isOwner) {
       return res.status(403).json({ message: "You can only delete your own message" });
     }
 
