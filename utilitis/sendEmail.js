@@ -18,6 +18,11 @@ const withTimeout = (promise, ms, label) =>
     ),
   ]);
 
+const sanitizeSenderValue = (value) =>
+  String(value || "")
+    .trim()
+    .replace(/^['"]+|['"]+$/g, "");
+
 /**
  * Send email using Brevo (Sendinblue)
  * @param {string} to - Recipient email
@@ -26,17 +31,22 @@ const withTimeout = (promise, ms, label) =>
  * @param {string} name - Recipient name
  */
 export const sendEmail = async (to, subject, htmlContent, name = "") => {
-  const senderEmailRaw =
-    process.env.BREVO_SENDER_EMAIL ||
-    process.env.BREVO_FROM_EMAIL ||
-    process.env.BREVO_FROM ||
-    process.env.BREVO_SENDER ||
-    process.env.EMAIL_SENDER ||
-    process.env.MAIL_FROM ||
-    process.env.SENDER ||
-    process.env.SENDER_EMAIL ||
-    process.env.EMAIL_USER;
-  const senderEmailInput = String(senderEmailRaw || "").trim();
+  const senderCandidates = [
+    ["BREVO_SENDER_EMAIL", process.env.BREVO_SENDER_EMAIL],
+    ["BREVO_FROM_EMAIL", process.env.BREVO_FROM_EMAIL],
+    ["BREVO_FROM", process.env.BREVO_FROM],
+    ["BREVO_SENDER", process.env.BREVO_SENDER],
+    ["EMAIL_SENDER", process.env.EMAIL_SENDER],
+    ["MAIL_FROM", process.env.MAIL_FROM],
+    ["SENDER", process.env.SENDER],
+    ["SENDER_EMAIL", process.env.SENDER_EMAIL],
+    ["EMAIL_USER", process.env.EMAIL_USER],
+  ];
+  const firstSenderCandidate = senderCandidates.find(
+    ([, value]) => sanitizeSenderValue(value)
+  );
+  const senderSourceKey = firstSenderCandidate?.[0] || "none";
+  const senderEmailInput = sanitizeSenderValue(firstSenderCandidate?.[1]);
   const looksLikeDomainOnly =
     /^[a-z0-9.-]+\.[a-z]{2,}$/i.test(senderEmailInput) &&
     !senderEmailInput.includes("@");
@@ -52,6 +62,9 @@ export const sendEmail = async (to, subject, htmlContent, name = "") => {
     process.env.EMAIL_USER && process.env.EMAIL_PASS
   );
   const hasValidSenderEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(senderEmail);
+  const maskedSenderPreview = senderEmail
+    ? `${senderEmail.slice(0, 2)}***@${senderEmail.split("@")[1] || "unknown"}`
+    : "none";
 
   const sendViaSmtp = async () => {
     const transporter = nodemailer.createTransport({
@@ -81,6 +94,15 @@ export const sendEmail = async (to, subject, htmlContent, name = "") => {
   };
 
   if (!hasValidSenderEmail) {
+    console.error("❌ Email sender config invalid", {
+      senderSourceKey,
+      maskedSenderPreview,
+      looksLikeDomainOnly,
+      hasValidSenderEmail,
+      hasBrevoApiKey: Boolean(process.env.BREVO_API_KEY),
+      hasSmtpUser: Boolean(process.env.EMAIL_USER),
+      hasSmtpPass: Boolean(process.env.EMAIL_PASS),
+    });
     if (canUseSmtpFallback) {
       try {
         return await sendViaSmtp();
@@ -98,7 +120,7 @@ export const sendEmail = async (to, subject, htmlContent, name = "") => {
     );
   }
 
-  const sendSmtpEmail = new SibApiV3Sdk.SendSmtpEmail({
+  const sendSmtpEmail = {
     sender: {
       name: senderName,
       email: senderEmail,
@@ -106,9 +128,15 @@ export const sendEmail = async (to, subject, htmlContent, name = "") => {
     to: [{ email: to, name }],
     subject,
     htmlContent,
-  });
+  };
 
   try {
+    console.log("📨 Attempting Brevo send", {
+      senderSourceKey,
+      maskedSenderPreview,
+      hasValidSenderEmail,
+      hasBrevoApiKey: Boolean(process.env.BREVO_API_KEY),
+    });
     const response = await withTimeout(
       brevoEmailApi.sendTransacEmail(sendSmtpEmail),
       EMAIL_TIMEOUT_MS,
