@@ -3,19 +3,22 @@ import User from "../module/userModule.js";
 
 const normalizeChannel = (channel) => {
   const value = String(channel || "").toLowerCase();
-  if (value === "users") return "students";
+  if (value === "users" || value === "user") return "students";
   return value;
 };
 
 const canAccessChannel = (role, channel) => {
-  if (channel === "students") return ["student", "owner", "admin"].includes(role);
-  if (channel === "coaches") return ["coach", "owner", "admin"].includes(role);
+  const normalized = normalizeChannel(channel);
+  if (normalized === "students")
+    return ["student", "coach", "owner", "admin"].includes(role);
+  if (normalized === "coaches")
+    return ["coach", "owner", "admin"].includes(role);
   return false;
 };
 
 const getAllowedChannels = (role) => {
   if (role === "student") return ["students"];
-  if (role === "coach") return ["coaches"];
+  if (role === "coach") return ["coaches", "students"];
   if (role === "owner" || role === "admin") return ["coaches", "students"];
   return [];
 };
