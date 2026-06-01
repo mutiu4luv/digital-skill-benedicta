@@ -8,6 +8,15 @@ dotenv.config();
 const client = SibApiV3Sdk.ApiClient.instance;
 client.authentications["api-key"].apiKey = process.env.BREVO_API_KEY;
 const brevoEmailApi = new SibApiV3Sdk.TransactionalEmailsApi();
+const EMAIL_TIMEOUT_MS = 15000;
+
+const withTimeout = (promise, ms, label) =>
+  Promise.race([
+    promise,
+    new Promise((_, reject) =>
+      setTimeout(() => reject(new Error(`${label} timeout after ${ms}ms`)), ms)
+    ),
+  ]);
 
 /**
  * Send email using Brevo (Sendinblue)
@@ -23,8 +32,45 @@ export const sendEmail = async (to, subject, htmlContent, name = "") => {
     process.env.SENDER_EMAIL ||
     process.env.EMAIL_USER;
   const senderName = process.env.SENDER_NAME || "HGSC² Digital Skills";
+  const canUseSmtpFallback = Boolean(
+    process.env.EMAIL_USER && process.env.EMAIL_PASS
+  );
+
+  const sendViaSmtp = async () => {
+    const transporter = nodemailer.createTransport({
+      service: "gmail",
+      connectionTimeout: EMAIL_TIMEOUT_MS,
+      greetingTimeout: EMAIL_TIMEOUT_MS,
+      socketTimeout: EMAIL_TIMEOUT_MS,
+      auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS,
+      },
+    });
+
+    await withTimeout(
+      transporter.sendMail({
+        from: `"${senderName}" <${process.env.EMAIL_USER}>`,
+        to,
+        subject,
+        html: htmlContent,
+      }),
+      EMAIL_TIMEOUT_MS,
+      "SMTP send"
+    );
+
+    console.log("✅ Email sent successfully via SMTP fallback");
+    return { provider: "smtp_fallback" };
+  };
 
   if (!senderEmail) {
+    if (canUseSmtpFallback) {
+      try {
+        return await sendViaSmtp();
+      } catch (smtpError) {
+        console.error("❌ SMTP fallback email error:", smtpError);
+      }
+    }
     throw Object.assign(
       new Error(
         "Missing sender email configuration. Set BREVO_SENDER_EMAIL or EMAIL_SENDER."
@@ -46,7 +92,11 @@ export const sendEmail = async (to, subject, htmlContent, name = "") => {
   });
 
   try {
-    const response = await brevoEmailApi.sendTransacEmail(sendSmtpEmail);
+    const response = await withTimeout(
+      brevoEmailApi.sendTransacEmail(sendSmtpEmail),
+      EMAIL_TIMEOUT_MS,
+      "Brevo send"
+    );
     console.log("✅ Email sent successfully via Brevo:", response);
     return { provider: "brevo" };
   } catch (brevoError) {
@@ -55,7 +105,7 @@ export const sendEmail = async (to, subject, htmlContent, name = "") => {
       brevoError.response?.body || brevoError
     );
 
-    if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
+    if (!canUseSmtpFallback) {
       throw Object.assign(
         new Error(
           brevoError.response?.body?.message ||
@@ -67,23 +117,7 @@ export const sendEmail = async (to, subject, htmlContent, name = "") => {
     }
 
     try {
-      const transporter = nodemailer.createTransport({
-        service: "gmail",
-        auth: {
-          user: process.env.EMAIL_USER,
-          pass: process.env.EMAIL_PASS,
-        },
-      });
-
-      await transporter.sendMail({
-        from: `"${senderName}" <${process.env.EMAIL_USER}>`,
-        to,
-        subject,
-        html: htmlContent,
-      });
-
-      console.log("✅ Email sent successfully via SMTP fallback");
-      return { provider: "smtp_fallback" };
+      return await sendViaSmtp();
     } catch (smtpError) {
       console.error("❌ SMTP fallback email error:", smtpError);
       throw Object.assign(
