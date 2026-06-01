@@ -104,10 +104,6 @@ export const registerUser = async (req, res) => {
       createdAt: Date.now(),
     });
 
-    // ✅ Setup Brevo client here
-    const defaultClient = SibApiV3Sdk.ApiClient.instance;
-    defaultClient.authentications["api-key"].apiKey = process.env.BREVO_API_KEY;
-    const brevoEmailApi = new SibApiV3Sdk.TransactionalEmailsApi();
 
     // ✅ Construct email content
     const htmlContent = `
@@ -608,17 +604,12 @@ export const forgotPassword = async (req, res) => {
       </div>
     `;
 
-    const emailData = {
-      sender: {
-        email: process.env.EMAIL_SENDER,
-        name: "HGSC² Digital Skills",
-      },
-      to: [{ email: user.email, name: user.fullName }],
-      subject: "Reset Your Password",
+    await sendEmail(
+      user.email,
+      "Reset Your Password",
       htmlContent,
-    };
-
-    await brevoEmailApi.sendTransacEmail(emailData);
+      user.fullName
+    );
 
     res.status(200).json({
       message: "Password reset code sent to your email",
