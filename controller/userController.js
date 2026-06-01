@@ -76,12 +76,10 @@ export const registerUser = async (req, res) => {
 
         profilePhoto = uploadResult.secure_url;
       } catch (error) {
-        console.error("❌ Registration error [cloudinary]:", error);
-        return res.status(500).json({
-          message: "Registration failed at image upload stage.",
-          stage: "cloudinary",
-          error: error.message,
-        });
+        // Keep registration flow alive even when Cloudinary times out/fails.
+        // User can still verify email and update profile photo later.
+        console.error("⚠️ Registration warning [cloudinary]:", error?.message || error);
+        profilePhoto = "";
       }
     }
 
