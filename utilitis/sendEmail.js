@@ -36,7 +36,13 @@ export const sendEmail = async (to, subject, htmlContent, name = "") => {
     process.env.SENDER ||
     process.env.SENDER_EMAIL ||
     process.env.EMAIL_USER;
-  const senderEmail = String(senderEmailRaw || "").trim();
+  const senderEmailInput = String(senderEmailRaw || "").trim();
+  const looksLikeDomainOnly =
+    /^[a-z0-9.-]+\.[a-z]{2,}$/i.test(senderEmailInput) &&
+    !senderEmailInput.includes("@");
+  const senderEmail = looksLikeDomainOnly
+    ? `noreply@${senderEmailInput}`
+    : senderEmailInput;
   const senderName =
     process.env.SENDER_NAME ||
     process.env.BREVO_SENDER_NAME ||
