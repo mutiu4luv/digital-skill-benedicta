@@ -104,6 +104,19 @@ io.on("connection", (socket) => {
     console.log(`Socket ${socket.id} joined ${roomName}`);
   });
 
+  socket.on("groupChatTyping", (payload = {}) => {
+    const channel = String(payload.channel || "").toLowerCase();
+    if (!["students", "coaches"].includes(channel)) return;
+
+    const roomName = `group-chat:${channel}`;
+    socket.to(roomName).emit("groupChatTyping", {
+      channel,
+      userId: payload.userId || "",
+      firstName: payload.firstName || "User",
+      isTyping: Boolean(payload.isTyping),
+    });
+  });
+
   socket.on("disconnect", () => {
     console.log("User disconnected:", socket.id);
   });
