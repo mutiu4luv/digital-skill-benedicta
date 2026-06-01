@@ -26,15 +26,26 @@ const withTimeout = (promise, ms, label) =>
  * @param {string} name - Recipient name
  */
 export const sendEmail = async (to, subject, htmlContent, name = "") => {
-  const senderEmail =
+  const senderEmailRaw =
     process.env.BREVO_SENDER_EMAIL ||
+    process.env.BREVO_FROM_EMAIL ||
+    process.env.BREVO_FROM ||
+    process.env.BREVO_SENDER ||
     process.env.EMAIL_SENDER ||
+    process.env.MAIL_FROM ||
+    process.env.SENDER ||
     process.env.SENDER_EMAIL ||
     process.env.EMAIL_USER;
-  const senderName = process.env.SENDER_NAME || "HGSC² Digital Skills";
+  const senderEmail = String(senderEmailRaw || "").trim();
+  const senderName =
+    process.env.SENDER_NAME ||
+    process.env.BREVO_SENDER_NAME ||
+    process.env.BREVO_FROM_NAME ||
+    "HGSC² Digital Skills";
   const canUseSmtpFallback = Boolean(
     process.env.EMAIL_USER && process.env.EMAIL_PASS
   );
+  const hasValidSenderEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(senderEmail);
 
   const sendViaSmtp = async () => {
     const transporter = nodemailer.createTransport({
@@ -63,7 +74,7 @@ export const sendEmail = async (to, subject, htmlContent, name = "") => {
     return { provider: "smtp_fallback" };
   };
 
-  if (!senderEmail) {
+  if (!hasValidSenderEmail) {
     if (canUseSmtpFallback) {
       try {
         return await sendViaSmtp();
@@ -73,7 +84,7 @@ export const sendEmail = async (to, subject, htmlContent, name = "") => {
     }
     throw Object.assign(
       new Error(
-        "Missing sender email configuration. Set BREVO_SENDER_EMAIL or EMAIL_SENDER."
+        "Missing/invalid sender email configuration. Set BREVO_SENDER_EMAIL (or BREVO_FROM_EMAIL / EMAIL_SENDER)."
       ),
       {
       stage: "brevo",
