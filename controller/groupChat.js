@@ -129,6 +129,11 @@ export const sendGroupMessage = async (req, res) => {
     await chat.populate(`messages.${savedIndex}.senderId`, "fullName role profilePhoto");
     const saved = chat.messages[savedIndex];
 
+    req.io?.to(`group-chat:${channel}`).emit("groupChatMessage", {
+      channel,
+      message: saved,
+    });
+
     return res.status(201).json({ channel, message: saved });
   } catch (error) {
     console.error("❌ sendGroupMessage error:", error);
