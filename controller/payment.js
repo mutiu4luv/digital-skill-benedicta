@@ -216,12 +216,13 @@ export const getPendingConfirmationStudents = async (req, res) => {
 
         student.enrollments.forEach((enrollment) => {
           const proofOfPayment = getEnrollmentProof(enrollment);
+          const paymentStatus = enrollment.paymentStatus || "pending";
 
           // ✅ ONLY REAL PENDING PAYMENTS
           if (
             enrollment.paymentConfirmed === true ||
-            enrollment.paymentStatus === "rejected" ||
-            (!enrollment.paid && !proofOfPayment)
+            paymentStatus === "rejected" ||
+            (paymentStatus !== "pending" && !enrollment.paid && !proofOfPayment)
           ) {
             return;
           }
@@ -234,7 +235,7 @@ export const getPendingConfirmationStudents = async (req, res) => {
 
             paid: enrollment.paid,
             paymentConfirmed: enrollment.paymentConfirmed,
-            paymentStatus: enrollment.paymentStatus || "pending",
+            paymentStatus,
 
             registeredCohort: {
               cohortId: cohort._id,
@@ -370,17 +371,21 @@ export const confirmCoursePayment = async (req, res) => {
       // ✅ Student submitted payment, but admin must confirm
       studentEntry.enrollments.push({
         courseId,
-        paid: false,
+        paid: true,
         paymentConfirmed: false, // initially false
+        paymentStatus: "pending",
         hasAccess: false, // initially false
         paidAt: new Date(),
+        registeredAt: new Date(),
       });
     } else {
       // Update existing enrollment
-      enrollment.paid = false;
+      enrollment.paid = true;
       enrollment.paymentConfirmed = false; // reset in case admin needs to confirm
+      enrollment.paymentStatus = "pending";
       enrollment.hasAccess = false; // reset access
       enrollment.paidAt = new Date();
+      enrollment.registeredAt = enrollment.registeredAt || new Date();
     }
 
     await foundCohort.save();

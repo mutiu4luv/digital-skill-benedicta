@@ -21,6 +21,62 @@ const streamUpload = (buffer, folder, resourceType) => {
   });
 };
 
+const isValidDateValue = (value) =>
+  value instanceof Date && !Number.isNaN(value.getTime());
+
+const findAssignedCohortCourse = async ({ coachId, courseId, cohortId }) => {
+  if (
+    !mongoose.Types.ObjectId.isValid(coachId) ||
+    !mongoose.Types.ObjectId.isValid(courseId) ||
+    !mongoose.Types.ObjectId.isValid(cohortId)
+  ) {
+    return null;
+  }
+
+  return Cohort.findOne({
+    _id: cohortId,
+    courses: {
+      $elemMatch: {
+        courseId,
+        coachId,
+      },
+    },
+  }).lean();
+};
+
+const canCoachManageCourse = async ({ coachId, courseId }) => {
+  if (
+    !mongoose.Types.ObjectId.isValid(coachId) ||
+    !mongoose.Types.ObjectId.isValid(courseId)
+  ) {
+    return false;
+  }
+
+  const [course, assignedCohort] = await Promise.all([
+    Course.findById(courseId).select("coach"),
+    Cohort.findOne({
+      courses: {
+        $elemMatch: {
+          courseId,
+          coachId,
+        },
+      },
+    })
+      .select("_id")
+      .lean(),
+  ]);
+
+  if (!course) return { course: null, allowed: false };
+
+  const ownedByCoach =
+    course.coach && String(course.coach) === String(coachId);
+
+  return {
+    course,
+    allowed: ownedByCoach || Boolean(assignedCohort),
+  };
+};
+
 // =============================================
 //  COACH UPLOAD COHORT VIDEO (upload anytime)
 //  Coach chooses classStartTime from frontend
@@ -40,27 +96,28 @@ export const uploadVideo = async (req, res) => {
     if (!cohortId)
       return res.status(400).json({ message: "Cohort ID is required" });
 
-    // Validate course
-    const course = await Course.findById(courseId);
-    if (!course) return res.status(404).json({ message: "Course not found" });
+    const [{ course, allowed }, assignedCohort] = await Promise.all([
+      canCoachManageCourse({ coachId, courseId }),
+      findAssignedCohortCourse({ coachId, courseId, cohortId }),
+    ]);
 
-    // Validate ownership
-    if (!course.coach.equals(coachId))
-      return res
-        .status(403)
-        .json({ message: "You are not authorized. This is not your course." });
+    if (!course) return res.status(404).json({ message: "Course not found" });
+    if (!allowed) {
+      return res.status(403).json({
+        message: "You are not authorized to upload for this course.",
+      });
+    }
+    if (!assignedCohort) {
+      return res.status(400).json({
+        message: "This course is not assigned to you in the selected cohort.",
+      });
+    }
 
     // Convert classStartTime to UTC Date
     const startTime = new Date(classStartTime);
-    const utcStartTime = new Date(
-      startTime.getUTCFullYear(),
-      startTime.getUTCMonth(),
-      startTime.getUTCDate(),
-      startTime.getUTCHours(),
-      startTime.getUTCMinutes(),
-      0,
-      0
-    );
+    if (!isValidDateValue(startTime)) {
+      return res.status(400).json({ message: "Invalid class start time" });
+    }
 
     // Upload video to Cloudinary
     const uploadResult = await streamUpload(
@@ -77,7 +134,7 @@ export const uploadVideo = async (req, res) => {
       coach: coachId,
       course: courseId,
       cohortId: cohortId,
-      unlockAt: utcStartTime, // store in UTC
+      unlockAt: startTime,
     });
 
     return res.status(201).json({
@@ -108,17 +165,21 @@ export const uploadDocument = async (req, res) => {
         .json({ message: "Course and unlock time required" });
     }
 
-    const course = await Course.findById(courseId);
+    const { course, allowed } = await canCoachManageCourse({ coachId, courseId });
     if (!course) {
       return res.status(404).json({ message: "Course not found" });
     }
-
-    if (!course.coach.equals(coachId)) {
-      return res.status(403).json({ message: "Unauthorized" });
+    if (!allowed) {
+      return res.status(403).json({
+        message: "You are not authorized to upload for this course.",
+      });
     }
 
     // ✅ CORRECT: Do NOT manually adjust time
     const utcUnlockTime = new Date(unlockAt);
+    if (!isValidDateValue(utcUnlockTime)) {
+      return res.status(400).json({ message: "Invalid unlock time" });
+    }
 
     const uploadResult = await streamUpload(
       req.file.buffer,
