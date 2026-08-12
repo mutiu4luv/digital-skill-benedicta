@@ -1,4 +1,5 @@
 import GroupChat from "../module/groupChat.js";
+import GroupChatReadState from "../module/groupChatReadState.js";
 import User from "../module/userModule.js";
 
 const normalizeChannel = (channel) => {
@@ -23,11 +24,70 @@ const getAllowedChannels = (role) => {
   return [];
 };
 
+const getLatestMessageTimestamp = (chat) => {
+  const messages = Array.isArray(chat?.messages) ? chat.messages : [];
+  const latest = messages[messages.length - 1];
+  if (!latest) return new Date();
+
+  const latestDate = new Date(latest.createdAt || latest.updatedAt || Date.now());
+  return Number.isNaN(latestDate.getTime()) ? new Date() : latestDate;
+};
+
 const EDIT_WINDOW_MS = 20 * 60 * 1000;
 
 export const getChatChannels = async (req, res) => {
   const channels = getAllowedChannels(req.user.role);
   return res.status(200).json({ channels });
+};
+
+export const getGroupUnreadSummary = async (req, res) => {
+  try {
+    const channels = getAllowedChannels(req.user.role);
+    const userId = String(req.user._id);
+
+    const [chats, readStates] = await Promise.all([
+      GroupChat.find({ channel: { $in: channels } }).lean(),
+      GroupChatReadState.find({
+        userId: req.user._id,
+        channel: { $in: channels },
+      }).lean(),
+    ]);
+
+    const chatMap = new Map(chats.map((chat) => [chat.channel, chat]));
+    const readStateMap = new Map(
+      readStates.map((state) => [state.channel, new Date(state.lastReadAt || 0)])
+    );
+
+    const unreadByChannel = {};
+    let total = 0;
+
+    for (const channel of channels) {
+      const chat = chatMap.get(channel);
+      const messages = Array.isArray(chat?.messages) ? chat.messages : [];
+      const lastReadAt = readStateMap.get(channel) || new Date(0);
+
+      const count = messages.filter((message) => {
+        const senderId = message?.senderId?._id || message?.senderId;
+        const createdAt = new Date(
+          message?.createdAt || message?.updatedAt || 0
+        );
+
+        return (
+          !Number.isNaN(createdAt.getTime()) &&
+          createdAt > lastReadAt &&
+          String(senderId) !== userId
+        );
+      }).length;
+
+      unreadByChannel[channel] = count;
+      total += count;
+    }
+
+    return res.status(200).json({ unreadByChannel, total });
+  } catch (error) {
+    console.error("❌ getGroupUnreadSummary error:", error);
+    return res.status(500).json({ message: "Failed to load unread chat summary" });
+  }
 };
 
 export const getGroupMessages = async (req, res) => {
@@ -141,6 +201,47 @@ export const sendGroupMessage = async (req, res) => {
   } catch (error) {
     console.error("❌ sendGroupMessage error:", error);
     return res.status(500).json({ message: "Failed to send group message" });
+  }
+};
+
+export const markGroupChannelRead = async (req, res) => {
+  try {
+    const channel = normalizeChannel(req.params.channel);
+
+    if (!["students", "coaches"].includes(channel)) {
+      return res.status(400).json({ message: "Invalid chat channel" });
+    }
+
+    if (!canAccessChannel(req.user.role, channel)) {
+      return res.status(403).json({ message: "Unauthorized for this chat channel" });
+    }
+
+    let chat = await GroupChat.findOne({ channel }).lean();
+
+    if (!chat && channel === "students") {
+      const legacy = await GroupChat.findOne({ channel: "users" });
+      if (legacy) {
+        legacy.channel = "students";
+        await legacy.save();
+        chat = await GroupChat.findOne({ channel: "students" }).lean();
+      }
+    }
+
+    const lastReadAt = getLatestMessageTimestamp(chat);
+
+    await GroupChatReadState.findOneAndUpdate(
+      { userId: req.user._id, channel },
+      { $max: { lastReadAt } },
+      { upsert: true, new: true, setDefaultsOnInsert: true }
+    );
+
+    return res.status(200).json({
+      channel,
+      lastReadAt: lastReadAt.toISOString(),
+    });
+  } catch (error) {
+    console.error("❌ markGroupChannelRead error:", error);
+    return res.status(500).json({ message: "Failed to mark chat as read" });
   }
 };
 
