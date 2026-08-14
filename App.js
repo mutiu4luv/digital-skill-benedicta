@@ -27,6 +27,9 @@ import selfLearningRoutes from "./routes/selfLearning.js";
 import freeCourseRoute from "./routes/freeCourse.js";
 import directChatRoutes from "./routes/directChat.js";
 import groupChatRoutes from "./routes/groupChat.js";
+import jwt from "jsonwebtoken";
+import User from "./module/userModule.js";
+import Cohort from "./module/cohort.js";
 
 dotenv.config();
 
@@ -76,28 +79,141 @@ app.use((req, res, next) => {
   next();
 });
 
-// Socket.IO connection
-io.on("connection", (socket) => {
-  console.log("User connected:", socket.id);
+const normalizeGroupChannel = (value) => {
+  const channel = String(value || "").toLowerCase();
+  if (channel === "users" || channel === "user") return "students";
+  return channel;
+};
 
-  socket.on("joinCohort", (payload = {}) => {
-    const { cohortId, courseId, room } = payload;
-    const resolvedRoom =
-      room || (cohortId && courseId ? `${cohortId}:${courseId}` : null);
+const canAccessGroupChannel = (role, channel) => {
+  if (channel === "students") {
+    return ["student", "coach", "owner", "admin"].includes(role);
+  }
+  if (channel === "coaches") {
+    return ["coach", "owner", "admin"].includes(role);
+  }
+  return false;
+};
 
-    if (!resolvedRoom) {
-      console.warn("joinCohort called without valid room payload:", payload);
-      return;
+const canJoinCohortRoom = async ({ user, cohortId, courseId }) => {
+  if (!user || !cohortId || !courseId) return false;
+
+  const cohort = await Cohort.findById(cohortId).lean();
+  if (!cohort) return false;
+
+  const userId = String(user._id || user.id);
+  const role = user.role;
+
+  if (["owner", "admin"].includes(role)) return true;
+
+  const course = Array.isArray(cohort.courses)
+    ? cohort.courses.find((entry) => String(entry.courseId) === String(courseId))
+    : null;
+
+  if (!course) return false;
+
+  if (role === "coach") {
+    return String(course.coachId) === userId;
+  }
+
+  if (role === "student") {
+    const studentEntry = Array.isArray(cohort.studentIds)
+      ? cohort.studentIds.find((entry) => String(entry.studentId) === userId)
+      : null;
+
+    return Boolean(
+      studentEntry &&
+        Array.isArray(studentEntry.enrollments) &&
+        studentEntry.enrollments.some(
+          (enrollment) =>
+            String(enrollment.courseId) === String(courseId) &&
+            enrollment.hasAccess === true
+        )
+    );
+  }
+
+  return false;
+};
+
+io.use(async (socket, next) => {
+  try {
+    const rawToken =
+      socket.handshake.auth?.token ||
+      socket.handshake.headers?.authorization?.replace(/^Bearer\s+/i, "");
+
+    if (!rawToken) {
+      return next(new Error("Authentication required"));
     }
 
-    const roomName = String(resolvedRoom);
-    socket.join(roomName);
-    console.log(`Socket ${socket.id} joined ${roomName}`);
+    const decoded = jwt.verify(rawToken, process.env.JWT_SECRET);
+    const user = await User.findById(decoded.id).select("_id fullName role").lean();
+
+    if (!user) {
+      return next(new Error("Authenticated user not found"));
+    }
+
+    socket.data.user = user;
+    next();
+  } catch (error) {
+    next(new Error("Invalid socket token"));
+  }
+});
+
+// Socket.IO connection
+io.on("connection", (socket) => {
+  console.log("User connected:", socket.id, socket.data.user?.role || "unknown");
+
+  socket.on("joinCohort", async (payload = {}) => {
+    try {
+      const { cohortId, courseId, room } = payload;
+      const resolvedRoom =
+        room || (cohortId && courseId ? `${cohortId}:${courseId}` : null);
+
+      if (!resolvedRoom || !cohortId || !courseId) {
+        console.warn("joinCohort called without valid room payload:", payload);
+        socket.emit("socketError", {
+          type: "joinCohort",
+          message: "A valid cohort room is required.",
+        });
+        return;
+      }
+
+      const allowed = await canJoinCohortRoom({
+        user: socket.data.user,
+        cohortId,
+        courseId,
+      });
+
+      if (!allowed) {
+        socket.emit("socketError", {
+          type: "joinCohort",
+          message: "You are not allowed to join this class room.",
+        });
+        return;
+      }
+
+      const roomName = String(resolvedRoom);
+      socket.join(roomName);
+      console.log(`Socket ${socket.id} joined ${roomName}`);
+    } catch (error) {
+      console.error("joinCohort socket error:", error);
+      socket.emit("socketError", {
+        type: "joinCohort",
+        message: "Failed to join the class room.",
+      });
+    }
   });
 
   socket.on("joinGroupChat", (payload = {}) => {
-    const channel = String(payload.channel || "").toLowerCase();
-    if (!["students", "coaches"].includes(channel)) return;
+    const channel = normalizeGroupChannel(payload.channel);
+    const role = socket.data.user?.role;
+    if (!["students", "coaches"].includes(channel) || !canAccessGroupChannel(role, channel)) {
+      socket.emit("socketError", {
+        type: "joinGroupChat",
+        message: "You are not allowed to join this group chat.",
+      });
+      return;
+    }
 
     const roomName = `group-chat:${channel}`;
     socket.join(roomName);
@@ -105,14 +221,17 @@ io.on("connection", (socket) => {
   });
 
   socket.on("groupChatTyping", (payload = {}) => {
-    const channel = String(payload.channel || "").toLowerCase();
-    if (!["students", "coaches"].includes(channel)) return;
+    const channel = normalizeGroupChannel(payload.channel);
+    const role = socket.data.user?.role;
+    if (!["students", "coaches"].includes(channel) || !canAccessGroupChannel(role, channel)) {
+      return;
+    }
 
     const roomName = `group-chat:${channel}`;
     socket.to(roomName).emit("groupChatTyping", {
       channel,
-      userId: payload.userId || "",
-      firstName: payload.firstName || "User",
+      userId: socket.data.user?._id || "",
+      firstName: payload.firstName || socket.data.user?.fullName || "User",
       isTyping: Boolean(payload.isTyping),
     });
   });
