@@ -1,6 +1,7 @@
 import Material from "../module/coachUpload.js";
 import cloudinary from "../config/cloudnary.js";
 import User from "../module/userModule.js";
+import fs from "fs";
 import streamifier from "streamifier";
 import Course from "../module/course.js";
 import Cohort from "../module/cohort.js";
@@ -11,7 +12,7 @@ import moment from "moment";
 const streamUpload = (buffer, folder, resourceType) => {
   return new Promise((resolve, reject) => {
     const stream = cloudinary.uploader.upload_stream(
-      { folder, resource_type: resourceType },
+      { folder, resource_type: resourceType, timeout: 120000 },
       (error, result) => {
         if (result) resolve(result);
         else reject(error);
@@ -23,6 +24,51 @@ const streamUpload = (buffer, folder, resourceType) => {
 
 const isValidDateValue = (value) =>
   value instanceof Date && !Number.isNaN(value.getTime());
+
+
+const removeTempFile = (filePath) => {
+  if (!filePath) return;
+  fs.unlink(filePath, (err) => {
+    if (err) console.error("Failed to delete temp file:", err);
+  });
+};
+
+const uploadCoachFile = async (file, folder, resourceType) => {
+  if (file?.path) {
+    return cloudinary.uploader.upload(file.path, {
+      folder,
+      resource_type: resourceType,
+      timeout: resourceType === "video" ? 180000 : 120000,
+    });
+  }
+
+  if (file?.buffer) {
+    return streamUpload(file.buffer, folder, resourceType);
+  }
+
+  throw new Error("Uploaded file payload is missing");
+};
+
+const getCloudinaryPublicIdFromUrl = (fileUrl) => {
+  if (!fileUrl) return "";
+
+  try {
+    const url = new URL(fileUrl);
+    const segments = url.pathname.split("/").filter(Boolean);
+    const uploadIndex = segments.findIndex((segment) => segment === "upload");
+    if (uploadIndex < 0) return "";
+
+    const publicSegments = segments.slice(uploadIndex + 1);
+    if (publicSegments[0] && /^v\d+$/.test(publicSegments[0])) {
+      publicSegments.shift();
+    }
+
+    const joined = publicSegments.join("/");
+    return joined.replace(/\.[^./]+$/, "");
+  } catch {
+    return "";
+  }
+};
 
 const findAssignedCohortCourse = async ({ coachId, courseId, cohortId }) => {
   if (
@@ -95,38 +141,41 @@ export const uploadVideo = async (req, res) => {
       return res.status(400).json({ message: "Class start time is required" });
     if (!cohortId)
       return res.status(400).json({ message: "Cohort ID is required" });
+    if (req.file.size > 20 * 1024 * 1024) {
+      removeTempFile(req.file.path);
+      return res.status(400).json({ message: "Video must not exceed 20MB" });
+    }
 
     const [{ course, allowed }, assignedCohort] = await Promise.all([
       canCoachManageCourse({ coachId, courseId }),
       findAssignedCohortCourse({ coachId, courseId, cohortId }),
     ]);
 
-    if (!course) return res.status(404).json({ message: "Course not found" });
+    if (!course) {
+      removeTempFile(req.file.path);
+      return res.status(404).json({ message: "Course not found" });
+    }
     if (!allowed) {
+      removeTempFile(req.file.path);
       return res.status(403).json({
         message: "You are not authorized to upload for this course.",
       });
     }
     if (!assignedCohort) {
+      removeTempFile(req.file.path);
       return res.status(400).json({
         message: "This course is not assigned to you in the selected cohort.",
       });
     }
 
-    // Convert classStartTime to UTC Date
     const startTime = new Date(classStartTime);
     if (!isValidDateValue(startTime)) {
+      removeTempFile(req.file.path);
       return res.status(400).json({ message: "Invalid class start time" });
     }
 
-    // Upload video to Cloudinary
-    const uploadResult = await streamUpload(
-      req.file.buffer,
-      "HGSC-videos",
-      "video"
-    );
+    const uploadResult = await uploadCoachFile(req.file, "HGSC-videos", "video");
 
-    // Save material in DB
     const material = await Material.create({
       title,
       fileUrl: uploadResult.secure_url,
@@ -137,15 +186,19 @@ export const uploadVideo = async (req, res) => {
       unlockAt: startTime,
     });
 
+    removeTempFile(req.file.path);
+
     return res.status(201).json({
       message: "🎥 Video uploaded successfully",
       material,
     });
   } catch (error) {
+    removeTempFile(req.file?.path);
     console.error("❌ Upload Video Error:", error);
-    return res
-      .status(500)
-      .json({ message: "Video upload failed", error: error.message });
+    return res.status(500).json({
+      message: "Video upload failed",
+      error: error.message,
+    });
   }
 };
 
@@ -160,32 +213,35 @@ export const uploadDocument = async (req, res) => {
     }
 
     if (!courseId || !unlockAt) {
+      removeTempFile(req.file.path);
       return res
         .status(400)
         .json({ message: "Course and unlock time required" });
     }
+    if (req.file.size > 8 * 1024 * 1024) {
+      removeTempFile(req.file.path);
+      return res.status(400).json({ message: "Document must not exceed 8MB" });
+    }
 
     const { course, allowed } = await canCoachManageCourse({ coachId, courseId });
     if (!course) {
+      removeTempFile(req.file.path);
       return res.status(404).json({ message: "Course not found" });
     }
     if (!allowed) {
+      removeTempFile(req.file.path);
       return res.status(403).json({
         message: "You are not authorized to upload for this course.",
       });
     }
 
-    // ✅ CORRECT: Do NOT manually adjust time
     const utcUnlockTime = new Date(unlockAt);
     if (!isValidDateValue(utcUnlockTime)) {
+      removeTempFile(req.file.path);
       return res.status(400).json({ message: "Invalid unlock time" });
     }
 
-    const uploadResult = await streamUpload(
-      req.file.buffer,
-      "documents",
-      "auto"
-    );
+    const uploadResult = await uploadCoachFile(req.file, "documents", "auto");
 
     const document = await Material.create({
       title,
@@ -196,11 +252,14 @@ export const uploadDocument = async (req, res) => {
       unlockAt: utcUnlockTime,
     });
 
+    removeTempFile(req.file.path);
+
     return res.status(201).json({
       message: "✅ Document uploaded successfully",
       document,
     });
   } catch (error) {
+    removeTempFile(req.file?.path);
     console.error("❌ Document upload failed:", error);
     return res.status(500).json({
       message: "Document upload failed",
@@ -507,27 +566,54 @@ export const getAssignedCoaches = async (req, res) => {
 export const deleteVideo = async (req, res) => {
   try {
     const videoId = req.params.id;
+    const requesterId = String(req.user?.id || req.user?._id || "");
+    const requesterRole = req.user?.role;
 
     const video = await Material.findById(videoId);
     if (!video) {
       return res.status(404).json({ message: "Video not found" });
     }
 
-    // Extract Cloudinary public_id from URL
-    const urlParts = video.fileUrl.split("/");
-    const publicIdWithExt = urlParts[urlParts.length - 1];
-    const publicId = "HGSC-videos/" + publicIdWithExt.split(".")[0];
+    const ownsVideo = String(video.coach) === requesterId;
+    const canManage = ownsVideo || ["owner", "admin"].includes(requesterRole);
+    if (!canManage) {
+      return res.status(403).json({
+        message: "You are not allowed to delete this video.",
+      });
+    }
 
-    // Delete from Cloudinary
-    await cloudinary.uploader.destroy(publicId, { resource_type: "video" });
+    const publicId = getCloudinaryPublicIdFromUrl(video.fileUrl);
+    if (!publicId) {
+      return res.status(400).json({
+        message: "The stored video reference is invalid and cannot be removed safely.",
+      });
+    }
 
-    // Delete from MongoDB
+    const destroyResult = await cloudinary.uploader.destroy(publicId, {
+      resource_type: "video",
+      invalidate: true,
+      timeout: 120000,
+    });
+
+    if (
+      destroyResult?.result &&
+      !["ok", "not found"].includes(String(destroyResult.result).toLowerCase())
+    ) {
+      return res.status(502).json({
+        message: "Cloud video deletion did not complete successfully.",
+        cloudinaryResult: destroyResult.result,
+      });
+    }
+
     await Material.findByIdAndDelete(videoId);
 
     res.json({ message: "Video deleted successfully" });
   } catch (error) {
     console.error("Delete video failed:", error);
-    res.status(500).json({ message: "Server error deleting video" });
+    res.status(500).json({
+      message: "Server error deleting video",
+      error: error?.message,
+    });
   }
 };
 

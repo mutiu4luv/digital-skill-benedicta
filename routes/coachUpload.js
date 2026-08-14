@@ -1,5 +1,4 @@
 import express from "express";
-import multer from "multer";
 import {
   uploadVideo,
   uploadDocument,
@@ -13,14 +12,25 @@ import {
   deleteDocument,
 } from "../controller/coachUpload.js";
 import { protect, authorizeRoles } from "../middleware/authMiddleware.js";
+import upload, { multerErrorHandler } from "../middleware/multer.js";
 
 const router = express.Router();
 
-const upload = multer();
+router.post(
+  "/upload-video",
+  protect,
+  authorizeRoles("coach", "owner"),
+  upload.single("file"),
+  uploadVideo
+);
 
-router.post("/upload-video", protect, upload.single("file"), uploadVideo);
-
-router.post("/upload-document", protect, upload.single("file"), uploadDocument);
+router.post(
+  "/upload-document",
+  protect,
+  authorizeRoles("coach", "owner"),
+  upload.single("file"),
+  uploadDocument
+);
 
 router.get(
   "/materials/:courseId",
@@ -49,5 +59,7 @@ router.delete("/document/:documentId", protect, deleteDocument);
 
 router.get("/video", protect, getStudentCourseMaterials);
 router.get("/doc", protect, getStudentDocuments);
+
+router.use(multerErrorHandler);
 
 export default router;
