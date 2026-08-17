@@ -416,6 +416,7 @@ export const getCoachAssignments = async (req, res) => {
       .populate("courseId", "name category duration");
 
     const allSubmissions = [];
+    const assignmentSummaries = [];
 
     assignments.forEach((a) => {
       const cohort = a.cohortId;
@@ -424,7 +425,7 @@ export const getCoachAssignments = async (req, res) => {
       const studentsWithAccess = new Set();
       if (cohort && Array.isArray(cohort.studentIds)) {
         cohort.studentIds.forEach((s) => {
-          const enrollment = s.enrollments.find(
+          const enrollment = s.enrollments?.find(
             (e) =>
               e.courseId.toString() === a.courseId._id.toString() && e.hasAccess
           );
@@ -432,8 +433,29 @@ export const getCoachAssignments = async (req, res) => {
         });
       }
 
-      if (Array.isArray(a.submissions) && a.submissions.length > 0) {
-        a.submissions.forEach((s) => {
+      const submissions = Array.isArray(a.submissions) ? a.submissions : [];
+      const gradedCount = submissions.filter((submission) => submission.grade != null).length;
+      const pendingReviewCount = Math.max(submissions.length - gradedCount, 0);
+
+      assignmentSummaries.push({
+        assignmentId: a._id,
+        title: a.title,
+        description: a.description || "",
+        cohortId: cohort?._id || null,
+        cohortName: cohort?.name || "No Cohort",
+        courseId: a.courseId?._id || null,
+        courseName: a.courseId?.name || "N/A",
+        dueDate: a.dueDate,
+        createdAt: a.createdAt,
+        updatedAt: a.updatedAt,
+        eligibleStudentsCount: studentsWithAccess.size,
+        submissionCount: submissions.length,
+        gradedCount,
+        pendingReviewCount,
+      });
+
+      if (submissions.length > 0) {
+        submissions.forEach((s) => {
           // Only include submission if student has access
           if (!s.studentId || !studentsWithAccess.has(s.studentId.toString()))
             return;
@@ -511,6 +533,7 @@ export const getCoachAssignments = async (req, res) => {
     });
 
     return res.status(200).json({
+      assignments: assignmentSummaries,
       assignmentsByCohort,
       submissions: allSubmissions,
     });

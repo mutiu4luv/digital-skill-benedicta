@@ -119,6 +119,7 @@ const canCoachManageCourse = async ({ coachId, courseId }) => {
 
   return {
     course,
+    ownedByCoach,
     allowed: ownedByCoach || Boolean(assignedCohort),
   };
 };
@@ -139,16 +140,23 @@ export const uploadVideo = async (req, res) => {
       return res.status(400).json({ message: "Course ID is required" });
     if (!classStartTime)
       return res.status(400).json({ message: "Class start time is required" });
-    if (!cohortId)
-      return res.status(400).json({ message: "Cohort ID is required" });
     if (req.file.size > 20 * 1024 * 1024) {
       removeTempFile(req.file.path);
       return res.status(400).json({ message: "Video must not exceed 20MB" });
     }
 
-    const [{ course, allowed }, assignedCohort] = await Promise.all([
+    const normalizedCohortId =
+      typeof cohortId === "string" && cohortId.trim() ? cohortId.trim() : null;
+
+    const [{ course, ownedByCoach, allowed }, assignedCohort] = await Promise.all([
       canCoachManageCourse({ coachId, courseId }),
-      findAssignedCohortCourse({ coachId, courseId, cohortId }),
+      normalizedCohortId
+        ? findAssignedCohortCourse({
+            coachId,
+            courseId,
+            cohortId: normalizedCohortId,
+          })
+        : Promise.resolve(null),
     ]);
 
     if (!course) {
@@ -161,10 +169,17 @@ export const uploadVideo = async (req, res) => {
         message: "You are not authorized to upload for this course.",
       });
     }
-    if (!assignedCohort) {
+    if (normalizedCohortId && !assignedCohort) {
       removeTempFile(req.file.path);
       return res.status(400).json({
         message: "This course is not assigned to you in the selected cohort.",
+      });
+    }
+    if (!normalizedCohortId && !ownedByCoach) {
+      removeTempFile(req.file.path);
+      return res.status(400).json({
+        message:
+          "Select a valid cohort for this class, or use a course assigned directly to you.",
       });
     }
 
@@ -182,7 +197,7 @@ export const uploadVideo = async (req, res) => {
       type: "video",
       coach: coachId,
       course: courseId,
-      cohortId: cohortId,
+      cohortId: normalizedCohortId,
       unlockAt: startTime,
     });
 
@@ -418,10 +433,33 @@ export const getMyVideos = async (req, res) => {
       coach: coachId,
       type: "video",
     })
-      .populate("course", "name")
+      .populate("course", "name category duration")
+      .populate("cohortId", "name")
       .sort({ createdAt: -1 });
 
-    return res.status(200).json(videos);
+    const formatted = videos.map((video) => ({
+      _id: video._id,
+      title: video.title,
+      fileUrl: video.fileUrl,
+      type: video.type,
+      coach: video.coach,
+      unlockAt: video.unlockAt,
+      createdAt: video.createdAt,
+      updatedAt: video.updatedAt,
+      course: video.course
+        ? {
+            _id: video.course._id,
+            name: video.course.name || "Unknown Course",
+            category: video.course.category || "",
+            duration: video.course.duration || "",
+          }
+        : null,
+      courseId: video.course?._id || null,
+      cohortId: video.cohortId?._id || null,
+      cohortName: video.cohortId?.name || "No Cohort",
+    }));
+
+    return res.status(200).json({ videos: formatted });
   } catch (error) {
     return res.status(500).json({
       message: "Could not fetch videos",
