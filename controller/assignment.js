@@ -410,6 +410,7 @@ export const getCoachAssignments = async (req, res) => {
 
     // Fetch all assignments created by this coach
     const assignments = await Assignment.find({ coachId })
+      .sort({ createdAt: -1, updatedAt: -1 })
       .populate("submissions.studentId", "fullName email")
       .populate("cohortId", "name studentIds") // include studentIds to check access
       .populate("courseId", "name category duration");
