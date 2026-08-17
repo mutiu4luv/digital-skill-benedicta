@@ -83,6 +83,6 @@ router.patch(
   authorizeRoles("owner"),
   undoEndCohortCourse
 );
-router.get("/students/coach", protect, getStudentsTaughtByCoach);
+router.get("/students/taught-by-coach", protect, getStudentsTaughtByCoach);
 
 export default router;

@@ -886,7 +886,7 @@ export const getCoachAssignedCohorts = async (req, res) => {
       .populate("courses.coachId");
 
     if (!cohorts || cohorts.length === 0) {
-      return res.status(201).json({ cohorts: [], coursesByCohort: {} });
+      return res.status(200).json({ cohorts: [], coursesByCohort: {} });
     }
 
     // Map cohorts to include only coach's courses
@@ -910,6 +910,7 @@ export const getCoachAssignedCohorts = async (req, res) => {
       const coachCourses = cohort.courses
         .filter(
           (c) =>
+            c?.courseId &&
             (c.coachId &&
               c.coachId._id &&
               c.coachId._id.toString() === coachId) ||
@@ -1313,12 +1314,22 @@ export const getStudentsTaughtByCoach = async (req, res) => {
     cohorts.forEach((cohort) => {
       // courses taught by this coach in this cohort
       const coachCourseIds = cohort.courses
-        .filter((course) => course.coachId.toString() === coachId.toString())
+        .filter(
+          (course) =>
+            course?.coachId &&
+            course?.courseId &&
+            course.coachId.toString() === coachId.toString()
+        )
         .map((course) => course.courseId.toString());
 
       cohort.studentIds.forEach((studentEntry) => {
+        if (!studentEntry?.studentId || !Array.isArray(studentEntry.enrollments)) {
+          return;
+        }
+
         const isEnrolledInCoachCourse = studentEntry.enrollments.some(
           (enrollment) =>
+            enrollment?.courseId &&
             coachCourseIds.includes(enrollment.courseId.toString())
         );
 
