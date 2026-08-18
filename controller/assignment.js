@@ -23,6 +23,127 @@ const deleteLocalFile = (filePath) => {
   }
 };
 
+const sameId = (left, right) =>
+  String(left?._id || left || "") === String(right?._id || right || "");
+
+const getEffectiveAssignmentDueDate = (assignment, studentId = null) => {
+  if (!studentId) return toEndOfDay(assignment?.dueDate);
+
+  const override = Array.isArray(assignment?.studentDueDateOverrides)
+    ? assignment.studentDueDateOverrides.find((entry) =>
+        sameId(entry?.studentId, studentId)
+      )
+    : null;
+
+  return toEndOfDay(override?.dueDate || assignment?.dueDate);
+};
+
+const getEligibleStudentEntries = (assignment) => {
+  const courseId = assignment?.courseId?._id?.toString?.()
+    || assignment?.courseId?.toString?.()
+    || "";
+  const cohortStudents = Array.isArray(assignment?.cohortId?.studentIds)
+    ? assignment.cohortId.studentIds
+    : [];
+
+  return cohortStudents.filter((student) =>
+    Array.isArray(student?.enrollments) &&
+    student.enrollments.some(
+      (enrollment) =>
+        enrollment?.courseId?.toString() === courseId && enrollment?.hasAccess
+    )
+  );
+};
+
+const getEligibleStudentIds = (assignment) =>
+  getEligibleStudentEntries(assignment)
+    .map((student) => student?.studentId)
+    .filter(Boolean);
+
+const getSubmittedStudentIds = (assignment) =>
+  new Set(
+    (Array.isArray(assignment?.submissions) ? assignment.submissions : [])
+      .map((submission) => String(submission?.studentId?._id || submission?.studentId || ""))
+      .filter(Boolean)
+  );
+
+const buildStudentRedoEmail = ({
+  studentName,
+  assignmentTitle,
+  courseName,
+  cohortName,
+  dueDate,
+  coachName,
+}) => `
+  <div style="font-family: Arial, sans-serif; color: #1f2937; line-height: 1.6;">
+    <p>Dear ${studentName || "Student"},</p>
+    <p>
+      Your coach has reopened your submitted assignment
+      <strong>${assignmentTitle}</strong> and you are now allowed to submit it again.
+    </p>
+    <table style="border-collapse: collapse; width: 100%; margin: 16px 0;">
+      <tr>
+        <td style="padding: 8px; border: 1px solid #d1d5db;"><strong>Course</strong></td>
+        <td style="padding: 8px; border: 1px solid #d1d5db;">${courseName || "N/A"}</td>
+      </tr>
+      <tr>
+        <td style="padding: 8px; border: 1px solid #d1d5db;"><strong>Cohort</strong></td>
+        <td style="padding: 8px; border: 1px solid #d1d5db;">${cohortName || "No Cohort"}</td>
+      </tr>
+      <tr>
+        <td style="padding: 8px; border: 1px solid #d1d5db;"><strong>New Due Date</strong></td>
+        <td style="padding: 8px; border: 1px solid #d1d5db;">${formatHumanDate(dueDate)}</td>
+      </tr>
+    </table>
+    <p>
+      Please review your work and resubmit before the deadline above.
+    </p>
+    <p>Best regards,<br />${coachName || "Your Coach"}<br />HGSC² Digital Skills</p>
+  </div>
+`;
+
+const buildCoachRedoEmail = ({
+  coachName,
+  assignmentTitle,
+  courseName,
+  cohortName,
+  dueDate,
+  studentName,
+}) => `
+  <div style="font-family: Arial, sans-serif; color: #1f2937; line-height: 1.6;">
+    <p>Dear ${coachName || "Coach"},</p>
+    <p>
+      This confirms that you reopened the assignment
+      <strong>${assignmentTitle}</strong> for <strong>${studentName || "the student"}</strong>.
+    </p>
+    <table style="border-collapse: collapse; width: 100%; margin: 16px 0;">
+      <tr>
+        <td style="padding: 8px; border: 1px solid #d1d5db;"><strong>Course</strong></td>
+        <td style="padding: 8px; border: 1px solid #d1d5db;">${courseName || "N/A"}</td>
+      </tr>
+      <tr>
+        <td style="padding: 8px; border: 1px solid #d1d5db;"><strong>Cohort</strong></td>
+        <td style="padding: 8px; border: 1px solid #d1d5db;">${cohortName || "No Cohort"}</td>
+      </tr>
+      <tr>
+        <td style="padding: 8px; border: 1px solid #d1d5db;"><strong>Current Due Date</strong></td>
+        <td style="padding: 8px; border: 1px solid #d1d5db;">${formatHumanDate(dueDate)}</td>
+      </tr>
+    </table>
+    <p>
+      The student has been notified that the assignment is open for resubmission.
+    </p>
+    <p>Regards,<br />HGSC² Digital Skills</p>
+  </div>
+`;
+
+const notifyEmails = async (jobs = []) => {
+  const results = await Promise.allSettled(jobs);
+  return results
+    .filter((result) => result.status === "rejected")
+    .map((result) => result.reason?.message || "Email delivery failed");
+};
+
 const formatHumanDate = (dateValue) => {
   if (!dateValue) return "Not specified";
 
@@ -251,7 +372,7 @@ export const getStudentAssignments = async (req, res) => {
           (s) => s.studentId?.toString() === studentId.toString()
         );
 
-        const dueDate = toEndOfDay(a.dueDate);
+        const dueDate = getEffectiveAssignmentDueDate(a, studentId);
 
         return {
           assignmentId: a._id,
@@ -428,7 +549,7 @@ export const submitAssignment = async (req, res) => {
     const now = new Date();
 
     // 2️⃣ Check expiry
-    const dueDate = toEndOfDay(assignment.dueDate);
+    const dueDate = getEffectiveAssignmentDueDate(assignment, studentId);
 
     if (dueDate && dueDate < now) {
       localFilePaths.forEach(deleteLocalFile);
@@ -543,6 +664,9 @@ export const getCoachAssignments = async (req, res) => {
         submissionCount: submissions.length,
         gradedCount,
         pendingReviewCount,
+        studentOverrideCount: Array.isArray(a.studentDueDateOverrides)
+          ? a.studentDueDateOverrides.length
+          : 0,
       });
 
       if (submissions.length > 0) {
@@ -555,7 +679,8 @@ export const getCoachAssignments = async (req, res) => {
             assignmentId: a._id,
             title: a.title,
             description: a.description,
-            dueDate: a.dueDate,
+            dueDate: getEffectiveAssignmentDueDate(a, s.studentId?._id || s.studentId),
+            assignmentDueDate: a.dueDate,
             cohort: cohort?.name || "No Cohort",
             cohortId: cohort?._id || null,
             courseName: a.courseId?.name || "N/A",
@@ -576,28 +701,9 @@ export const getCoachAssignments = async (req, res) => {
             feedback: s.feedback ?? null,
             submittedAt: s.submittedAt,
             submissionId: s._id,
+            hasSubmitted: true,
           });
         });
-      } else {
-        // No submissions — include assignment only if some student has access
-        if (studentsWithAccess.size > 0) {
-          allSubmissions.push({
-            assignmentId: a._id,
-            title: a.title,
-            description: a.description,
-            dueDate: a.dueDate,
-            cohort: cohort?.name || "No Cohort",
-            cohortId: cohort?._id || null,
-            courseName: a.courseId?.name || "N/A",
-            student: null,
-            studentId: null,
-            file: null,
-            grade: null,
-            feedback: null,
-            submittedAt: a.createdAt, // fallback for sorting
-            submissionId: null,
-          });
-        }
       }
     });
 
@@ -689,7 +795,7 @@ export const updateAssignment = async (req, res) => {
   try {
     const coachId = req.user.id;
     const { assignmentId } = req.params;
-    const { dueDate } = req.body;
+    const { dueDate, studentId, scope = "assignment" } = req.body;
 
     const assignment = await Assignment.findById(assignmentId)
       .populate("cohortId", "name studentIds")
@@ -703,77 +809,138 @@ export const updateAssignment = async (req, res) => {
       return res.status(403).json({ message: "Unauthorized" });
     }
 
-    const previousDueDate = assignment.dueDate;
-    let eligibleStudents = [];
-
-    if (dueDate) {
-      assignment.dueDate = toEndOfDay(dueDate);
-
-      const cohort = assignment.cohortId;
-      const courseId = assignment.courseId?._id?.toString();
-
-      const eligibleStudentIds = Array.isArray(cohort?.studentIds)
-        ? cohort.studentIds
-            .filter((student) =>
-              student?.enrollments?.some(
-                (enrollment) =>
-                  enrollment?.courseId?.toString() === courseId &&
-                  enrollment?.hasAccess
-              )
-            )
-            .map((student) => student.studentId)
-            .filter(Boolean)
-        : [];
-
-      if (eligibleStudentIds.length > 0) {
-        eligibleStudents = await User.find(
-          { _id: { $in: eligibleStudentIds } },
-          "fullName email"
-        );
-      }
+    if (!dueDate) {
+      return res.status(400).json({ message: "Due date is required" });
     }
 
-    await assignment.save();
-
-    const dueDateChanged =
-      dueDate &&
-      new Date(previousDueDate || 0).getTime() !==
-        new Date(assignment.dueDate || 0).getTime();
-
+    const normalizedDueDate = toEndOfDay(dueDate);
+    const coachName = assignment.coachId?.fullName || "Coach";
+    const coachEmail = assignment.coachId?.email || "";
+    const assignmentTitle = assignment.title || "Assignment";
+    const courseName = assignment.courseId?.name || "N/A";
+    const cohortName = assignment.cohortId?.name || "No Cohort";
+    const eligibleStudentIds = getEligibleStudentIds(assignment);
+    const submittedStudentIds = getSubmittedStudentIds(assignment);
     let emailWarnings = [];
 
-    if (dueDateChanged) {
-      const coachName = assignment.coachId?.fullName || "Coach";
-      const coachEmail = assignment.coachId?.email || "";
-      const assignmentTitle = assignment.title || "Assignment";
-      const courseName = assignment.courseId?.name || "N/A";
-      const cohortName = assignment.cohortId?.name || "No Cohort";
+    if (scope === "student") {
+      if (!studentId) {
+        return res
+          .status(400)
+          .json({ message: "studentId is required for student due date updates" });
+      }
 
-      const emailJobs = eligibleStudents
-        .filter((student) => student?.email)
-        .map((student) =>
-          sendEmail(
-            student.email,
-            `Assignment Due Date Extended: ${assignmentTitle}`,
-            buildStudentDueDateExtensionEmail({
-              studentName: student.fullName,
-              assignmentTitle,
-              courseName,
-              cohortName,
-              dueDate: assignment.dueDate,
-              coachName,
-            }),
-            student.fullName
-          )
-        );
+      const targetEligible = eligibleStudentIds.some((id) => sameId(id, studentId));
+      if (!targetEligible) {
+        return res.status(404).json({ message: "Student is not eligible for this assignment" });
+      }
 
-      const studentEmailResults = await Promise.allSettled(emailJobs);
-      emailWarnings = studentEmailResults
-        .filter((result) => result.status === "rejected")
-        .map((result) => result.reason?.message || "Student email failed");
+      if (submittedStudentIds.has(String(studentId))) {
+        return res.status(400).json({
+          message:
+            "This student has already submitted the assignment. Use allow redo to reopen it.",
+        });
+      }
 
-      if (coachEmail) {
-        const coachEmailResult = await Promise.allSettled([
+      const targetStudent = await User.findById(studentId, "fullName email");
+      if (!targetStudent) {
+        return res.status(404).json({ message: "Student not found" });
+      }
+
+      assignment.studentDueDateOverrides =
+        Array.isArray(assignment.studentDueDateOverrides)
+          ? assignment.studentDueDateOverrides.filter(
+              (entry) => !sameId(entry?.studentId, studentId)
+            )
+          : [];
+      assignment.studentDueDateOverrides.push({
+        studentId,
+        dueDate: normalizedDueDate,
+        updatedAt: new Date(),
+      });
+
+      await assignment.save();
+
+      emailWarnings = await notifyEmails(
+        [
+          targetStudent.email
+            ? sendEmail(
+                targetStudent.email,
+                `Assignment Due Date Updated: ${assignmentTitle}`,
+                buildStudentDueDateExtensionEmail({
+                  studentName: targetStudent.fullName,
+                  assignmentTitle,
+                  courseName,
+                  cohortName,
+                  dueDate: normalizedDueDate,
+                  coachName,
+                }),
+                targetStudent.fullName
+              )
+            : null,
+          coachEmail
+            ? sendEmail(
+                coachEmail,
+                `Student Assignment Due Date Updated: ${assignmentTitle}`,
+                buildCoachDueDateExtensionEmail({
+                  coachName,
+                  assignmentTitle,
+                  courseName,
+                  cohortName,
+                  dueDate: normalizedDueDate,
+                  studentCount: 1,
+                }),
+                coachName
+              )
+            : null,
+        ].filter(Boolean)
+      );
+
+      return res.status(200).json({
+        message:
+          emailWarnings.length > 0
+            ? "Student due date updated, but some emails could not be sent"
+            : "Student due date updated successfully",
+        assignment,
+        emailWarnings,
+      });
+    }
+
+    assignment.dueDate = normalizedDueDate;
+    await assignment.save();
+
+    const studentsToNotify = await User.find(
+      {
+        _id: {
+          $in: eligibleStudentIds.filter(
+            (id) => !submittedStudentIds.has(String(id))
+          ),
+        },
+      },
+      "fullName email"
+    );
+
+    emailWarnings = await notifyEmails(
+      [
+        ...studentsToNotify
+          .filter((student) => student?.email)
+          .map((student) =>
+            sendEmail(
+              student.email,
+              `Assignment Due Date Extended: ${assignmentTitle}`,
+              buildStudentDueDateExtensionEmail({
+                studentName: student.fullName,
+                assignmentTitle,
+                courseName,
+                cohortName,
+                dueDate: normalizedDueDate,
+                coachName,
+              }),
+              student.fullName
+            )
+          ),
+        coachEmail
+          ?
           sendEmail(
             coachEmail,
             `Assignment Due Date Extension Confirmed: ${assignmentTitle}`,
@@ -782,21 +949,15 @@ export const updateAssignment = async (req, res) => {
               assignmentTitle,
               courseName,
               cohortName,
-              dueDate: assignment.dueDate,
-              studentCount: eligibleStudents.filter((student) => student?.email)
+              dueDate: normalizedDueDate,
+              studentCount: studentsToNotify.filter((student) => student?.email)
                 .length,
             }),
             coachName
-          ),
-        ]);
-
-        if (coachEmailResult[0]?.status === "rejected") {
-          emailWarnings.push(
-            coachEmailResult[0].reason?.message || "Coach email failed"
-          );
-        }
-      }
-    }
+          )
+          : null,
+      ].filter(Boolean)
+    );
 
     return res.status(200).json({
       message:
@@ -808,6 +969,96 @@ export const updateAssignment = async (req, res) => {
     });
   } catch (err) {
     console.error("Update Assignment Error:", err);
+    return res.status(500).json({ message: "Server error", error: err.message });
+  }
+};
+
+export const reopenAssignmentSubmission = async (req, res) => {
+  try {
+    const coachId = req.user.id;
+    const { assignmentId, studentId } = req.params;
+
+    const assignment = await Assignment.findById(assignmentId)
+      .populate("cohortId", "name studentIds")
+      .populate("courseId", "name")
+      .populate("coachId", "fullName email");
+
+    if (!assignment) {
+      return res.status(404).json({ message: "Assignment not found" });
+    }
+
+    if (assignment.coachId.toString() !== coachId) {
+      return res.status(403).json({ message: "Unauthorized" });
+    }
+
+    const submissionIndex = assignment.submissions.findIndex((submission) =>
+      sameId(submission?.studentId, studentId)
+    );
+
+    if (submissionIndex === -1) {
+      return res.status(404).json({ message: "Student submission not found" });
+    }
+
+    const targetStudent = await User.findById(studentId, "fullName email");
+    if (!targetStudent) {
+      return res.status(404).json({ message: "Student not found" });
+    }
+
+    assignment.submissions.splice(submissionIndex, 1);
+    await assignment.save();
+
+    const effectiveDueDate = getEffectiveAssignmentDueDate(assignment, studentId);
+    const coachName = assignment.coachId?.fullName || "Coach";
+    const coachEmail = assignment.coachId?.email || "";
+    const assignmentTitle = assignment.title || "Assignment";
+    const courseName = assignment.courseId?.name || "N/A";
+    const cohortName = assignment.cohortId?.name || "No Cohort";
+
+    const emailWarnings = await notifyEmails(
+      [
+        targetStudent.email
+          ? sendEmail(
+              targetStudent.email,
+              `Assignment Reopened for Resubmission: ${assignmentTitle}`,
+              buildStudentRedoEmail({
+                studentName: targetStudent.fullName,
+                assignmentTitle,
+                courseName,
+                cohortName,
+                dueDate: effectiveDueDate,
+                coachName,
+              }),
+              targetStudent.fullName
+            )
+          : null,
+        coachEmail
+          ? sendEmail(
+              coachEmail,
+              `Assignment Reopened for Student: ${assignmentTitle}`,
+              buildCoachRedoEmail({
+                coachName,
+                assignmentTitle,
+                courseName,
+                cohortName,
+                dueDate: effectiveDueDate,
+                studentName: targetStudent.fullName,
+              }),
+              coachName
+            )
+          : null,
+      ].filter(Boolean)
+    );
+
+    return res.status(200).json({
+      message:
+        emailWarnings.length > 0
+          ? "Student submission reopened, but some emails could not be sent"
+          : "Student can now redo this assignment",
+      assignment,
+      emailWarnings,
+    });
+  } catch (err) {
+    console.error("Reopen Assignment Submission Error:", err);
     return res.status(500).json({ message: "Server error", error: err.message });
   }
 };
