@@ -1,8 +1,10 @@
 import Assignment from "../module/cohortAssignment.js";
 import Cohort from "../module/cohort.js";
+import User from "../module/userModule.js";
 import cloudinary from "../config/cloudnary.js";
 import mongoose from "mongoose";
 import fs from "fs";
+import { sendEmail } from "../utilitis/sendEmail.js";
 
 const toEndOfDay = (date) => {
   if (!date) return date;
@@ -20,6 +22,95 @@ const deleteLocalFile = (filePath) => {
     console.error("Delete local assignment file error:", err);
   }
 };
+
+const formatHumanDate = (dateValue) => {
+  if (!dateValue) return "Not specified";
+
+  const parsedDate = new Date(dateValue);
+  if (Number.isNaN(parsedDate.getTime())) return "Not specified";
+
+  return parsedDate.toLocaleString("en-US", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+};
+
+const buildStudentDueDateExtensionEmail = ({
+  studentName,
+  assignmentTitle,
+  courseName,
+  cohortName,
+  dueDate,
+  coachName,
+}) => `
+  <div style="font-family: Arial, sans-serif; color: #1f2937; line-height: 1.6;">
+    <p>Dear ${studentName || "Student"},</p>
+    <p>
+      This is to inform you that the submission deadline for your assignment
+      <strong>${assignmentTitle}</strong> has been extended.
+    </p>
+    <table style="border-collapse: collapse; width: 100%; margin: 16px 0;">
+      <tr>
+        <td style="padding: 8px; border: 1px solid #d1d5db;"><strong>Course</strong></td>
+        <td style="padding: 8px; border: 1px solid #d1d5db;">${courseName || "N/A"}</td>
+      </tr>
+      <tr>
+        <td style="padding: 8px; border: 1px solid #d1d5db;"><strong>Cohort</strong></td>
+        <td style="padding: 8px; border: 1px solid #d1d5db;">${cohortName || "No Cohort"}</td>
+      </tr>
+      <tr>
+        <td style="padding: 8px; border: 1px solid #d1d5db;"><strong>New Due Date</strong></td>
+        <td style="padding: 8px; border: 1px solid #d1d5db;">${formatHumanDate(dueDate)}</td>
+      </tr>
+    </table>
+    <p>
+      Please make sure you complete and submit the assignment before the new deadline.
+    </p>
+    <p>Best regards,<br />${coachName || "Your Coach"}<br />HGSC² Digital Skills</p>
+  </div>
+`;
+
+const buildCoachDueDateExtensionEmail = ({
+  coachName,
+  assignmentTitle,
+  courseName,
+  cohortName,
+  dueDate,
+  studentCount,
+}) => `
+  <div style="font-family: Arial, sans-serif; color: #1f2937; line-height: 1.6;">
+    <p>Dear ${coachName || "Coach"},</p>
+    <p>
+      This is a confirmation that you successfully extended the due date for
+      <strong>${assignmentTitle}</strong>.
+    </p>
+    <table style="border-collapse: collapse; width: 100%; margin: 16px 0;">
+      <tr>
+        <td style="padding: 8px; border: 1px solid #d1d5db;"><strong>Course</strong></td>
+        <td style="padding: 8px; border: 1px solid #d1d5db;">${courseName || "N/A"}</td>
+      </tr>
+      <tr>
+        <td style="padding: 8px; border: 1px solid #d1d5db;"><strong>Cohort</strong></td>
+        <td style="padding: 8px; border: 1px solid #d1d5db;">${cohortName || "No Cohort"}</td>
+      </tr>
+      <tr>
+        <td style="padding: 8px; border: 1px solid #d1d5db;"><strong>Extended Due Date</strong></td>
+        <td style="padding: 8px; border: 1px solid #d1d5db;">${formatHumanDate(dueDate)}</td>
+      </tr>
+      <tr>
+        <td style="padding: 8px; border: 1px solid #d1d5db;"><strong>Students Notified</strong></td>
+        <td style="padding: 8px; border: 1px solid #d1d5db;">${studentCount}</td>
+      </tr>
+    </table>
+    <p>
+      The assignment extension notice has been prepared for the eligible students in this cohort.
+    </p>
+    <p>Regards,<br />HGSC² Digital Skills</p>
+  </div>
+`;
 
 const studentHasAssignmentAccess = async (assignment, studentId) => {
   const cohort = await Cohort.findOne({
@@ -600,7 +691,10 @@ export const updateAssignment = async (req, res) => {
     const { assignmentId } = req.params;
     const { dueDate } = req.body;
 
-    const assignment = await Assignment.findById(assignmentId);
+    const assignment = await Assignment.findById(assignmentId)
+      .populate("cohortId", "name studentIds")
+      .populate("courseId", "name")
+      .populate("coachId", "fullName email");
     if (!assignment) {
       return res.status(404).json({ message: "Assignment not found" });
     }
@@ -609,18 +703,111 @@ export const updateAssignment = async (req, res) => {
       return res.status(403).json({ message: "Unauthorized" });
     }
 
+    const previousDueDate = assignment.dueDate;
+    let eligibleStudents = [];
+
     if (dueDate) {
       assignment.dueDate = toEndOfDay(dueDate);
+
+      const cohort = assignment.cohortId;
+      const courseId = assignment.courseId?._id?.toString();
+
+      const eligibleStudentIds = Array.isArray(cohort?.studentIds)
+        ? cohort.studentIds
+            .filter((student) =>
+              student?.enrollments?.some(
+                (enrollment) =>
+                  enrollment?.courseId?.toString() === courseId &&
+                  enrollment?.hasAccess
+              )
+            )
+            .map((student) => student.studentId)
+            .filter(Boolean)
+        : [];
+
+      if (eligibleStudentIds.length > 0) {
+        eligibleStudents = await User.find(
+          { _id: { $in: eligibleStudentIds } },
+          "fullName email"
+        );
+      }
     }
 
     await assignment.save();
 
+    const dueDateChanged =
+      dueDate &&
+      new Date(previousDueDate || 0).getTime() !==
+        new Date(assignment.dueDate || 0).getTime();
+
+    let emailWarnings = [];
+
+    if (dueDateChanged) {
+      const coachName = assignment.coachId?.fullName || "Coach";
+      const coachEmail = assignment.coachId?.email || "";
+      const assignmentTitle = assignment.title || "Assignment";
+      const courseName = assignment.courseId?.name || "N/A";
+      const cohortName = assignment.cohortId?.name || "No Cohort";
+
+      const emailJobs = eligibleStudents
+        .filter((student) => student?.email)
+        .map((student) =>
+          sendEmail(
+            student.email,
+            `Assignment Due Date Extended: ${assignmentTitle}`,
+            buildStudentDueDateExtensionEmail({
+              studentName: student.fullName,
+              assignmentTitle,
+              courseName,
+              cohortName,
+              dueDate: assignment.dueDate,
+              coachName,
+            }),
+            student.fullName
+          )
+        );
+
+      const studentEmailResults = await Promise.allSettled(emailJobs);
+      emailWarnings = studentEmailResults
+        .filter((result) => result.status === "rejected")
+        .map((result) => result.reason?.message || "Student email failed");
+
+      if (coachEmail) {
+        const coachEmailResult = await Promise.allSettled([
+          sendEmail(
+            coachEmail,
+            `Assignment Due Date Extension Confirmed: ${assignmentTitle}`,
+            buildCoachDueDateExtensionEmail({
+              coachName,
+              assignmentTitle,
+              courseName,
+              cohortName,
+              dueDate: assignment.dueDate,
+              studentCount: eligibleStudents.filter((student) => student?.email)
+                .length,
+            }),
+            coachName
+          ),
+        ]);
+
+        if (coachEmailResult[0]?.status === "rejected") {
+          emailWarnings.push(
+            coachEmailResult[0].reason?.message || "Coach email failed"
+          );
+        }
+      }
+    }
+
     return res.status(200).json({
-      message: "Assignment updated successfully",
+      message:
+        emailWarnings.length > 0
+          ? "Assignment updated successfully, but some emails could not be sent"
+          : "Assignment updated successfully",
       assignment,
+      emailWarnings,
     });
   } catch (err) {
     console.error("Update Assignment Error:", err);
-    return res.status(500).json({ message: "Server error" });
+    return res.status(500).json({ message: "Server error", error: err.message });
   }
 };
