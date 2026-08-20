@@ -916,10 +916,19 @@ export const getCoachAssignedCohorts = async (req, res) => {
   try {
     const coachId = req.user.id;
 
-    // Fetch cohorts where this coach is assigned
-    const cohorts = await Cohort.find({
-      "courses.coachId": coachId,
-    })
+    const coachCourses = await Course.find({ coach: coachId }).select("_id");
+    const coachCourseIds = coachCourses.map((course) => getIdValue(course._id));
+
+    const query = coachCourseIds.length
+      ? {
+          $or: [
+            { "courses.coachId": coachId },
+            { "courses.courseId": { $in: coachCourseIds } },
+          ],
+        }
+      : { "courses.coachId": coachId };
+
+    const cohorts = await Cohort.find(query)
       .populate("courses.courseId")
       .populate("courses.coachId");
 
@@ -929,7 +938,12 @@ export const getCoachAssignedCohorts = async (req, res) => {
 
     const assigned = cohorts.map((cohort) => {
       const coachCourses = cohort.courses
-        .filter((c) => isSameId(c.coachId, coachId) && c.courseId)
+        .filter(
+          (c) =>
+            c.courseId &&
+            (isSameId(c.coachId, coachId) ||
+              coachCourseIds.includes(getIdValue(c.courseId)))
+        )
         .map((c) => buildCoachCoursePayload(cohort, c, coachId));
 
       return {
@@ -947,7 +961,12 @@ export const getCoachAssignedCohorts = async (req, res) => {
 
     const courses = assigned.flatMap((cohort) => cohort.courses);
 
-    return res.status(200).json({ cohorts: assigned, courses, coursesByCohort });
+    return res.status(200).json({
+      cohorts: assigned,
+      availableCohorts: assigned,
+      courses,
+      coursesByCohort,
+    });
   } catch (err) {
     console.error("getCoachAssignedCohorts Error:", err);
     res.status(500).json({ message: "Internal server error" });
