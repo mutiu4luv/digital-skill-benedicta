@@ -6,6 +6,44 @@ import coachUpload from "../module/coachUpload.js";
 import User from "../module/userModule.js";
 import cloudinary from "../config/cloudnary.js";
 
+const getIdValue = (value) => {
+  if (!value) return "";
+  if (typeof value === "string" || typeof value === "number") {
+    return String(value);
+  }
+
+  if (typeof value === "object") {
+    return String(value._id || value.id || value.toString?.() || "");
+  }
+
+  return String(value);
+};
+
+const isSameId = (left, right) => getIdValue(left) === getIdValue(right);
+
+const buildCoachCoursePayload = (cohort, course, coachId) => {
+  const courseName =
+    course?.courseId?.name || course?.name || course?.courseName || "Untitled Course";
+
+  return {
+    cohortCourseId: getIdValue(course?._id),
+    courseId: getIdValue(course?.courseId),
+    courseName,
+    name: courseName,
+    title: courseName,
+    category: course?.courseId?.category || course?.category || "",
+    duration: course?.durationInDays
+      ? `${course.durationInDays} days`
+      : course?.courseId?.duration || "",
+    status: course?.status || "not_started",
+    startDate: course?.startDate || null,
+    endDate: course?.endDate || null,
+    coachId: getIdValue(course?.coachId || coachId),
+    cohortId: getIdValue(cohort?._id),
+    cohortName: cohort?.name || "No Cohort",
+  };
+};
+
 //CREATE COHORT
 function convertDurationStringToDays(duration) {
   if (!duration) return null;
@@ -889,58 +927,17 @@ export const getCoachAssignedCohorts = async (req, res) => {
       return res.status(200).json({ cohorts: [], coursesByCohort: {} });
     }
 
-    // Map cohorts to include only coach's courses
-    // const assigned = cohorts.map((cohort) => {
-    //   const coachCourses = cohort.courses
-    //     .filter((c) => c.coachId._id.toString() === coachId)
-    //     .map((c) => ({
-    //       cohortCourseId: c._id,
-    //       courseId: c.courseId._id,
-    //       name: c.courseId.name,
-    //       category: c.courseId.category,
-    //       duration: c.durationInDays
-    //         ? c.durationInDays + " days"
-    //         : c.courseId.duration,
-    //       status: c.status,
-    //       startDate: c.startDate,
-    //       endDate: c.endDate,
-    //     }));
-
     const assigned = cohorts.map((cohort) => {
       const coachCourses = cohort.courses
-        .filter(
-          (c) =>
-            c?.courseId &&
-            (c.coachId &&
-              c.coachId._id &&
-              c.coachId._id.toString() === coachId) ||
-            (c.coachId && c.coachId.toString() === coachId)
-        )
-        .map((c) => ({
-          cohortCourseId: c._id,
-          courseId: c.courseId._id,
-          name: c.courseId.name,
-          category: c.courseId.category,
-          duration: c.durationInDays
-            ? c.durationInDays + " days"
-            : c.courseId.duration,
-          status: c.status,
-          startDate: c.startDate,
-          endDate: c.endDate,
-        }));
+        .filter((c) => isSameId(c.coachId, coachId) && c.courseId)
+        .map((c) => buildCoachCoursePayload(cohort, c, coachId));
 
       return {
-        cohortId: cohort._id,
-        cohortName: cohort.name,
+        cohortId: getIdValue(cohort._id),
+        cohortName: cohort.name || "No Cohort",
         courses: coachCourses,
       };
     });
-    // return {
-    //   cohortId: cohort._id,
-    //   cohortName: cohort.name,
-    //   courses: coachCourses,
-    // };
-    // });
 
     // Create a grouped object for frontend convenience
     const coursesByCohort = {};
@@ -948,7 +945,9 @@ export const getCoachAssignedCohorts = async (req, res) => {
       coursesByCohort[cohort.cohortName] = cohort.courses;
     });
 
-    return res.status(200).json({ cohorts: assigned, coursesByCohort });
+    const courses = assigned.flatMap((cohort) => cohort.courses);
+
+    return res.status(200).json({ cohorts: assigned, courses, coursesByCohort });
   } catch (err) {
     console.error("getCoachAssignedCohorts Error:", err);
     res.status(500).json({ message: "Internal server error" });
@@ -976,8 +975,8 @@ export const getStudentsUnderCoach = async (req, res) => {
 
     cohorts.forEach((cohort) => {
       cohort.courses.forEach((course) => {
-        if (course.coachId.toString() === coachId) {
-          coachCourseIds.add(course.courseId.toString());
+        if (isSameId(course.coachId, coachId)) {
+          coachCourseIds.add(getIdValue(course.courseId));
         }
       });
     });

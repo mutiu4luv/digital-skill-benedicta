@@ -3,6 +3,7 @@ import {
   createCohortAssignment,
   getCoachAssignments,
   getStudentAssignments,
+  reopenAssignmentSubmission,
   submitAssignment,
   submitAssignmentGrade,
   updateAssignment,
@@ -49,5 +50,11 @@ router.patch(
   protect,
   authorizeRoles("coach"),
   updateAssignment
+);
+router.post(
+  "/:assignmentId/reopen/:studentId",
+  protect,
+  authorizeRoles("coach"),
+  reopenAssignmentSubmission
 );
 export default router;

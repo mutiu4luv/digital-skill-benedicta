@@ -6,6 +6,46 @@ import mongoose from "mongoose";
 import cohort from "../module/cohort.js";
 import Cohort from "../module/cohort.js";
 
+const getIdValue = (value) => {
+  if (!value) return "";
+  if (typeof value === "string" || typeof value === "number") {
+    return String(value);
+  }
+
+  if (typeof value === "object") {
+    return String(value._id || value.id || value.toString?.() || "");
+  }
+
+  return String(value);
+};
+
+const isSameId = (left, right) => getIdValue(left) === getIdValue(right);
+
+const buildCoachCoursePayload = (cohortDoc, courseDoc) => {
+  const courseName =
+    courseDoc?.courseId?.name ||
+    courseDoc?.name ||
+    courseDoc?.courseName ||
+    "Untitled Course";
+
+  return {
+    cohortCourseId: getIdValue(courseDoc?._id),
+    cohortId: getIdValue(cohortDoc?._id),
+    cohortName: cohortDoc?.name || "No Cohort",
+    courseId: getIdValue(courseDoc?.courseId),
+    courseName,
+    name: courseName,
+    title: courseName,
+    category: courseDoc?.courseId?.category || courseDoc?.category || "",
+    duration: courseDoc?.durationInDays
+      ? `${courseDoc.durationInDays} days`
+      : courseDoc?.courseId?.duration || "",
+    status: courseDoc?.status || "not_started",
+    startDate: courseDoc?.startDate || null,
+    endDate: courseDoc?.endDate || null,
+  };
+};
+
 // ---------------------------------------------------------
 // ✅ Coach sets class schedule
 // ---------------------------------------------------------
@@ -234,14 +274,8 @@ export const getCoachCourses = async (req, res) => {
 
     cohorts.forEach((cohort) => {
       cohort.courses.forEach((c) => {
-        if (c.coachId?._id.toString() === coachId) {
-          myCourses.push({
-            cohortId: cohort._id,
-            cohortName: cohort.name,
-            courseId: c.courseId._id,
-            courseName: c.courseId.name,
-            status: c.status,
-          });
+        if (isSameId(c.coachId, coachId) && c.courseId) {
+          myCourses.push(buildCoachCoursePayload(cohort, c));
         }
       });
     });
@@ -283,7 +317,7 @@ export const getCohortCoursesForCoach = async (req, res) => {
     // ✅ Only courses belonging to this coach
     const myCourses = cohortDoc.courses
       .filter((c) => {
-        const isCoachMatch = c.coachId?._id?.toString() === coachId.toString();
+        const isCoachMatch = isSameId(c.coachId, coachId);
 
         console.log(
           "🔍 Checking course:",
@@ -294,13 +328,7 @@ export const getCohortCoursesForCoach = async (req, res) => {
 
         return isCoachMatch;
       })
-      .map((c) => ({
-        cohortCourseId: c._id,
-        courseId: c.courseId._id,
-        courseName: c.courseId.name,
-        cohortName: cohortDoc.name,
-        status: c.status,
-      }));
+      .map((c) => buildCoachCoursePayload(cohortDoc, c));
 
     console.log("✅ Filtered courses:", myCourses);
 

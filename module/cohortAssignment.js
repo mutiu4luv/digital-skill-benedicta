@@ -20,6 +20,13 @@ const assignmentSchema = new mongoose.Schema(
       required: true,
     },
     dueDate: { type: Date },
+    studentDueDateOverrides: [
+      {
+        studentId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+        dueDate: { type: Date, required: true },
+        updatedAt: { type: Date, default: Date.now },
+      },
+    ],
     submissions: [
       {
         studentId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
