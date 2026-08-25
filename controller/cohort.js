@@ -935,11 +935,7 @@ export const getCoachAssignedCohorts = async (req, res) => {
       .populate("courses.courseId")
       .populate("courses.coachId");
 
-    if (!cohorts || cohorts.length === 0) {
-      return res.status(200).json({ cohorts: [], coursesByCohort: {} });
-    }
-
-    const assigned = cohorts.map((cohort) => {
+    const assigned = (cohorts || []).map((cohort) => {
       const coachCourses = cohort.courses
         .filter(
           (c) =>
