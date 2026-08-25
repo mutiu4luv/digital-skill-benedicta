@@ -917,6 +917,9 @@ export const getCoachAssignedCohorts = async (req, res) => {
     const coachId = req.user.id;
 
     const coachCourses = await Course.find({ coach: coachId }).select("_id");
+    const directCoachCourses = await Course.find({ coach: coachId })
+      .populate("coach", "fullName email")
+      .select("name category duration coach createdBy");
     const coachCourseIds = coachCourses.map((course) => getIdValue(course._id));
 
     const query = coachCourseIds.length
@@ -965,6 +968,18 @@ export const getCoachAssignedCohorts = async (req, res) => {
       cohorts: assigned,
       availableCohorts: assigned,
       courses,
+      coachCourses: directCoachCourses.map((course) => ({
+        courseId: getIdValue(course._id),
+        courseName: course.name || "Untitled Course",
+        name: course.name || "Untitled Course",
+        title: course.name || "Untitled Course",
+        category: course.category || "",
+        duration: course.duration || "",
+        coachId: getIdValue(course.coach),
+        cohortId: "",
+        cohortName: "No Cohort",
+        cohortCourseId: getIdValue(course._id),
+      })),
       coursesByCohort,
     });
   } catch (err) {
