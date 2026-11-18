@@ -943,16 +943,10 @@ export const getCoachAssignedCohorts = async (req, res) => {
       .select("name category duration coach createdBy");
     const coachCourseIds = coachCourses.map((course) => getIdValue(course._id));
 
-    const query = coachCourseIds.length
-      ? {
-          $or: [
-            { "courses.coachId": coachId },
-            { "courses.courseId": { $in: coachCourseIds } },
-          ],
-        }
-      : { "courses.coachId": coachId };
-
-    const cohorts = await Cohort.find(query)
+    // Load cohort assignments directly. Filtering after population prevents
+    // valid cohort assignments from being lost when a coach is assigned on
+    // the cohort course subdocument but not on Course.coach.
+    const cohorts = await Cohort.find({ "courses.0": { $exists: true } })
       .populate("courses.courseId")
       .populate("courses.coachId");
 
