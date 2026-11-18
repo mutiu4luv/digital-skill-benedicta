@@ -238,9 +238,30 @@ export const registerStudentToCohort = async (req, res) => {
 
     await cohort.save();
 
+    // Verify the write before telling the student the submission succeeded.
+    // This prevents a false success response when the upload completed but
+    // the enrollment update was not persisted as expected.
+    const savedCohort = await Cohort.findById(cohortId).select(
+      "studentIds"
+    );
+    const savedStudentEntry = savedCohort?.studentIds?.find(
+      (entry) => entry.studentId?.toString() === studentId.toString()
+    );
+    const savedEnrollment = savedStudentEntry?.enrollments?.find(
+      (enrollment) => enrollment.courseId?.toString() === courseId.toString()
+    );
+
+    if (!savedEnrollment?.proofOfPayment?.url) {
+      return res.status(500).json({
+        message:
+          "Payment proof upload could not be verified. Please try again.",
+      });
+    }
+
     return res.status(200).json({
       message: "Registration submitted. Awaiting payment confirmation.",
       proofOfPayment: uploadResult.secure_url, // optional: return URL
+      paymentStatus: savedEnrollment.paymentStatus,
     });
   } catch (err) {
     console.error("Registration Error:", err);
