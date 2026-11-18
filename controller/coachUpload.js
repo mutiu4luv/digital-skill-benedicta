@@ -499,7 +499,21 @@ export const getAllMaterials = async (req, res) => {
     .populate("coach", "fullName email")
     .sort({ createdAt: -1 });
 
-  res.json({ message: "✅ Course materials fetched", materials });
+  // Students can see scheduled materials, but must not receive the direct
+  // Cloudinary URL until that material's unlock time has arrived.
+  const now = Date.now();
+  const responseMaterials = materials.map((material) => {
+    const item = material.toObject();
+    const unlockTime = item.unlockAt ? new Date(item.unlockAt).getTime() : 0;
+
+    if (req.user.role === "student" && unlockTime > now) {
+      item.fileUrl = null;
+    }
+
+    return item;
+  });
+
+  res.json({ message: "✅ Course materials fetched", materials: responseMaterials });
 };
 
 // ✅ Get all coaches assigned to a student

@@ -1275,6 +1275,14 @@ export const getUpcomingClass = async (req, res) => {
           type: "document",
         });
 
+        // Do not expose direct file URLs before each material unlocks.
+        const maskLockedUrl = (material) => {
+          const item = material.toObject();
+          const unlockTime = item.unlockAt ? new Date(item.unlockAt).getTime() : 0;
+          if (unlockTime > now) item.fileUrl = null;
+          return item;
+        };
+
         // Keep the earliest upcoming class
         if (
           !nextClassData ||
@@ -1285,8 +1293,8 @@ export const getUpcomingClass = async (req, res) => {
             courseId: courseInCohort.courseId,
             classDateTime,
             hasAccess,
-            videos,
-            documents,
+            videos: videos.map(maskLockedUrl),
+            documents: documents.map(maskLockedUrl),
           };
         }
       }
