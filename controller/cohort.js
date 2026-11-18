@@ -1002,28 +1002,19 @@ export const getStudentsUnderCoach = async (req, res) => {
       return res.status(200).json({ count: 0, students: [] });
     }
 
-    // A course can be assigned to the same coach in several cohorts. The
-    // dashboard represents the current cohort, so keep only the newest cohort
-    // assignment for each coach/course pair. This also protects the dashboard
-    // when an older cohort was not correctly marked completed in the database.
-    const latestCohortByCourse = new Map();
-    cohorts.forEach((cohort) => {
-      const cohortTimestamp = new Date(cohort.createdAt || 0).getTime();
+    // The dashboard represents one current cohort, not the latest cohort per
+    // course. Select the newest cohort assigned to this coach so students
+    // from older cohorts can never leak into the current student list.
+    const currentCohort = cohorts.reduce((latest, cohort) => {
+      if (!latest) return cohort;
 
-      cohort.courses.forEach((course) => {
-        if (!isSameId(course.coachId, coachId) || !course.courseId) return;
+      return new Date(cohort.createdAt || 0).getTime() >
+        new Date(latest.createdAt || 0).getTime()
+        ? cohort
+        : latest;
+    }, null);
 
-        const courseId = getIdValue(course.courseId);
-        const current = latestCohortByCourse.get(courseId);
-
-        if (!current || cohortTimestamp >= current.timestamp) {
-          latestCohortByCourse.set(courseId, {
-            cohortId: getIdValue(cohort._id),
-            timestamp: cohortTimestamp,
-          });
-        }
-      });
-    });
+    const currentCohortId = getIdValue(currentCohort?._id);
 
     /**
      * 3️⃣ Build students map (deduplicated)
@@ -1031,6 +1022,8 @@ export const getStudentsUnderCoach = async (req, res) => {
     const studentsMap = new Map();
 
     cohorts.forEach((cohort) => {
+      if (getIdValue(cohort._id) !== currentCohortId) return;
+
       cohort.studentIds.forEach((studentEntry) => {
         // ❗ Student user may have been deleted
         if (!studentEntry.studentId) return;
@@ -1049,8 +1042,7 @@ export const getStudentsUnderCoach = async (req, res) => {
               (course) =>
                 isSameId(course.coachId, coachId) &&
                 course.status !== "completed" &&
-                latestCohortByCourse.get(getIdValue(course.courseId))
-                  ?.cohortId === getIdValue(cohort._id)
+                getIdValue(cohort._id) === currentCohortId
             )
             .map((course) => getIdValue(course.courseId))
         );
