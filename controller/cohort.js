@@ -998,20 +998,7 @@ export const getStudentsUnderCoach = async (req, res) => {
       .select("name courses studentIds")
       .populate("studentIds.studentId", "fullName email phoneNumber");
 
-    /**
-     * 2️⃣ Collect all courseIds taught by this coach
-     */
-    const coachCourseIds = new Set();
-
-    cohorts.forEach((cohort) => {
-      cohort.courses.forEach((course) => {
-        if (isSameId(course.coachId, coachId)) {
-          coachCourseIds.add(getIdValue(course.courseId));
-        }
-      });
-    });
-
-    if (coachCourseIds.size === 0) {
+    if (cohorts.length === 0) {
       return res.status(200).json({ count: 0, students: [] });
     }
 
@@ -1026,12 +1013,27 @@ export const getStudentsUnderCoach = async (req, res) => {
         if (!studentEntry.studentId) return;
 
         /**
-         * 4️⃣ Filter enrollments to ONLY coach’s courses
+         * 4️⃣ Match enrollments to this exact cohort's coach assignment.
+         *
+         * Do not match by course ID globally: the same course can be taught
+         * in multiple cohorts, and students from a previous cohort must not
+         * leak into the current coach dashboard. Completed assignments are
+         * historical and are intentionally excluded from the active list.
          */
-        const relevantEnrollments = studentEntry.enrollments.filter(
+        const coachCourseIdsInThisCohort = new Set(
+          cohort.courses
+            .filter(
+              (course) =>
+                isSameId(course.coachId, coachId) &&
+                course.status !== "completed"
+            )
+            .map((course) => getIdValue(course.courseId))
+        );
+
+        const relevantEnrollments = (studentEntry.enrollments || []).filter(
           (enrollment) =>
             enrollment.courseId &&
-            coachCourseIds.has(enrollment.courseId.toString())
+            coachCourseIdsInThisCohort.has(enrollment.courseId.toString())
         );
 
         if (relevantEnrollments.length === 0) return;
@@ -1047,7 +1049,7 @@ export const getStudentsUnderCoach = async (req, res) => {
             fullName: studentEntry.studentId.fullName,
             email: studentEntry.studentId.email,
             phoneNumber: studentEntry.studentId.phoneNumber || null,
-            cohorts: new Set([cohort.name]),
+            cohorts: new Set(),
             enrollments: [],
           });
         }
