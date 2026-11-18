@@ -1058,7 +1058,10 @@ export const getStudentsUnderCoach = async (req, res) => {
         const relevantEnrollments = (studentEntry.enrollments || []).filter(
           (enrollment) =>
             enrollment.courseId &&
-            coachCourseIdsInThisCohort.has(enrollment.courseId.toString())
+            coachCourseIdsInThisCohort.has(enrollment.courseId.toString()) &&
+            enrollment.paymentStatus !== "rejected" &&
+            (enrollment.paid === true ||
+              Boolean(enrollment.proofOfPayment?.url))
         );
 
         if (relevantEnrollments.length === 0) return;
@@ -1095,6 +1098,11 @@ export const getStudentsUnderCoach = async (req, res) => {
               paid: enr.paid,
               paymentConfirmed: enr.paymentConfirmed,
               hasAccess: enr.hasAccess,
+              paymentStatus: enr.paymentStatus,
+              approvalStatus:
+                enr.paymentStatus === "confirmed"
+                  ? "Approved"
+                  : "Awaiting approval",
               paidAt: enr.paidAt,
               registeredAt: enr.registeredAt,
             });
