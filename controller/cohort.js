@@ -995,7 +995,7 @@ export const getStudentsUnderCoach = async (req, res) => {
     const cohorts = await Cohort.find({
       "courses.coachId": coachId,
     })
-      .select("name courses studentIds")
+      .select("name createdAt courses studentIds")
       .populate("studentIds.studentId", "fullName email phoneNumber");
 
     if (cohorts.length === 0) {
