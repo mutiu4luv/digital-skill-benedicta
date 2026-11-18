@@ -1002,6 +1002,29 @@ export const getStudentsUnderCoach = async (req, res) => {
       return res.status(200).json({ count: 0, students: [] });
     }
 
+    // A course can be assigned to the same coach in several cohorts. The
+    // dashboard represents the current cohort, so keep only the newest cohort
+    // assignment for each coach/course pair. This also protects the dashboard
+    // when an older cohort was not correctly marked completed in the database.
+    const latestCohortByCourse = new Map();
+    cohorts.forEach((cohort) => {
+      const cohortTimestamp = new Date(cohort.createdAt || 0).getTime();
+
+      cohort.courses.forEach((course) => {
+        if (!isSameId(course.coachId, coachId) || !course.courseId) return;
+
+        const courseId = getIdValue(course.courseId);
+        const current = latestCohortByCourse.get(courseId);
+
+        if (!current || cohortTimestamp >= current.timestamp) {
+          latestCohortByCourse.set(courseId, {
+            cohortId: getIdValue(cohort._id),
+            timestamp: cohortTimestamp,
+          });
+        }
+      });
+    });
+
     /**
      * 3️⃣ Build students map (deduplicated)
      */
@@ -1025,7 +1048,9 @@ export const getStudentsUnderCoach = async (req, res) => {
             .filter(
               (course) =>
                 isSameId(course.coachId, coachId) &&
-                course.status !== "completed"
+                course.status !== "completed" &&
+                latestCohortByCourse.get(getIdValue(course.courseId))
+                  ?.cohortId === getIdValue(cohort._id)
             )
             .map((course) => getIdValue(course.courseId))
         );
