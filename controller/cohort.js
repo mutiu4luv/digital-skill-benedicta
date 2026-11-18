@@ -961,6 +961,7 @@ export const getCoachAssignedCohorts = async (req, res) => {
         .filter(
           (c) =>
             c.courseId &&
+            c.status !== "completed" &&
             (isSameId(c.coachId, coachId) ||
               coachCourseIds.includes(getIdValue(c.courseId)))
         )
