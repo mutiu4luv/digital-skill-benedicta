@@ -759,6 +759,7 @@ export const getStudentCourseMaterials = async (req, res) => {
     return res.status(200).json({
       message: "✅ Course materials fetched successfully",
       unlockedMaterials,
+      lockedMaterials,
       lockedMaterialsMessage: lockedMaterials.length
         ? `Your coach has uploaded ${lockedMaterials.length} material(s). They will be available after the unlock time.`
         : null,
@@ -1071,7 +1072,12 @@ export const getStudentDocuments = async (req, res) => {
       if (!student?.enrollments) return;
 
       student.enrollments.forEach((enrollment) => {
-        if (enrollment.hasAccess && enrollment.courseId?._id) {
+        // Payment confirmation is the canonical enrollment gate used by the
+        // video endpoint. hasAccess is retained for older enrollment records.
+        if (
+          (enrollment.paymentConfirmed === true || enrollment.hasAccess === true) &&
+          enrollment.courseId?._id
+        ) {
           allowedCourseIds.push(enrollment.courseId._id.toString());
         }
       });
